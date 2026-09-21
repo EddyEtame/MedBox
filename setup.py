@@ -45,6 +45,13 @@ if IS_WINDOWS and not os.environ.get("WT_SESSION"):
 
 failures: list[str] = []
 warnings: list[str] = []
+# A third outcome, because two were not enough. Launching an installer and
+# waiting for a human is neither a failure nor a warning: nothing is wrong, and
+# nothing is finished either. Reported as a warning it became "Ready, with 1
+# warning(s)." and exit 0 on a machine with no Ollama and no model — the
+# station would start and simply have no assistant, which is the quiet kind of
+# lie this project is built to avoid.
+unfinished: list[str] = []
 
 
 def ok(msg: str) -> None:
@@ -59,6 +66,12 @@ def warn(msg: str) -> None:
 def fail(msg: str) -> None:
     print(f"  {RED}FAIL{RESET}  {msg}")
     failures.append(msg)
+
+
+def pending(msg: str) -> None:
+    """Something was started that a person has to finish."""
+    print(f"  {YELLOW}WAIT{RESET}  {msg}")
+    unfinished.append(msg)
 
 
 def step(title: str) -> None:
@@ -106,6 +119,20 @@ def read_model() -> str:
         if s.startswith("model") and "=" in s:
             return s.split("=", 1)[1].strip().strip('"').strip("'")
     return "qwen2.5:3b-instruct"
+
+
+def read_fallback_models() -> list[str]:
+    """`fallback_models` from config.toml, same hand-rolled read as read_model."""
+    try:
+        text = (ROOT / "config.toml").read_text(encoding="utf-8")
+    except OSError:
+        return []
+    for line in text.splitlines():
+        s = line.strip()
+        if s.startswith("fallback_models") and "=" in s:
+            inside = s.split("=", 1)[1].strip().strip("[]")
+            return [p.strip().strip('"').strip("'") for p in inside.split(",") if p.strip()]
+    return []
 
 
 # --------------------------------------------------------------------------
@@ -197,24 +224,45 @@ def install_ollama(assume_yes: bool, required: str = "") -> str | None:
                 print(f"        Skipped. Install it yourself from {OLLAMA_DOWNLOAD_PAGE}, then re-run setup.")
                 return None
         target = ROOT / "OllamaSetup.exe"
+        staging = target.with_suffix(".exe.part")
         try:
-            # The size is printed from the response, not guessed. This said
+            # Not urlretrieve. It takes no timeout, and nothing here sets a
+            # default one, so a stalled connection on the campus network this
+            # whole branch is worrying about hangs forever with the byte
+            # counter frozen — which looks exactly like a slow 1.2 GB
+            # transfer. It also writes straight to the final name, so an
+            # interruption leaves a truncated OllamaSetup.exe that the next run
+            # would happily launch.
+            #
+            # The size is read from the response rather than guessed. This said
             # "about 200 MB" for a long time and the pinned installer is
-            # 1.22 GB, so somebody on a school network watched a silent
-            # progress-free download run six times longer than promised, which
-            # is indistinguishable from a hang.
-            def progress(block: int, size: int, total: int) -> None:
-                if total <= 0:
-                    return
-                done = min(block * size, total)
-                print(f"\r        {done / 1e6:>7.0f} / {total / 1e6:.0f} MB",
-                      end="", flush=True)
-
-            print("        Downloading the Ollama installer. This is over a")
-            print("        gigabyte, so give it a few minutes.")
-            urllib.request.urlretrieve(url, target, reporthook=progress)
-            print()
+            # 1.22 GB, so somebody watched a silent download run six times
+            # longer than promised, which is indistinguishable from a hang.
+            print("        Downloading the Ollama installer.")
+            with urllib.request.urlopen(url, timeout=60) as r:
+                total = int(r.headers.get("Content-Length") or 0)
+                if total:
+                    print(f"        {total / 1e9:.2f} GB, so give it a few minutes.")
+                seen = 0
+                with staging.open("wb") as out:
+                    while True:
+                        chunk = r.read(1 << 20)
+                        if not chunk:
+                            break
+                        out.write(chunk)
+                        seen += len(chunk)
+                        if total:
+                            print(f"\r        {seen / 1e6:>7.0f} / {total / 1e6:.0f} MB",
+                                  end="", flush=True)
+            if total:
+                print()
+            if total and seen < total:
+                raise OSError(f"download stopped early at {seen} of {total} bytes")
+            staging.replace(target)
         except (urllib.error.URLError, OSError) as exc:
+            # A truncated installer is worse than none, because the next run
+            # would launch it.
+            staging.unlink(missing_ok=True)
             if required:
                 # The pinned release may not carry that asset name. Say so
                 # plainly rather than silently installing a different version.
@@ -225,11 +273,11 @@ def install_ollama(assume_yes: bool, required: str = "") -> str | None:
             else:
                 fail(f"Download failed: {exc}. Install manually from {OLLAMA_DOWNLOAD_PAGE}")
             return None
-        print("        Launching the installer. Finish it, then re-run this script.")
         try:
             os.startfile(str(target))  # type: ignore[attr-defined]
+            pending("Ollama installer launched. Finish it, then run setup again.")
         except Exception:
-            print(f"        Run it yourself: {target}")
+            pending(f"Run the installer yourself: {target}, then run setup again.")
         return None
 
     # Linux / macOS. The official script installs whatever is current unless
@@ -284,8 +332,19 @@ def setup_ollama(check_only: bool, assume_yes: bool) -> bool:
 
     model = read_model()
 
-    def installed_tags() -> set[str]:
+    def installed_tags() -> set[str] | None:
+        """The tags Ollama holds, or None if it could not be asked.
+
+        None and "no models" are different answers and were being conflated.
+        Finding ollama.exe is not the same as the daemon running — on Windows
+        the binary is found via %LOCALAPPDATA% while the tray app that actually
+        serves the API may be stopped. `ollama list` then fails, an empty
+        stdout read as an empty set, and setup went on to attempt a pull that
+        could not work and blamed the model for it.
+        """
         tags = run([binary, "list"])
+        if tags.returncode != 0:
+            return None
         return {ln.split()[0] for ln in tags.stdout.splitlines()[1:] if ln.strip()}
 
     def report(pulled: set[str]) -> None:
@@ -302,6 +361,14 @@ def setup_ollama(check_only: bool, assume_yes: bool) -> bool:
             print(f"        ollama list: {', '.join(sorted(pulled))}")
 
     pulled = installed_tags()
+    if pulled is None:
+        warn(
+            "Ollama is installed but not answering, so it is probably not "
+            "running.\n"
+            "        Start the Ollama app (or run `ollama serve`), then run "
+            "setup again."
+        )
+        return False
     if model in pulled or f"{model}:latest" in pulled:
         ok(f"model {model} already pulled")
         report(pulled)
@@ -315,9 +382,15 @@ def setup_ollama(check_only: bool, assume_yes: bool) -> bool:
         # refresh the PATH of an already-open shell, so telling somebody to
         # type `ollama` here hands them the CommandNotFoundException that
         # brought them to this message in the first place.
+        # The fallback comes from config.toml rather than a name written in
+        # here. The hardcoded suggestion was llama3.2:3b, which config.toml
+        # does not list and which is not Apache-2.0 — the licence question the
+        # model choice was settled on in the first place.
+        alt = read_fallback_models()
+        suggestion = alt[0] if alt else model
         warn(
-            f"Could not pull {model}. Try a fallback from config.toml, e.g.\n"
-            f'        "{binary}" pull llama3.2:3b\n'
+            f"Could not pull {model}. Try the fallback from config.toml:\n"
+            f'        "{binary}" pull {suggestion}\n'
             f"        then set it as `model` in config.toml"
         )
         return False
@@ -350,8 +423,13 @@ def setup_database(check_only: bool) -> bool:
 
 def run_tests(check_only: bool) -> bool:
     step("5. Tests")
-    if check_only or not venv_python().exists():
-        warn("skipped")
+    # Each warning is now listed in the final verdict rather than counted, so
+    # it has to say what was skipped and why on its own.
+    if check_only:
+        warn("tests not run (--check only reports)")
+        return True
+    if not venv_python().exists():
+        warn("tests not run: there is no .venv yet")
         return True
     r = run([str(venv_python()), "-m", "pytest", "tests/", "-q"], cwd=str(ROOT))
     tail = (r.stdout or r.stderr).strip().splitlines()
@@ -393,8 +471,24 @@ def main() -> int:
             print(f"  - {f}")
         return 1
 
+    if unfinished:
+        # Before the "Ready" paths, and non-zero, so the wrapper's exit code
+        # says the same thing the screen does.
+        print(f"{YELLOW}Setup is NOT finished.{RESET}")
+        for u in unfinished:
+            print(f"  - {u}")
+        for w in warnings:
+            print(f"  - {w}")
+        print("\n  Finish the step above, then run setup again.")
+        print("  Everything already done will be skipped.\n")
+        return 2
+
     if warnings:
-        print(f"{YELLOW}Ready, with {len(warnings)} warning(s).{RESET}")
+        print(f"{YELLOW}Ready, with {len(warnings)} warning(s):{RESET}")
+        # Listed, not merely counted. A count tells somebody that something is
+        # wrong and not what, which is the least useful possible message.
+        for w in warnings:
+            print(f"  - {w}")
     else:
         print(f"{GREEN}Ready.{RESET}")
 
