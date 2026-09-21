@@ -41,6 +41,7 @@ import shutil
 import sys
 import urllib.error
 import urllib.request
+import warnings
 import zipfile
 from pathlib import Path
 
@@ -92,24 +93,63 @@ def read_manifest() -> list[dict]:
     return [a for a in assets if a.get("path")]
 
 
+def _lone_top_folder(names: list[str]) -> str:
+    """The single directory every member sits inside, or "".
+
+    There are two natural ways to zip a folder and people use both:
+
+        zip -r model.zip model/     -> every path starts "model/"
+        cd model && zip -r ../model.zip .   -> paths start at the contents
+
+    Extracting the first into models/faster-whisper-base produces
+    models/faster-whisper-base/faster-whisper-base, which loads nothing. Found
+    by making a zip the obvious way and watching it fail. So the shared leading
+    folder is stripped when there is exactly one, which makes both zips land
+    identically.
+    """
+    tops = {n.split("/", 1)[0] for n in names if n and not n.startswith("/")}
+    if len(tops) != 1:
+        return ""
+    top = tops.pop()
+    # Only strip it if it really is a folder containing everything, rather than
+    # a single file that happens to be the only member. A zip holding just
+    # model.bin shares "model.bin" as its one leading component, and stripping
+    # that would leave an empty path and silently drop the file — which is the
+    # failure this whole script exists to prevent, arriving by another door.
+    inside = [n for n in names if n.startswith(top + "/") and n != top + "/"]
+    if not inside:
+        return ""
+    return top if all(n == top or n.startswith(top + "/") for n in names) else ""
+
+
 def unpack(asset: dict, archive: Path) -> bool:
     """Extract a zip into the directory the asset declares.
 
-    A speech model is a folder, not a file, so it travels as a zip. The
+    A model is a folder, not a file, so on a USB stick it travels as a zip. The
     extraction is checked member by member: a zip that writes outside its
-    destination is the oldest archive trick there is, and this one arrives
-    from a USB stick that has been in somebody else's laptop.
+    destination is the oldest archive trick there is, and this one arrives from
+    a stick that has been in somebody else's laptop.
     """
-    dest = ROOT / asset["unpack"]
+    dest = (ROOT / asset["unpack"]).resolve()
     dest.mkdir(parents=True, exist_ok=True)
     try:
         with zipfile.ZipFile(archive) as z:
-            for member in z.namelist():
-                target = (dest / member).resolve()
-                if not str(target).startswith(str(dest.resolve())):
+            names = z.namelist()
+            strip = _lone_top_folder(names)
+            for member in names:
+                rel = member[len(strip) + 1:] if strip else member
+                if not rel:
+                    continue
+                target = (dest / rel).resolve()
+                if target != dest and dest not in target.parents:
                     bad(f"{asset['path']} tries to write outside {asset['unpack']}: {member}")
                     return False
-            z.extractall(dest)
+                if member.endswith("/"):
+                    target.mkdir(parents=True, exist_ok=True)
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with z.open(member) as src, target.open("wb") as out:
+                    shutil.copyfileobj(src, out)
     except (zipfile.BadZipFile, OSError) as exc:
         bad(f"{asset['path']} would not unpack: {exc}")
         return False
@@ -187,6 +227,108 @@ def download(asset: dict, dest: Path) -> bool:
     return True
 
 
+
+# --------------------------------------------------------------- speech model
+#
+# The speech model is not a file with a URL and a hash. It is a directory of
+# five files on the Hugging Face Hub, and faster-whisper ships the function
+# that fetches it correctly. Using that function rather than five hand-written
+# URLs matters: the file list below is read from faster-whisper's own
+# `allow_patterns`, so it cannot drift from what the library will actually look
+# for when it loads the model.
+#
+# The server prints "Run: python tools/assets.py" when the model is absent, so
+# this is what has to make that sentence true.
+SPEECH_DIR = ROOT / "models" / "faster-whisper-base"
+
+# "base" is the size, and the smallest one that transcribes an English sentence
+# reliably. tiny mishears exactly the words that matter here — it turns
+# "can't breathe" into "can breathe", which is the one error this must not make.
+SPEECH_SIZE = "base"
+
+# What a loadable model directory contains. From faster_whisper.utils, which is
+# the only place this list is authoritative.
+SPEECH_FILES = ("config.json", "model.bin", "tokenizer.json")
+
+
+def speech_present() -> bool:
+    return SPEECH_DIR.is_dir() and all((SPEECH_DIR / f).exists() for f in SPEECH_FILES)
+
+
+def fetch_speech(source: Path | None) -> bool:
+    """Put a loadable speech model in models/faster-whisper-base.
+
+    From a drive if one was given, otherwise from the Hub through the library's
+    own downloader. Both end in the same directory, which is the one the server
+    loads by path.
+    """
+    if speech_present():
+        ok(f"speech model  {DIM}present at models/{SPEECH_DIR.name}{OFF}")
+        return True
+
+    if source:
+        # On a USB stick the model is a folder, or a zip of one. Both are how a
+        # person would actually carry it.
+        folder = source / SPEECH_DIR.name
+        archive = source / f"{SPEECH_DIR.name}.zip"
+        if folder.is_dir():
+            SPEECH_DIR.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(folder, SPEECH_DIR, dirs_exist_ok=True)
+        elif archive.exists():
+            if not unpack({"path": str(archive), "unpack": str(SPEECH_DIR.relative_to(ROOT))},
+                          archive):
+                return False
+        else:
+            bad(f"no speech model on the drive (looked for {folder.name}/ and {archive.name})")
+            return False
+        good = speech_present()
+        if not good:
+            # A half-copied model is worse than none, because the next thing to
+            # look at it will try to load it.
+            shutil.rmtree(SPEECH_DIR, ignore_errors=True)
+            bad("speech model  incomplete, so it was removed")
+            note(f"a usable copy holds {', '.join(SPEECH_FILES)}")
+        else:
+            ok("speech model  copied from the drive")
+        return good
+
+    try:
+        from faster_whisper import download_model
+    except ImportError:
+        bad("faster-whisper is not installed, so the speech model cannot be fetched")
+        note("Install it: pip install -r requirements-speech.txt")
+        note("Or copy models/faster-whisper-base from a machine that has it and use --from.")
+        return False
+
+    print(f"  {AMBER}…{OFF} speech model  {DIM}downloading, about 140 MB{OFF}")
+    try:
+        # By output_dir, so it lands where server/voice.py loads it from rather
+        # than in a cache the demo laptop might not carry.
+        #
+        # Warnings silenced because faster-whisper passes a deprecated argument
+        # to huggingface_hub and the resulting paragraph lands in the middle of
+        # this script's output. It is not our warning and there is nothing to
+        # act on, and a person reading an installer should see what happened to
+        # their files rather than somebody else's deprecation notice.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            download_model(SPEECH_SIZE, output_dir=str(SPEECH_DIR))
+    except Exception as exc:
+        bad(f"speech model: {type(exc).__name__}: {exc}")
+        note("If there is no network here, copy models/faster-whisper-base from a")
+        note("machine that has it onto a drive and re-run with --from.")
+        return False
+    good = speech_present()
+    # Nothing is hashed here, and saying so is the point: the Hub verifies its
+    # own transfers, and claiming a check that did not happen is worse than
+    # admitting one did not. Once it is on disk, --record prints its hashes so
+    # the copy that travels on a USB stick can be checked properly.
+    (ok if good else bad)(
+        f"speech model  {'downloaded, verified by the Hub' if good else 'incomplete after download'}"
+    )
+    return good
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--from", dest="source", metavar="DIR",
@@ -198,10 +340,6 @@ def main() -> int:
     args = ap.parse_args()
 
     manifest = read_manifest()
-    if not manifest:
-        print("No [[assets]] in config.toml, so there is nothing large to fetch.")
-        print("MedBox runs without this: the stand-in assistant needs no weights.")
-        return 0
 
     if args.record:
         # The first person to fetch an asset is the one who can record what it
@@ -213,6 +351,13 @@ def main() -> int:
                 print(f'  # {asset["path"]}\n  sha256 = "{digest(dest)}"')
             else:
                 print(f"  # {asset['path']}: not here yet")
+        # The speech model travels as a zip of its directory, so what a USB
+        # copy needs checked is the zip. Print its hash if one has been made.
+        zipped = SPEECH_DIR.with_suffix(".zip")
+        if zipped.exists():
+            print(f'  # {zipped.relative_to(ROOT)}\n  sha256 = "{digest(zipped)}"')
+        if not manifest and not zipped.exists():
+            print("  # Nothing present to hash yet.")
         return 0
 
     source = Path(args.source).expanduser().resolve() if args.source else None
@@ -220,8 +365,22 @@ def main() -> int:
         bad(f"{source} is not a folder")
         return 1
 
-    print(f"\nAssets for MedBox  {DIM}({len(manifest)} declared){OFF}\n")
+    print(f"\nAssets for MedBox  {DIM}({len(manifest) + 1} declared){OFF}\n")
     missing: list[dict] = []
+
+    # The speech model first, because it is the one the server names by this
+    # script's own command when the microphone is unavailable.
+    if args.check:
+        if speech_present():
+            ok(f"speech model  {DIM}present at models/{SPEECH_DIR.name}{OFF}")
+        else:
+            bad(f"speech model  missing from models/{SPEECH_DIR.name}")
+            note("Without it the microphone stays hidden. Typing is unaffected.")
+            missing.append({"path": f"models/{SPEECH_DIR.name}",
+                            "why": "Hold-to-speak. Typing works without it."})
+    elif not fetch_speech(source):
+        missing.append({"path": f"models/{SPEECH_DIR.name}",
+                        "why": "Hold-to-speak. Typing works without it."})
     for asset in manifest:
         dest = ROOT / asset["path"]
         good, why = verify(asset, dest)
@@ -259,8 +418,10 @@ def main() -> int:
     print(f"{RED}{len(missing)} asset(s) still missing.{OFF}")
     for asset in missing:
         print(f"  · {asset['path']}" + (f"  — {asset['why']}" if asset.get("why") else ""))
-    print("\nMedBox still starts without these. Vitals, NEWS2, quarantine, the board")
-    print("and the 3D console do not use them; the assistant is what goes quiet.")
+    print("\nMedBox still starts without these, and that is the whole design.")
+    print("Vitals, NEWS2, quarantine, the board and the 3D console use none of")
+    print("them. What goes quiet is the assistant, and the microphone hides")
+    print("itself; typing a symptom still works and still reaches triage.")
     print("Run tools/fake_ollama.py to exercise the assistant path with no weights.\n")
     return 1
 

@@ -43,6 +43,17 @@ log = logging.getLogger("medbox.voice")
 # GitHub's blob limit, and tools/assets.py is how it reaches a machine.
 MODEL_DIR = ROOT / "models" / "faster-whisper-base"
 
+# What a loadable model directory actually holds. Taken from faster-whisper's
+# own `allow_patterns`, which is the only place this list is authoritative.
+#
+# Checking the files rather than just the directory matters more than it looks.
+# A half-copied model off a USB stick leaves a directory that exists, so the
+# microphone button would appear and then fail on the first press — which is
+# the thing this whole property is meant to prevent. tools/assets.py checks the
+# same three names, so the installer and the server agree on what "present"
+# means.
+MODEL_FILES = ("config.json", "model.bin", "tokenizer.json")
+
 
 class Transcriber:
     """Loads once, lazily, and reports honestly when it cannot."""
@@ -52,6 +63,19 @@ class Transcriber:
         self._model = None
         self._tried = False
         self.last_error: str | None = None
+
+    def _where(self) -> str:
+        """The model directory, said the way a person would read it.
+
+        Relative to the repo when it is inside it, absolute when it is not.
+        `relative_to` raises on a path outside the root, and this is reached
+        from `available`, which the board calls ten times a second — a property
+        on that path is not allowed to raise for a cosmetic reason.
+        """
+        try:
+            return str(self.model_dir.relative_to(ROOT))
+        except ValueError:
+            return str(self.model_dir)
 
     @property
     def available(self) -> bool:
@@ -65,7 +89,15 @@ class Transcriber:
             return True
         if not self.model_dir.is_dir():
             self.last_error = (
-                f"no speech model at {self.model_dir.relative_to(ROOT)}. "
+                f"no speech model at {self._where()}. "
+                "Run: python tools/assets.py"
+            )
+            return False
+        short = [f for f in MODEL_FILES if not (self.model_dir / f).exists()]
+        if short:
+            self.last_error = (
+                f"the speech model at {self._where()} is "
+                f"incomplete ({', '.join(short)} missing). "
                 "Run: python tools/assets.py"
             )
             return False

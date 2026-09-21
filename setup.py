@@ -146,6 +146,23 @@ def setup_venv(check_only: bool) -> bool:
         fail(f"pip install failed: {r.stderr.strip()[:400]}")
         return False
     ok("dependencies installed from requirements.txt")
+
+    # Speech-in, and it is allowed to fail. These are prebuilt wheels carrying
+    # compiled extensions, so they are the likeliest line in this whole script
+    # to fall over on somebody's machine, and a laptop that cannot run the
+    # demo because an optional microphone would not install is a far worse
+    # outcome than a laptop with no microphone. Without them the button is
+    # hidden and typing works.
+    speech = ROOT / "requirements-speech.txt"
+    if speech.exists():
+        r = run([py, "-m", "pip", "install", "-q", "-r", str(speech)])
+        if r.returncode == 0:
+            ok("speech dependencies installed (hold-to-speak available)")
+        else:
+            why = r.stderr.strip().splitlines()[-1][:160] if r.stderr.strip() else ""
+            warn("speech dependencies would not install, so the microphone "
+                 "stays hidden and typing still works"
+                 + (f" ({why})" if why else ""))
     return True
 
 

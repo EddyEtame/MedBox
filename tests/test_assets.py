@@ -11,12 +11,20 @@ from __future__ import annotations
 
 import hashlib
 import sys
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tools.assets import install_from, read_manifest, verify  # noqa: E402
+from tools.assets import (  # noqa: E402
+    SPEECH_FILES,
+    _lone_top_folder,
+    install_from,
+    read_manifest,
+    unpack,
+    verify,
+)
 
 
 def _write(path: Path, data: bytes) -> str:
@@ -110,3 +118,130 @@ def test_weights_stay_out_of_git():
     ignored = (ROOT / ".gitignore").read_text(encoding="utf-8")
     for rule in ("models/", "*.gguf"):
         assert rule in ignored, f"{rule} must stay in .gitignore"
+
+
+# ----------------------------------------------------- the model on a stick
+
+def _zip(path: Path, members: dict[str, bytes]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w") as z:
+        for name, data in members.items():
+            z.writestr(name, data)
+    return path
+
+
+def _unpack_into(archive: Path, dest: Path) -> bool:
+    """unpack() resolves against the repo root, so give it a path it can."""
+    import tools.assets as assets
+
+    real, assets.ROOT = assets.ROOT, dest.parent
+    try:
+        return assets.unpack({"path": str(archive), "unpack": dest.name}, archive)
+    finally:
+        assets.ROOT = real
+
+
+def test_a_zip_of_a_folder_lands_in_the_folder_and_not_inside_itself(tmp_path):
+    """Found on a real drive. `zip -r model.zip model/` stores every path with
+    the folder still on the front, so extracting it into models/x produced
+    models/x/x and the loader found nothing. Both ways of zipping a folder are
+    natural and people use both, so both have to land identically."""
+    z = _zip(tmp_path / "m.zip", {f"faster-whisper-base/{f}": b"x" for f in SPEECH_FILES})
+    dest = tmp_path / "repo" / "faster-whisper-base"
+    assert _unpack_into(z, dest)
+    for f in SPEECH_FILES:
+        assert (dest / f).exists(), f"{f} did not land at the top of the folder"
+    assert not (dest / "faster-whisper-base").exists(), "the folder nested inside itself"
+
+
+def test_a_zip_made_from_inside_the_folder_lands_the_same_way(tmp_path):
+    z = _zip(tmp_path / "m.zip", {f: b"x" for f in SPEECH_FILES})
+    dest = tmp_path / "repo" / "faster-whisper-base"
+    assert _unpack_into(z, dest)
+    for f in SPEECH_FILES:
+        assert (dest / f).exists()
+
+
+def test_one_stray_file_does_not_get_mistaken_for_a_wrapper_folder(tmp_path):
+    """Stripping a shared prefix is only right when it really is a folder
+    holding everything. A zip of a single file must not lose its name."""
+    assert _lone_top_folder(["model.bin"]) == ""
+    assert _lone_top_folder(["m/a", "m/b"]) == "m"
+    assert _lone_top_folder(["m/a", "n/b"]) == ""
+
+
+def test_a_zip_cannot_write_outside_where_it_was_put(tmp_path):
+    """The oldest archive trick there is, and this one arrives on a stick that
+    has been in somebody else's laptop."""
+    dest = tmp_path / "repo" / "models"
+    for name in ("../../escape.txt", "m/../../escape.txt", "/tmp/escape.txt"):
+        z = _zip(tmp_path / "evil.zip", {name: b"pwned", "config.json": b"{}"})
+        assert _unpack_into(z, dest) is False, f"{name} was not blocked"
+        assert not (tmp_path / "escape.txt").exists()
+        assert not (tmp_path / "repo" / "escape.txt").exists()
+
+
+def test_the_speech_model_is_named_by_the_files_the_loader_needs():
+    """These are read from faster-whisper's own allow_patterns. If the library
+    ever stops looking for one of them, "present" starts meaning nothing."""
+    assert "model.bin" in SPEECH_FILES
+    assert "config.json" in SPEECH_FILES
+    assert "tokenizer.json" in SPEECH_FILES
+
+
+def test_the_error_the_server_shows_names_a_command_that_does_something():
+    """server/voice.py tells an operator to run tools/assets.py. For a long
+    while that printed "there is nothing large to fetch" and stopped, which is
+    a dead end dressed as an instruction."""
+    voice = (ROOT / "server" / "voice.py").read_text(encoding="utf-8")
+    assert "tools/assets.py" in voice
+    assets_src = (ROOT / "tools" / "assets.py").read_text(encoding="utf-8")
+    assert "fetch_speech" in assets_src, "assets.py does not fetch the speech model"
+    assert "download_model" in assets_src, "assets.py has no way to get the weights"
+
+
+def test_the_speech_dependencies_are_declared_somewhere_installable():
+    """They are not in requirements.txt on purpose: a failed optional wheel
+    must never fail the install that makes the demo work. But undeclared is a
+    different thing from optional, and undeclared is how it was."""
+    req = ROOT / "requirements-speech.txt"
+    assert req.exists(), "nothing declares faster-whisper"
+    text = req.read_text(encoding="utf-8")
+    for pkg in ("faster-whisper", "ctranslate2", "av"):
+        assert pkg in text, f"{pkg} is not declared"
+    assert "==" in text, "the speech dependencies are not pinned"
+    core = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+    assert "faster-whisper" not in core, (
+        "faster-whisper is in requirements.txt, so a failed optional wheel now "
+        "fails the whole setup"
+    )
+    setup = (ROOT / "setup.py").read_text(encoding="utf-8")
+    assert "requirements-speech.txt" in setup, "setup.py never installs them"
+
+
+def test_the_installer_and_the_server_agree_on_what_a_model_is():
+    """Two places decide whether a speech model is present: the installer that
+    puts it there and the server that offers the button. If they drift, one of
+    them is lying — either the button appears over a half-copied model and
+    fails on the first press, or the installer reports success on something the
+    server will refuse to load."""
+    from server.voice import MODEL_FILES
+
+    assert set(MODEL_FILES) == set(SPEECH_FILES), (
+        "server/voice.py and tools/assets.py disagree about what a usable "
+        f"speech model contains: {sorted(MODEL_FILES)} vs {sorted(SPEECH_FILES)}"
+    )
+
+
+def test_a_half_copied_model_is_not_offered_as_a_working_microphone(tmp_path):
+    """A button that appears and then fails is worse than one that was never
+    offered, and a directory that exists is not a model."""
+    from server.voice import MODEL_FILES, Transcriber
+
+    half = tmp_path / "faster-whisper-base"
+    half.mkdir()
+    (half / MODEL_FILES[0]).write_text("{}", encoding="utf-8")
+    t = Transcriber(half)
+    assert t.available is False
+    assert "incomplete" in (t.last_error or "")
+    assert "tools/assets.py" in (t.last_error or ""), "the message names no way out"

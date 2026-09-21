@@ -1,0 +1,18 @@
+# Listening to the crew. Optional, and deliberately kept out of
+# requirements.txt.
+#
+# setup.py treats a failure here as a warning, never as a failed setup. These
+# are prebuilt wheels with compiled extensions, so they are the most likely
+# line in the whole install to fail on somebody's machine, and the one thing
+# that must never happen is a laptop that cannot run the demo because an
+# optional microphone could not be installed. Without these the button is
+# simply hidden and typing works.
+#
+# Pinned to what was actually tested, not to a range.
+faster-whisper==1.2.1
+# CTranslate2 is the inference engine faster-whisper runs on. Pinned because
+# it is the piece that carries the compiled code.
+ctranslate2==4.8.2
+# Decodes the webm/opus the browser records. PyAV bundles its own FFmpeg, so
+# no system ffmpeg has to be installed on the demo laptop.
+av==18.1.0
