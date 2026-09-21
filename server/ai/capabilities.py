@@ -68,8 +68,11 @@ CAPABILITIES = [
         "title": "Offer ranked hypotheses for one crew member",
         "does": (
             "The assistant reads that person's measurements and anything they "
-            "reported, and offers possible explanations, each listing the signs "
-            "behind it. It does not diagnose and it cannot change the urgency."
+            "reported, and offers possible explanations, each sign labelled with "
+            "the instrument that recorded it, or marked as something the crew "
+            "member said and nothing measured. It does not diagnose, it cannot "
+            "change the urgency, and when the four parameters support nothing it "
+            "is allowed to say so rather than invent a pattern."
         ),
         "needs_ai": True,
         "how": "Select a crew member and press 'ask the assistant'.",
@@ -95,6 +98,15 @@ REFUSALS = [
             "It offers hypotheses with the signs behind them. There is no "
             "diagnosis field anywhere in the schema it is allowed to answer in, "
             "so it cannot emit one even if asked."
+        ),
+    },
+    {
+        "never": "Prescribe anything",
+        "why": (
+            "It has no field to put a treatment in. The one array it can fill "
+            "is for observations and measurements to take, and the station "
+            "drops the whole array and says so if a drug, a dose or a route "
+            "appears in it. There is no doctor aboard and this box is not one."
         ),
     },
     {

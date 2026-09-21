@@ -18,8 +18,9 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, scenarios
-from .ai.capabilities import manifest, self_explanation_prompt
+from .ai.capabilities import manifest
 from .ai.ollama import CLIENT
+from .ai.validate import enforce
 from .bus import BUS
 from .config import CONFIG, ROOT
 from .db import Database
@@ -286,8 +287,9 @@ async def ai_assess(patient_id: str) -> JSONResponse:
     entry = STATION.latest.get(patient_id)
     if entry is None:
         raise HTTPException(404, f"No crew member {patient_id}")
+    triage = entry["triage"]
     result = await CLIENT.assess(
-        entry["patient"], entry["triage"], STATION.symptoms.prompt_note(patient_id)
+        entry["patient"], triage, STATION.symptoms.prompt_note(patient_id)
     )
     if result is None:
         return JSONResponse(
@@ -298,7 +300,40 @@ async def ai_assess(patient_id: str) -> JSONResponse:
                 "note": "Vitals and triage are unaffected. This is the degraded path working as designed.",
             },
         )
-    return JSONResponse(content=result)
+
+    # Never splat the model's dict into the response. Anything it invented that
+    # the schema does not name — a `diagnosis` key, an `escalate` verdict —
+    # used to travel straight through to the API surface, hidden only by the
+    # fact that no renderer happened to look for it. enforce() rebuilds the
+    # answer from the schema's own keys and reports what it took out.
+    safe = enforce(result, triage.get("urgency", ""))
+    if not safe["ok"]:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "AI output rejected",
+                "detail": "; ".join(safe["blocked"]) or "the assistant returned nothing usable",
+                "note": "Vitals and triage are unaffected. A malformed assessment takes the same degraded path as a dead assistant.",
+            },
+        )
+
+    return JSONResponse(content={
+        **safe,
+        # Stamped by the server, from what the server knows. An assessment that
+        # cannot say which crew member, which score and which moment it was
+        # written against cannot be detected as stale by a panel whose band
+        # updates ten times a second — and the whole demo is vitals
+        # deteriorating while you watch.
+        "patient_id": patient_id,
+        "news2_at_assessment": triage.get("total"),
+        "urgency_at_assessment": triage.get("urgency"),
+        "at": time.time(),
+        "model": CLIENT.model,
+        # From the probe, never from the payload. The flag that tells a jury
+        # "this is not a language model" must not be emitted by the thing it
+        # is labelling.
+        "stand_in": CLIENT.stand_in,
+    })
 
 
 @app.get("/api/assistant/help")
@@ -315,7 +350,7 @@ async def assistant_help() -> dict:
 @app.post("/api/assistant/introduce")
 async def assistant_introduce() -> JSONResponse:
     """Let the assistant introduce itself, from facts it is handed."""
-    text = await CLIENT.freeform(self_explanation_prompt())
+    text = await CLIENT.introduce()
     if text is None:
         return JSONResponse(
             status_code=503,

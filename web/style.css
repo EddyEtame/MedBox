@@ -156,3 +156,32 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 }
 .say input:disabled{opacity:.45}
 .say input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* See the matching block in ship.css: the assistant's output gets its own
+   surface so it never reads as continuous with the computed NEWS2 panel. */
+.ai{border-left:2px dashed var(--line2);padding-left:11px;
+    background:linear-gradient(90deg,rgba(120,170,190,.05),transparent 60%)}
+.ai .ai-provenance{margin:12px 0 2px;font-size:10.5px;line-height:1.5;color:var(--ink3);
+    font-family:var(--mono)}
+.ai .ai-provenance b{color:var(--ink2)}
+.ai .ai-provenance.standin{padding:10px 12px;border:1px solid var(--warn);border-radius:8px;
+    background:rgba(240,196,89,.09);font-size:12px;font-family:inherit;color:var(--ink2)}
+.ai .ai-provenance.standin b{color:var(--warn);display:block;margin-bottom:3px}
+.ai .ai-blocked{margin:11px 0;padding:9px 11px;border:1px solid var(--crit);border-radius:8px;
+    background:rgba(232,90,90,.08);font-size:11.5px;line-height:1.5;color:var(--ink2)}
+.ai .ai-blocked b{color:var(--crit);display:block;margin-bottom:3px}
+.ai .ai-blocked ul{margin:0;padding-left:16px}
+.ai .nothing{margin:12px 0 0;padding:10px 12px;border:1px dashed var(--line2);border-radius:8px;
+    color:var(--ink2);font-size:12.5px;line-height:1.55}
+.hyp .sign{list-style:none;margin-left:-16px;line-height:1.5}
+.hyp .sign .src{font-family:var(--mono);font-size:9px;text-transform:uppercase;
+    letter-spacing:.08em;margin-right:6px;padding:1px 4px;border-radius:3px}
+.hyp .sign.measured .src{color:var(--accent);background:rgba(79,216,226,.11)}
+.hyp .sign.unmeasured .src{color:var(--warn);background:rgba(240,196,89,.14)}
+.hyp .sign.unmeasured{color:var(--ink3)}
+.stale-note{margin:12px 0 0;padding:9px 11px;border:1px solid var(--warn);border-radius:8px;
+    background:rgba(240,196,89,.1);color:var(--warn);font-size:11.5px;line-height:1.45}
+.ai.stale{opacity:.45;filter:saturate(.4)}
+.hyp .unbacked{display:block;font-size:11px;line-height:1.45;color:var(--warn);margin:3px 0 2px}
+.hyp.unbacked-hyp{border-left-color:var(--warn)}
+.hyp.unbacked-hyp b{color:var(--ink2)}

@@ -66,6 +66,19 @@ class OllamaClient:
 
     async def assess(self, patient: dict, triage: dict, history_note: str = "") -> dict | None:
         """Ask for hypotheses. Returns None on any failure, never raises."""
+        # Hand over the reason the band is what it is, not just the number.
+        # Under NEWS2 a single parameter scoring 3 escalates on its own, so an
+        # aggregate of 3 can be MEDIUM. A model given the bare pair sees a small
+        # number beside a serious word, resolves the tension in favour of the
+        # number, and writes "reassuring" directly under a MEDIUM band.
+        why_band = ""
+        if triage.get("single_param_3"):
+            param = triage.get("worst_param") or "one parameter"
+            why_band = (
+                f"This band was set by the NEWS2 single-parameter rule: {param} alone "
+                f"scored 3, which escalates on its own whatever the aggregate is. Do "
+                f"not describe this aggregate as low or reassuring.\n"
+            )
         prompt = (
             f"Crew member {patient.get('name')} ({patient.get('role')}), id {patient.get('id')}.\n\n"
             f"Current readings:\n"
@@ -74,6 +87,7 @@ class OllamaClient:
             f"  pulse        {patient.get('pulse')} /min\n"
             f"  respiration  {patient.get('respiration')} /min\n\n"
             f"NEWS2 aggregate {triage.get('total')} -> urgency '{triage.get('urgency')}'.\n"
+            f"{why_band}"
             f"Parameters actually measured: {', '.join(triage.get('measured', []))}.\n"
             f"{history_note}\n\n"
             "Give your assessment."
@@ -102,14 +116,29 @@ class OllamaClient:
             return None
 
 
-    async def freeform(self, prompt: str) -> str | None:
-        """Plain text, no schema. Used only where there is nothing to parse.
+    async def introduce(self) -> str | None:
+        """The one unconstrained call in the product, and it takes no argument.
+
+        This deliberately has no `prompt` parameter. An earlier version was
+        `freeform(prompt: str)`, which meant the codebase contained a path that
+        prepended the full system prompt to arbitrary text and ran it with no
+        schema at all. Nothing used it that way, and the safety argument
+        everywhere else in this project is "there is no diagnosis field in the
+        shape it is allowed to answer in" — which is worth nothing next to a
+        path where there is no shape. Only convention kept it pointed
+        somewhere harmless, and the twenty minutes before a jury demo is
+        exactly when someone wires a text box into a convenient helper.
+
+        So the prompt is built inside. There is no argument to pass, and
+        tests/test_ai_path.py asserts there never is again.
 
         Same contract as everything else here: returns None on any failure and
-        never raises. The one place this is used — the assistant introducing
-        itself — has a complete non-AI fallback already on screen, so losing
-        it costs nothing.
+        never raises. What it narrates — the station introducing itself — has a
+        complete non-AI rendering already on screen, so losing it costs nothing.
         """
+        from .capabilities import self_explanation_prompt
+
+        prompt = self_explanation_prompt()
         body = {
             "model": self.model,
             "stream": False,

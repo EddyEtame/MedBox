@@ -85,11 +85,19 @@ class TriageResult:
         return any(p.score >= MAX_PARAM_SCORE for p in self.params if p.measured)
 
     def to_dict(self) -> dict:
+        worst = self.worst_param
         return {
             "total": self.total,
             "urgency": self.urgency.value,
             "response": self.urgency.response,
             "measured": list(self.measured_params),
+            # Both of these cross into the AI prompt. The single-parameter rule
+            # is the thing people forget, and a small model forgets it too: told
+            # only "aggregate 3 -> medium" it writes "a low aggregate of 3,
+            # overall reassuring" under a MEDIUM band. It has to be given the
+            # reason, not just the number.
+            "single_param_3": self.has_single_param_3,
+            "worst_param": worst.name if worst else None,
             "params": [
                 {
                     "name": p.name,

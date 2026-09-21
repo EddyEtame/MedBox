@@ -12,6 +12,7 @@ here says anything about the quality of an assessment.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import socket
 import sys
 from pathlib import Path
@@ -21,6 +22,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from server.ai.ollama import OllamaClient  # noqa: E402
+from server.ai.schemas import FIT_LEVELS, SIGN_SOURCES  # noqa: E402
 from tools.fake_ollama import serve  # noqa: E402
 
 PATIENT = {
@@ -73,22 +75,47 @@ def test_assessment_round_trips_the_schema(stand_in):
     asyncio.run(c.probe())
     result = asyncio.run(c.assess(PATIENT, TRIAGE))
     assert result is not None
-    for field in ("summary", "hypotheses", "questions_for_patient",
-                  "suggested_protocol", "escalate"):
+    for field in ("summary", "insufficient_data", "hypotheses",
+                  "questions_for_patient", "information_to_gather"):
         assert field in result, f"{field} missing from the assessment"
     assert isinstance(result["hypotheses"], list) and result["hypotheses"]
     for h in result["hypotheses"]:
-        assert h["confidence"] in ("low", "moderate", "high")
+        assert h["fit"] in FIT_LEVELS
         assert h["supporting_signs"], "a hypothesis with no supporting sign is a guess"
 
 
-def test_assessment_never_contains_a_diagnosis_field(stand_in):
-    """The absence of this field is the whole safety argument. Guard it."""
+def test_the_assessment_carries_no_second_urgency_verdict(stand_in):
+    """The absence of these fields is the whole safety argument. Guard it.
+
+    `diagnosis` was always absent. `escalate` was not: it was required on every
+    call, authored by the model, and rendered by nothing — a second urgency
+    verdict sitting in the API response waiting for someone to display it four
+    centimetres from the NEWS2 band that disagrees with it.
+    """
     c = _client(stand_in)
     asyncio.run(c.probe())
     result = asyncio.run(c.assess(PATIENT, TRIAGE))
-    assert "diagnosis" not in result
-    assert "diagnoses" not in result
+    for forbidden in ("diagnosis", "diagnoses", "escalate", "urgency", "severity"):
+        assert forbidden not in result, (
+            f"{forbidden!r} is a clinical verdict and belongs to triage.py alone"
+        )
+
+
+def test_free_text_cannot_be_handed_to_the_model():
+    """There must be no path that runs arbitrary text with no schema.
+
+    This project's safety argument is "there is no diagnosis field in the shape
+    it is allowed to answer in". A method taking an arbitrary prompt and no
+    schema is a documented bypass of exactly that argument, so the argument for
+    it not existing has to be enforced rather than remembered.
+    """
+    assert not hasattr(OllamaClient, "freeform"), (
+        "freeform() ran caller-supplied text with no schema at all"
+    )
+    params = inspect.signature(OllamaClient.introduce).parameters
+    assert list(params) == ["self"], (
+        "introduce() must build its own prompt; an argument here reloads the gun"
+    )
 
 
 def test_a_dead_ai_returns_none_and_never_raises():
@@ -105,9 +132,11 @@ def test_every_supporting_sign_names_a_measurement(stand_in):
     c = _client(stand_in)
     asyncio.run(c.probe())
     result = asyncio.run(c.assess(PATIENT, TRIAGE))
-    instruments = ("temperature", "spo2", "pulse", "respiration", "parameters")
     for h in result["hypotheses"]:
         for sign in h["supporting_signs"]:
-            assert any(word in sign.lower() for word in instruments), (
-                f"supporting sign cites no measurement: {sign!r}"
+            # Provenance is structural now, not a hope about prose: the model
+            # picks from an enum of the instruments this station actually has,
+            # or admits that nothing measured it.
+            assert sign["source"] in SIGN_SOURCES, (
+                f"supporting sign cites no instrument: {sign!r}"
             )

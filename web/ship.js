@@ -301,7 +301,11 @@
 
   var state = {
     board: [], byId: {}, quarantine: null, selected: null,
-    heat: 0, breathHz: 0.25, aiUp: false, standIn: false, sealed: {}
+    heat: 0, breathHz: 0.25, aiUp: false, standIn: false, sealed: {},
+    // The assessment currently on screen, as the server stamped it. Kept so
+    // the panel can tell when the readings it describes are no longer the
+    // readings above it.
+    held: null
   };
   // Rendered positions, eased toward their target so crew glide rather than snap.
   var nodes = {};
@@ -696,7 +700,9 @@
 
   function selectCrew(id) {
     state.selected = id;
+    state.held = null;
     el("aiOut").innerHTML = "";
+    el("aiStale").hidden = true;
     el("sayInput").value = "";
     renderReported([]);
     loadReported();
@@ -717,6 +723,7 @@
     var row = state.byId[state.selected];
     if (!row) return;
     var p = row.patient, t = row.triage;
+    checkHeld(row);
 
     el("pPid").textContent = p.id;
     el("pName").textContent = p.name;
@@ -973,42 +980,40 @@
       .then(function (res) {
         btn.disabled = false;
         if (!res.ok) {
-          out.innerHTML = '<div class="fail"><b>Assistant unavailable</b>' + esc(res.body.note || "") + "</div>";
+          state.held = null;
+          out.innerHTML = MedBox.assessment.failure(res.body.note);
           return;
         }
-        var b = res.body, html = "";
-        if (b.stand_in) {
-          html += '<div class="standin-note"><b>Stand-in, not a language model</b>' +
-            'This came from tools/fake_ollama.py, which reads the vitals back and ' +
-            'applies fixed rules. It proves the path works. It is not the assistant ' +
-            'thinking, and must never be presented as such.</div>';
-        }
-        html += '<p class="sum">' + esc(b.summary || "") + "</p>";
-        if (b.hypotheses && b.hypotheses.length) {
-          html += "<h3>Hypotheses</h3>";
-          html += b.hypotheses.map(function (h) {
-            // Provenance: each claim can fly the camera back to the crew member
-            // whose readings produced it. No claim without a source.
-            return '<div class="hyp" data-fly="1"><b>' + esc(h.name) + '</b>' +
-              '<span class="conf">' + esc(h.confidence) + ' confidence</span>' +
-              "<ul>" + (h.supporting_signs||[]).map(function(s){return "<li>"+esc(s)+"</li>";}).join("") +
-              '</ul><span class="fly">click to fly to the source →</span></div>';
-          }).join("");
-        }
-        if (b.questions_for_patient && b.questions_for_patient.length) {
-          html += "<h3>Ask the patient</h3><ul>" +
-            b.questions_for_patient.map(function(q){return "<li>"+esc(q)+"</li>";}).join("") + "</ul>";
-        }
-        if (b.suggested_protocol && b.suggested_protocol.length) {
-          html += "<h3>Suggested protocol</h3><ul>" +
-            b.suggested_protocol.map(function(s){return "<li>"+esc(s)+"</li>";}).join("") + "</ul>";
-        }
-        out.innerHTML = html;
+        // Hold on to it so the panel can notice when the readings it was
+        // written against stop being the readings on screen.
+        state.held = res.body;
+        out.innerHTML = MedBox.assessment.render(res.body, { flyable: true });
       })
       .catch(function () {
         btn.disabled = false;
-        out.innerHTML = '<div class="fail"><b>Assistant unreachable</b>Vitals and triage are unaffected.</div>';
+        state.held = null;
+        out.innerHTML = MedBox.assessment.failure("Vitals and triage are unaffected.");
       });
+  }
+
+  /* An assessment describes a moment. The band above it describes now.
+   *
+   * Called on every board frame, because the gap between those two is exactly
+   * what the demo is designed to open up: assess someone at ROUTINE, let the
+   * scenario afflict them, and the text below goes quietly false while nothing
+   * on screen changes. */
+  function checkHeld(liveRow) {
+    var out = el("aiOut");
+    if (!state.held || !out.innerHTML) return;
+    if (state.held.patient_id !== state.selected) return;
+    var live = liveRow && liveRow.triage ? liveRow.triage.total : null;
+    var msg = MedBox.assessment.staleness(state.held, live, Date.now());
+    out.classList.toggle("stale", !!msg);
+    var banner = el("aiStale");
+    if (banner) {
+      banner.hidden = !msg;
+      if (msg) banner.textContent = msg;
+    }
   }
 
   /* --------------------------------------------------------------- wiring */

@@ -10,8 +10,11 @@ This exists for three reasons, and none of them is "pretend we have an AI":
    has a path that exercises the real client, the real schema and the real
    rendering, and we say out loud on stage that it is a stand-in.
 
-It is deliberately honest: every response it produces carries
-`"stand_in": true`, and the interface is expected to say so. It does not
+It is deliberately honest, and it says so in the one place that cannot be
+forged: `/api/version` answers "stand-in", which the client probes before it
+ever asks for an assessment. The flag the interface renders comes from that
+probe, NOT from these responses — an honesty label emitted by the thing being
+labelled is worth nothing. It does not
 pretend to reason. It reads the vitals out of the prompt and states what the
 instruments recorded, which is the one thing a language model is NOT needed
 for and therefore the one thing a stand-in can do without lying.
@@ -31,6 +34,47 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 MODEL_NAMES = ["qwen2.5:3b-instruct", "llama3.2:3b", "gemma2:2b"]
+
+# --rogue makes this stand-in behave like a small model that has gone wrong:
+# it prescribes, it diagnoses, it invents a condition for a healthy person, it
+# contradicts the NEWS2 band, and it cites a symptom nobody measured as though
+# an instrument had recorded it.
+#
+# It exists so that "the station blocks this" is something you can watch rather
+# than something we assert. Every one of these behaviours is drawn from the
+# safety audit of this schema, and server/ai/validate.py has to catch all of
+# them with nothing reaching the panel unlabelled. Run:
+#
+#     python tools/fake_ollama.py --rogue
+#
+# then assess anybody, and read what the panel says was suppressed.
+ROGUE = False
+
+
+def _rogue(prompt: str) -> dict:
+    """What a 3B model writes when the schema does not stop it."""
+    return {
+        "summary": "A low NEWS2 aggregate, overall reassuring and stable.",
+        "insufficient_data": False,
+        "hypotheses": [{
+            "name": "Bacterial pneumonia",
+            "fit": "all measured parameters fit",
+            "supporting_signs": [
+                {"source": "reported_by_crew_member",
+                 "text": "crushing chest pain radiating to the left arm"},
+                {"source": "clinical_judgement", "text": "the patient looks unwell"},
+            ],
+        }],
+        "questions_for_patient": ["Any past history of chest infection?"],
+        "information_to_gather": [
+            "Administer paracetamol 1g orally, repeat at 6 hours",
+            "Start supplemental oxygen at 2 L/min via nasal cannula",
+        ],
+        # Neither of these is in the schema. They used to travel straight
+        # through json.loads into the API response.
+        "diagnosis": "bacterial pneumonia",
+        "escalate": True,
+    }
 
 # The prompt the real client sends is plain text with aligned columns. Pull the
 # numbers back out of it so the reply is grounded in the same readings the
@@ -71,19 +115,29 @@ def _assessment(prompt: str) -> dict:
     who = NAME_PATTERN.search(prompt)
     name = who.group(1).strip() if who else "this crew member"
 
-    signs: list[str] = []
+    # Every sign carries the instrument that recorded it. The stand-in is held
+    # to the same provenance rule as the assistant, because a stand-in that
+    # models worse behaviour than the thing it stands in for teaches the team
+    # the wrong lesson every time they run it.
+    signs: list[dict] = []
     if v.get("temperature") is not None:
         t = v["temperature"]
         if t >= 38.0:
-            signs.append(f"temperature {t:.1f} C, above the 38.0 fever threshold")
+            signs.append({"source": "temperature",
+                          "text": f"{t:.1f} C, above the 38.0 fever threshold"})
         elif t <= 36.0:
-            signs.append(f"temperature {t:.1f} C, below normal")
+            signs.append({"source": "temperature", "text": f"{t:.1f} C, below normal"})
     if v.get("spo2") is not None and v["spo2"] < 95:
-        signs.append(f"SpO2 {v['spo2']:.0f}%, below the 95% floor")
+        signs.append({"source": "spo2", "text": f"{v['spo2']:.0f}%, below the 95% floor"})
     if v.get("pulse") is not None and v["pulse"] > 100:
-        signs.append(f"pulse {v['pulse']:.0f}/min, above 100")
+        signs.append({"source": "pulse", "text": f"{v['pulse']:.0f}/min, above 100"})
     if v.get("respiration") is not None and v["respiration"] > 20:
-        signs.append(f"respiration {v['respiration']:.0f}/min, above 20")
+        signs.append({"source": "respiration", "text": f"{v['respiration']:.0f}/min, above 20"})
+
+    def fit(n: int) -> str:
+        return ("one measurement fits" if n <= 1
+                else "several measurements fit" if n < 4
+                else "all measured parameters fit")
 
     hypotheses = []
     fever = (v.get("temperature") or 0) >= 38.0
@@ -91,57 +145,65 @@ def _assessment(prompt: str) -> dict:
     tachypneic = (v.get("respiration") or 0) > 20
 
     if fever and (hypoxic or tachypneic):
+        picked = signs[:4]
         hypotheses.append({
-            "name": "Respiratory infection",
-            "confidence": "moderate",
-            "supporting_signs": signs[:4] or ["fever with respiratory involvement"],
+            "name": "Fever with respiratory involvement",
+            "fit": fit(len(picked)),
+            "supporting_signs": picked,
         })
     elif fever:
+        picked = [s for s in signs if s["source"] == "temperature"]
         hypotheses.append({
-            "name": "Febrile illness, source not yet localised",
-            "confidence": "low",
-            "supporting_signs": signs[:3] or ["raised temperature"],
+            "name": "Raised temperature, source not localised by these instruments",
+            "fit": fit(len(picked)),
+            "supporting_signs": picked,
         })
     if hypoxic:
+        picked = [s for s in signs if s["source"] == "spo2"]
         hypotheses.append({
-            "name": "Impaired gas exchange",
-            "confidence": "low",
-            "supporting_signs": [s for s in signs if "SpO2" in s] or ["reduced oxygen saturation"],
+            "name": "Reduced oxygen saturation",
+            "fit": fit(len(picked)),
+            "supporting_signs": picked,
         })
-    if not hypotheses:
-        hypotheses.append({
-            "name": "No pattern in the measured parameters",
-            "confidence": "low",
-            "supporting_signs": ["all four measured parameters within normal ranges"],
-        })
+
+    # The honest empty answer, which the old schema could not represent. A crew
+    # member whose four measured parameters are all in range gets no invented
+    # pattern: they get told that this box measured four things and all four
+    # were normal.
+    insufficient = not hypotheses
 
     questions = []
     if fever:
         questions.append("When did you first feel feverish?")
     if tachypneic or hypoxic:
         questions.append("Are you short of breath at rest, or only on exertion?")
+    if insufficient:
+        questions.append("What are you feeling that these four instruments would not show?")
     questions.append("Has anyone you share a deck with had the same symptoms?")
 
-    protocol = []
+    # Observations and measurements only. Never a drug, never a dose, never a
+    # route — server/ai/validate.py would drop the whole array if it were, and
+    # the stand-in must not be the thing that trips its own guard.
+    gather = []
     if urgency in ("medium", "high"):
-        protocol.append("Repeat the full set of observations now, then every 15 minutes.")
+        gather.append("Repeat the full set of observations now, then every 15 minutes.")
     if fever and (hypoxic or tachypneic):
-        protocol.append("Apply respiratory isolation precautions until a cause is established.")
-    protocol.append("Record fluid intake and temperature every hour.")
+        gather.append("Check whether respiratory isolation precautions are already in place.")
+    gather.append("Record temperature hourly.")
 
     summary = (
-        f"The instruments recorded "
-        + (", ".join(signs) if signs else "no parameter outside its normal range")
-        + f" for {name}. NEWS2 aggregate {total}, band '{urgency}'."
+        "The instruments recorded "
+        + ("; ".join(f"{s['source']} {s['text']}" for s in signs)
+           if signs else "no parameter outside its normal range")
+        + f" for {name}. NEWS2 aggregate {total}."
     )
 
     return {
         "summary": summary,
+        "insufficient_data": insufficient,
         "hypotheses": hypotheses[:4],
         "questions_for_patient": questions[:4],
-        "suggested_protocol": protocol,
-        "escalate": urgency in ("medium", "high"),
-        "stand_in": True,
+        "information_to_gather": gather[:3],
     }
 
 
@@ -198,7 +260,7 @@ class Handler(BaseHTTPRequestHandler):
             m.get("content", "") for m in body.get("messages", []) if m.get("role") == "user"
         )
         if body.get("format"):
-            content = json.dumps(_assessment(prompt))
+            content = json.dumps(_rogue(prompt) if ROGUE else _assessment(prompt))
         else:
             # A free-text request. A stand-in has no words of its own, so it
             # says exactly that rather than improvising something that would
@@ -226,9 +288,16 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--port", type=int, default=11434)
     ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--rogue", action="store_true",
+                    help="misbehave on purpose, to show the station blocking it")
     args = ap.parse_args()
+    global ROGUE
+    ROGUE = args.rogue
     httpd = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"Stand-in Ollama on http://{args.host}:{args.port}")
+    if ROGUE:
+        print("ROGUE MODE: prescribing, diagnosing and contradicting NEWS2 on purpose.")
+        print("Everything it sends should be caught by server/ai/validate.py.")
     print("This is NOT a language model. It reads the vitals out of the prompt")
     print("and states them back. Use it to test the path, never to claim a result.")
     try:

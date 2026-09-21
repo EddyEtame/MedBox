@@ -7,7 +7,9 @@
   "use strict";
 
   var el = function (id) { return document.getElementById(id); };
-  var state = { board: [], selected: null, quarantine: null, aiUp: false };
+  // `held` is the assessment currently on screen, as the server stamped it,
+  // so the detail pane can tell when the readings it describes have moved on.
+  var state = { board: [], selected: null, quarantine: null, aiUp: false, held: null };
 
   /* ---------- websocket, with automatic reconnect ---------- */
   var ws = null, retry = 0;
@@ -141,6 +143,7 @@
       if (state.board[i].patient.id === state.selected) { row = state.board[i]; break; }
     }
     if (!row) return;
+    checkHeld(row);
     var p = row.patient, t = row.triage;
 
     el("detailName").textContent = p.name;
@@ -179,46 +182,33 @@
       .then(function (res) {
         el("aiBtn").disabled = false;
         if (!res.ok) {
-          out.innerHTML = '<div class="fail"><b>Assistant unavailable</b>' +
-            esc(res.body.note || "") + "</div>";
+          state.held = null;
+          out.innerHTML = MedBox.assessment.failure(res.body.note);
           return;
         }
-        var b = res.body;
-        var html = "";
-        if (b.stand_in) {
-          html += '<div class="standin-note"><b>Stand-in, not a language model</b>' +
-            'This came from tools/fake_ollama.py, which reads the vitals back and ' +
-            'applies fixed rules. It proves the path works. It is not the assistant ' +
-            'thinking, and must never be presented as such.</div>';
-        }
-        html += '<p class="sum">' + esc(b.summary || "") + "</p>";
-        if (b.hypotheses && b.hypotheses.length) {
-          html += "<h3>Hypotheses</h3>";
-          html += b.hypotheses.map(function (h) {
-            return '<div class="hyp"><b>' + esc(h.name) + '</b>' +
-              '<span class="conf">' + esc(h.confidence) + ' confidence</span>' +
-              "<ul>" + (h.supporting_signs || []).map(function (s) {
-                return "<li>" + esc(s) + "</li>";
-              }).join("") + "</ul></div>";
-          }).join("");
-        }
-        if (b.questions_for_patient && b.questions_for_patient.length) {
-          html += "<h3>Ask the patient</h3><ul>" +
-            b.questions_for_patient.map(function (q) { return "<li>" + esc(q) + "</li>"; }).join("") +
-            "</ul>";
-        }
-        if (b.suggested_protocol && b.suggested_protocol.length) {
-          html += "<h3>Suggested protocol</h3><ul>" +
-            b.suggested_protocol.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") +
-            "</ul>";
-        }
-        out.innerHTML = html;
+        state.held = res.body;
+        out.innerHTML = MedBox.assessment.render(res.body);
       })
       .catch(function () {
         el("aiBtn").disabled = false;
-        out.innerHTML = '<div class="fail"><b>Assistant unreachable</b>' +
-          "Vitals and triage are unaffected.</div>";
+        state.held = null;
+        out.innerHTML = MedBox.assessment.failure("Vitals and triage are unaffected.");
       });
+  }
+
+  /* The band beside this text updates on every frame. The text does not. */
+  function checkHeld(row) {
+    var out = el("aiOut");
+    if (!state.held || !out.innerHTML) return;
+    if (state.held.patient_id !== state.selected) return;
+    var live = row && row.triage ? row.triage.total : null;
+    var msg = MedBox.assessment.staleness(state.held, live, Date.now());
+    out.classList.toggle("stale", !!msg);
+    var banner = el("aiStale");
+    if (banner) {
+      banner.hidden = !msg;
+      if (msg) banner.textContent = msg;
+    }
   }
 
   function esc(s) {
@@ -229,7 +219,9 @@
   /* ---------- wiring ---------- */
   function select(id) {
     state.selected = id;
+    state.held = null;
     el("aiOut").innerHTML = "";
+    el("aiStale").hidden = true;
     el("sayInput").value = "";
     el("sayInput").disabled = false;
     el("sayBtn").disabled = false;
