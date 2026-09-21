@@ -10,6 +10,7 @@ model loader.
 from __future__ import annotations
 
 import hashlib
+import os
 import sys
 import zipfile
 from pathlib import Path
@@ -420,3 +421,43 @@ def test_nothing_in_the_installer_recommends_a_bare_pip():
             assert "python_command" in ln, (
                 f"tools/assets.py:{n} recommends a bare pip: {ln.strip()}"
             )
+
+
+def test_the_installer_survives_a_windows_redirect(tmp_path):
+    """Windows defaults a redirected stdout to cp1252, which has no tick and no
+    cross, so printing one raised UnicodeEncodeError and took the script down
+    over decoration. Redirecting output to a file is exactly what somebody does
+    when setup has gone wrong and they want to send you the result."""
+    import subprocess
+
+    out = tmp_path / "log.txt"
+    env = dict(os.environ, PYTHONIOENCODING="cp1252")
+    with out.open("wb") as fh:
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "tools" / "assets.py"), "--check"],
+            stdout=fh, stderr=subprocess.STDOUT, env=env, timeout=120,
+        )
+    text = out.read_text(encoding="utf-8", errors="replace")
+    assert "UnicodeEncodeError" not in text, f"crashed under cp1252:\n{text}"
+    assert "Assets for MedBox" in text, f"produced nothing useful:\n{text}"
+    # --check exits 1 while the speech model is absent; a crash exits 1 too,
+    # so the assertions above are what distinguish them.
+    assert r.returncode in (0, 1)
+
+
+def test_the_marks_fall_back_to_letters_when_the_encoding_cannot_carry_them():
+    from tools.assets import _mark
+
+    assert _mark("\u2713", "OK") in ("\u2713", "OK")
+    # The fallback is what matters: a codec that cannot encode the glyph.
+    import io
+
+    class Narrow:
+        encoding = "cp1252"
+
+    real, sys.stdout = sys.stdout, Narrow()
+    try:
+        assert _mark("\u2713", "OK") == "OK"
+        assert _mark("\u00b7", "-") == "\u00b7", "cp1252 does carry a middle dot"
+    finally:
+        sys.stdout = real

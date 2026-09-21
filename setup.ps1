@@ -1,7 +1,15 @@
 # Windows convenience wrapper. All the logic lives in setup.py.
 #   powershell -ExecutionPolicy Bypass -File setup.ps1
 
-Set-Location -Path $PSScriptRoot
+# -LiteralPath, not -Path: -Path treats [ and ] as wildcard metacharacters, so
+# a clone under a folder like "MedBox [old]" fails to resolve. A space is fine
+# either way. If this does not land, "setup.py" below would resolve against
+# whatever directory the shell happened to be in.
+Set-Location -LiteralPath $PSScriptRoot
+if ((Get-Location).Path -ne $PSScriptRoot) {
+    Write-Host "Could not move to $PSScriptRoot" -ForegroundColor Red
+    exit 1
+}
 
 # Deliberately NOT "Stop".
 #
@@ -39,28 +47,36 @@ $prefix = @()
 # Note `2>&1` and NOT `2>$null`. Merging stderr into the output stream produces
 # records that the assignment to $null swallows. Redirecting to $null is the
 # construct that killed the earlier version of this file.
-$launcher = Get-Command "py" -ErrorAction SilentlyContinue
-if ($launcher) {
-    $null = & $launcher.Source -3 -c "pass" 2>&1
+# EVERY match is probed, not just the first. Get-Command returns one entry per
+# matching executable on PATH, and %LOCALAPPDATA%\Microsoft\WindowsApps -- which
+# holds the Store stubs -- is on the user PATH by default and often sits ahead
+# of a python.org install. Taking only the first match would test the stub,
+# watch it fail, and give up while the real interpreter sat second in the list.
+foreach ($found in @(Get-Command "py" -CommandType Application -ErrorAction SilentlyContinue)) {
+    if (-not $found.Source) { continue }
+    $null = & $found.Source -3 -c "pass" 2>&1
     if ($LASTEXITCODE -eq 0) {
-        $exe = $launcher.Source
+        $exe = $found.Source
         $prefix = @("-3")
+        break
     }
 }
 
 if (-not $exe) {
     foreach ($name in @("python", "python3")) {
-        $found = Get-Command $name -ErrorAction SilentlyContinue
-        if (-not $found) { continue }
-        $null = & $found.Source -c "pass" 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            $exe = $found.Source
-            # Reset, in case the py launcher was found but failed its probe.
-            # Leaving @("-3") here would run `python -3 setup.py`, which python
-            # rejects outright.
-            $prefix = @()
-            break
+        foreach ($found in @(Get-Command $name -CommandType Application -ErrorAction SilentlyContinue)) {
+            if (-not $found.Source) { continue }
+            $null = & $found.Source -c "pass" 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                $exe = $found.Source
+                # Reset, in case the py launcher was found but failed its
+                # probe. Leaving @("-3") here would run `python -3 setup.py`,
+                # which python rejects outright.
+                $prefix = @()
+                break
+            }
         }
+        if ($exe) { break }
     }
 }
 
@@ -77,11 +93,16 @@ if (-not $exe) {
 # a reason nothing else on screen explains.
 Write-Host "Using: $exe $($prefix -join ' ')" -ForegroundColor DarkGray
 
+# Cleared first. $LASTEXITCODE is session state, not per-statement state: if
+# the call below never launches a process, the previous value survives, and a
+# stale 0 would report a setup that never happened as a success. Running the
+# script directly in an existing session is enough for that to matter.
+$global:LASTEXITCODE = $null
 & $exe @prefix "setup.py" @args
 
 # $LASTEXITCODE is only set once a native program has actually run and
 # returned. If the call never got that far, it is whatever it was before, or
-# $null on a fresh session — and "exit $null" exits 0, which would report a
+# $null on a fresh session -- and "exit $null" exits 0, which would report a
 # setup that never happened as a success.
 if ($null -eq $LASTEXITCODE) { exit 1 }
 exit $LASTEXITCODE

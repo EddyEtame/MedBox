@@ -36,6 +36,7 @@ config change rather than a code change:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import shutil
 import sys
@@ -84,13 +85,33 @@ GREEN, RED, AMBER, DIM, OFF = "\033[32m", "\033[31m", "\033[33m", "\033[2m", "\0
 if not sys.stdout.isatty():
     GREEN = RED = AMBER = DIM = OFF = ""
 
+# Windows defaults a redirected or piped stdout to cp1252, which has no tick
+# and no cross. Printing one then raises UnicodeEncodeError and takes the whole
+# script down over decoration — and redirecting the output to a file is exactly
+# what somebody does when a setup step has gone wrong and they want to send it
+# to you. Ask for UTF-8 first, then fall back to plain letters if the encoding
+# still cannot carry the marks.
+with contextlib.suppress(Exception):
+    sys.stdout.reconfigure(encoding="utf-8")
+
+
+def _mark(glyph: str, plain: str) -> str:
+    try:
+        glyph.encode(sys.stdout.encoding or "ascii")
+        return glyph
+    except (UnicodeEncodeError, LookupError, TypeError):
+        return plain
+
+
+TICK, CROSS, DOTS = _mark("\u2713", "OK"), _mark("\u2717", "XX"), _mark("\u2026", "..")
+
 
 def ok(m: str) -> None:
-    print(f"  {GREEN}✓{OFF} {m}")
+    print(f"  {GREEN}{TICK}{OFF} {m}")
 
 
 def bad(m: str) -> None:
-    print(f"  {RED}✗{OFF} {m}")
+    print(f"  {RED}{CROSS}{OFF} {m}")
 
 
 def note(m: str) -> None:
@@ -332,7 +353,7 @@ def fetch_speech(source: Path | None) -> bool:
         note("Or copy models/faster-whisper-base from a machine that has it and use --from.")
         return False
 
-    print(f"  {AMBER}…{OFF} speech model  {DIM}downloading, about 140 MB{OFF}")
+    print(f"  {AMBER}{DOTS}{OFF} speech model  {DIM}downloading, about 140 MB{OFF}")
     try:
         # By output_dir, so it lands where server/voice.py loads it from rather
         # than in a cache the demo laptop might not carry.
@@ -446,7 +467,7 @@ def main() -> int:
             missing.append(asset)
             continue
 
-        print(f"  {AMBER}…{OFF} {asset['path']}  {DIM}{why}{OFF}")
+        print(f"  {AMBER}{DOTS}{OFF} {asset['path']}  {DIM}{why}{OFF}")
         got = install_from(asset, source, dest) if source else download(asset, dest)
         if not got:
             missing.append(asset)

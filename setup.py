@@ -310,9 +310,15 @@ def setup_ollama(check_only: bool, assume_yes: bool) -> bool:
     print(f"        Pulling {model}. First time this downloads about 1 GB.")
     r = subprocess.run([binary, "pull", model])
     if r.returncode != 0:
+        # The resolved path, not the bare name. ollama_binary() exists
+        # precisely because the Windows installer is per-user and does not
+        # refresh the PATH of an already-open shell, so telling somebody to
+        # type `ollama` here hands them the CommandNotFoundException that
+        # brought them to this message in the first place.
         warn(
             f"Could not pull {model}. Try a fallback from config.toml, e.g.\n"
-            f"        ollama pull llama3.2:3b     then set it as `model` in config.toml"
+            f'        "{binary}" pull llama3.2:3b\n'
+            f"        then set it as `model` in config.toml"
         )
         return False
     ok(f"pulled {model}")
