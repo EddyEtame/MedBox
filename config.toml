@@ -10,8 +10,10 @@ board_hz = 10
 sample_hz = 20
 
 [ai]
-# Ollama must be this version on BOTH machines and on the demo laptop.
-# setup.py checks this and refuses to continue on a mismatch.
+# The version both machines and the demo laptop should be on. setup.py checks
+# it and warns loudly on a mismatch, but does not stop: refusing to finish
+# setup on the demo laptop an hour before the defence would be a worse failure
+# than the mismatch it was guarding against.
 required_ollama = "0.5.4"
 host = "http://127.0.0.1:11434"
 # Exact model tag. Small enough for a laptop CPU, good at structured output.
