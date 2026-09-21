@@ -59,6 +59,8 @@ select:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-
 .chip.up .led{background:var(--ok)} .chip.down .led{background:var(--crit)}
 .chip.up{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
 .chip.down{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 40%,transparent)}
+.chip.standin .led{background:var(--warn)}
+.chip.standin{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent)}
 
 main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;padding:16px 20px 28px;align-items:start}
 @media (max-width:900px){main{grid-template-columns:1fr}}
@@ -125,6 +127,8 @@ main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;padding:16p
   color:var(--ink2);font-size:12.5px;background:color-mix(in srgb,var(--crit) 9%,transparent);
 }
 .ai .fail b{color:var(--crit);display:block;margin-bottom:3px}
+.ai .standin-note{margin:0 0 12px;padding:10px 12px;border:1px solid var(--warn);border-radius:8px;color:var(--ink2);font-size:12px;line-height:1.5;background:rgba(240,196,89,.09)}
+.ai .standin-note b{color:var(--warn);display:block;margin-bottom:3px}
 .hyp{border-left:2px solid var(--line2);padding-left:11px;margin-bottom:9px}
 .hyp b{display:block;font-size:13.5px}
 .hyp .conf{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink3)}

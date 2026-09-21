@@ -48,7 +48,16 @@
     state.aiUp = !!(msg.ai && msg.ai.available);
 
     el("ship").textContent = msg.ship || "";
-    setChip("aiChip", state.aiUp, state.aiUp ? "AI narration" : "AI offline — triage unaffected");
+    state.standIn = !!(msg.ai && msg.ai.stand_in);
+    // The board and the 3D console must never disagree about what is
+    // answering. Both say "stand-in" the moment it is one.
+    var aiChip = el("aiChip");
+    if (state.aiUp && state.standIn) {
+      aiChip.className = "chip standin";
+      aiChip.innerHTML = '<i class="led"></i>Stand-in, not a model';
+    } else {
+      setChip("aiChip", state.aiUp, state.aiUp ? "AI narration" : "AI offline — triage unaffected");
+    }
     el("scenarioChip").textContent = msg.scenario ? ("Running: " + msg.scenario) : "No scenario running";
 
     var impaired = 0;
@@ -172,7 +181,14 @@
           return;
         }
         var b = res.body;
-        var html = '<p class="sum">' + esc(b.summary || "") + "</p>";
+        var html = "";
+        if (b.stand_in) {
+          html += '<div class="standin-note"><b>Stand-in, not a language model</b>' +
+            'This came from tools/fake_ollama.py, which reads the vitals back and ' +
+            'applies fixed rules. It proves the path works. It is not the assistant ' +
+            'thinking, and must never be presented as such.</div>';
+        }
+        html += '<p class="sum">' + esc(b.summary || "") + "</p>";
         if (b.hypotheses && b.hypotheses.length) {
           html += "<h3>Hypotheses</h3>";
           html += b.hypotheses.map(function (h) {
