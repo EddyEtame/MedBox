@@ -26,10 +26,25 @@ from .db import Database
 from .quarantine import QuarantineRegistry
 from .sensors.synthetic import ScenarioSource
 from .symptoms import SymptomLog
-from .triage import assess
+from .triage import Urgency, assess
 
 log = logging.getLogger("medbox")
 WEB_DIR = ROOT / "web"
+
+
+def triage_order(row: dict) -> tuple:
+    """Sort key for the board: band first, then aggregate, then id.
+
+    NEWS2 escalates any single parameter scoring 3 to medium on its own, so a
+    crew member on an aggregate of 3 can need urgent review while someone on 4
+    needs only a ward review. Sorting on the raw aggregate alone filed the
+    urgent one lower, which is the one mistake a triage board must not make.
+    """
+    return (
+        -Urgency(row["triage"]["urgency"]).rank,
+        -row["triage"]["total"],
+        row["patient"]["id"],
+    )
 
 
 class MedBox:
@@ -105,9 +120,7 @@ class MedBox:
         rows = []
         for pid, entry in self.latest.items():
             rows.append(entry)
-        rows.sort(
-            key=lambda r: (-r["triage"]["total"], r["patient"]["id"]),
-        )
+        rows.sort(key=triage_order)
         return rows
 
     async def loop(self) -> None:
@@ -248,6 +261,16 @@ async def report_symptom(patient_id: str, body: dict) -> dict:
     return {"reported": STATION.symptoms.for_patient(patient_id)}
 
 
+# This must be declared BEFORE /api/scenario/{name}. Starlette matches routes
+# in declaration order, so with the parameterised route first, "stop" was
+# read as a scenario name and the Reset button in both views silently 404'd
+# instead of stopping anything.
+@app.post("/api/scenario/stop")
+async def stop_scenario() -> dict:
+    STATION.stop_scenario()
+    return {"stopped": True}
+
+
 @app.post("/api/scenario/{name}")
 async def start_scenario(name: str) -> dict:
     try:
@@ -255,12 +278,6 @@ async def start_scenario(name: str) -> dict:
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
     return {"started": sc.name, "description": sc.description, "duration": sc.duration}
-
-
-@app.post("/api/scenario/stop")
-async def stop_scenario() -> dict:
-    STATION.stop_scenario()
-    return {"stopped": True}
 
 
 @app.post("/api/assess/{patient_id}")
