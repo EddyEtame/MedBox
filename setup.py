@@ -4,6 +4,7 @@
     python setup.py              full setup
     python setup.py --no-ollama  skip everything AI (useful offline)
     python setup.py --check      report what is installed, change nothing
+    python setup.py -y           answer yes to the install prompts (unattended)
 
 It creates the virtual environment, installs pinned dependencies, installs and
 version-checks Ollama, pulls the model, creates the database and runs the tests.
@@ -141,9 +142,16 @@ def check_python() -> bool:
     v = sys.version_info
     if (v.major, v.minor) < MIN_PYTHON:
         fail(
-            f"Python {v.major}.{v.minor} found, {MIN_PYTHON[0]}.{MIN_PYTHON[1]}+ needed. "
-            f"Install it from python.org and re-run."
+            f"Python {v.major}.{v.minor} found, {MIN_PYTHON[0]}.{MIN_PYTHON[1]}+ needed."
         )
+        # WHICH one, always. A machine can carry several Pythons and the
+        # launcher can hand over the oldest: `py -3` resolved to 3.9.13 here
+        # while a working 3.11.9 sat on PATH as `python`, and the message
+        # without this line reads as "go and install Python" to somebody who
+        # already has it. setup.ps1 now probes the version rather than
+        # trusting the launcher; this line is how you see which one answered.
+        print(f"        {sys.executable}")
+        print("        Install it from https://www.python.org/downloads/ and re-run.")
         return False
     # The path, not just the number. When a wheel fails to build later, the
     # first question is always which interpreter ran, and on Windows `py -3`
@@ -210,6 +218,58 @@ def ollama_binary() -> str | None:
     return None
 
 
+def confirm(prompt: str, assume_yes: bool) -> bool:
+    """Ask a yes/no question, or answer it ourselves when nobody can be asked.
+
+    `-y` wins first: that is the whole point of the flag.
+
+    Then a tty test that checks stdout as well as stdin, and not stdin alone.
+    CPython only writes an input() prompt to the console when BOTH are a tty.
+    With just stdout redirected — `... *> setup.log`, `| Tee-Object`, the
+    obvious thing to do after a screen of errors when somebody asks you for
+    the full output — the prompt is written into the file and the read blocks
+    on a console showing nothing at all. Measured, not reasoned about: with a
+    pty on stdin and a file on stdout, the terminal received the empty string
+    and the prompt was sitting in the file. Checking stdin alone walks
+    straight into that, and it is indistinguishable from a hung download.
+
+    With no console stdin at all — Task Scheduler, `< NUL`, an IDE run button,
+    another program driving this — input() raises EOFError, which nothing
+    caught. setup died with a traceback in the middle of step 3, so the
+    database was never created and the tests never ran.
+
+    It declines rather than proceeds. Starting a 1.2 GB download, or piping a
+    remote script into sh, because nobody was watching is not an improvement.
+    `-y` is how you say yes when nobody is there to be asked.
+
+    sys.stdin and sys.stdout are None under pythonw.exe and .isatty() raises
+    on a closed stream, so neither is dereferenced without a guard.
+    """
+    if assume_yes:
+        return True
+    try:
+        interactive = (
+            sys.stdin is not None
+            and sys.stdout is not None
+            and sys.stdin.isatty()
+            and sys.stdout.isatty()
+        )
+    except (ValueError, OSError):
+        interactive = False
+    if not interactive:
+        print("        Nothing was downloaded: this is not an interactive terminal,")
+        print("        so there is no way to ask. Run it in a PowerShell window, or")
+        print("        pass -y to answer yes up front.")
+        return False
+    try:
+        # "yes" as well as "y". A [y/N] prompt that silently declines when
+        # somebody types the whole word is the worst answer available.
+        return input(prompt).strip().lower() in ("y", "yes")
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+
+
 def install_ollama(assume_yes: bool, required: str = "") -> str | None:
     """Install Ollama, pinned to `required` when we know which version to want."""
     if IS_WINDOWS:
@@ -218,11 +278,9 @@ def install_ollama(assume_yes: bool, required: str = "") -> str | None:
         print(f"        Download and run: {url}")
         if required:
             print(f"        (pinned to {required} so both machines match)")
-        if not assume_yes:
-            answer = input("        Download the installer now and launch it? [y/N] ").strip().lower()
-            if answer != "y":
-                print(f"        Skipped. Install it yourself from {OLLAMA_DOWNLOAD_PAGE}, then re-run setup.")
-                return None
+        if not confirm("        Download the installer now and launch it? [y/N] ", assume_yes):
+            print(f"        Skipped. Install it yourself from {OLLAMA_DOWNLOAD_PAGE}, then re-run setup.")
+            return None
         target = ROOT / "OllamaSetup.exe"
         staging = target.with_suffix(".exe.part")
         try:
@@ -284,11 +342,9 @@ def install_ollama(assume_yes: bool, required: str = "") -> str | None:
     # OLLAMA_VERSION says otherwise, and "whatever is current" is exactly the
     # drift we are trying to avoid between two developers.
     warn("Ollama is not installed.")
-    if not assume_yes:
-        answer = input(f"        Run the official installer from {OLLAMA_LINUX_INSTALL}? [y/N] ").strip().lower()
-        if answer != "y":
-            print("        Skipped. Install it yourself, then re-run setup.")
-            return None
+    if not confirm(f"        Run the official installer from {OLLAMA_LINUX_INSTALL}? [y/N] ", assume_yes):
+        print("        Skipped. Install it yourself, then re-run setup.")
+        return None
     env = dict(os.environ)
     if required:
         env["OLLAMA_VERSION"] = required

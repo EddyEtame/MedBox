@@ -92,3 +92,95 @@ def test_the_daemon_being_down_is_not_read_as_having_no_models():
     assert "not answering" in src or "not running" in src, (
         "nothing tells the user the daemon is down"
     )
+
+
+# --------------------------------------------------------------------------
+# The Ollama step asks before it downloads 1.2 GB. Asking is right; asking
+# where nobody can answer is how setup hangs with a blank screen.
+class FakeStream:
+    def __init__(self, tty: bool, answer: str = "") -> None:
+        self._tty, self._answer = tty, answer
+
+    def isatty(self) -> bool:
+        return self._tty
+
+    def readline(self) -> str:
+        return self._answer
+
+    def write(self, _text: str) -> int:
+        return 0
+
+    def flush(self) -> None:
+        pass
+
+
+def use_streams(monkeypatch, stdin, stdout):
+    monkeypatch.setattr(sys, "stdin", stdin)
+    monkeypatch.setattr(sys, "stdout", stdout)
+
+
+def test_yes_up_front_never_asks(monkeypatch):
+    """-y is the answer for a machine with nobody at it."""
+    setup = _setup()
+    use_streams(monkeypatch, FakeStream(False), FakeStream(False))
+    assert setup.confirm("would never be answerable? ", True) is True
+
+
+def test_a_redirected_screen_is_never_asked(monkeypatch):
+    """`setup.ps1 *> setup.log` — the obvious thing to do when somebody asks
+    you for the full output. CPython writes an input() prompt to the console
+    only when stdin AND stdout are a tty; with stdout redirected the prompt
+    goes into the file and the read blocks on a console showing nothing. It is
+    indistinguishable from a hung 1.2 GB download, and there is no timeout.
+
+    Measured before this was written: a pty on stdin and a file on stdout, and
+    the terminal received the empty string while the prompt sat in the file.
+    """
+    setup = _setup()
+    use_streams(monkeypatch, FakeStream(True, "y\n"), FakeStream(False))
+    assert setup.confirm("must not be asked? ", False) is False
+
+
+def test_no_terminal_at_all_declines_rather_than_crashing(monkeypatch):
+    """Task Scheduler, `< NUL`, an IDE's run button, another program driving
+    this. input() raised EOFError, which nothing caught, so setup died with a
+    traceback halfway through step 3 and never created the database or ran the
+    tests."""
+    setup = _setup()
+
+    class NoInput(FakeStream):
+        def readline(self):
+            raise EOFError
+
+    use_streams(monkeypatch, NoInput(False), FakeStream(False))
+    assert setup.confirm("nobody is there? ", False) is False
+
+
+def test_it_declines_rather_than_helping_itself(monkeypatch):
+    """Downloading 1.2 GB, or piping a remote script into sh, because nobody
+    was watching is not a favour. Silence is No; -y is Yes."""
+    setup = _setup()
+    use_streams(monkeypatch, FakeStream(False), FakeStream(False))
+    assert setup.confirm("start a big download? ", False) is False
+
+
+def test_typing_the_whole_word_yes_works(monkeypatch):
+    """A [y/N] prompt that silently declines when somebody types "yes" is the
+    worst answer available: it looks like it worked and it did nothing."""
+    setup = _setup()
+    monkeypatch.setattr("builtins.input", lambda _prompt="": "  YES  ")
+    use_streams(monkeypatch, FakeStream(True), FakeStream(True))
+    assert setup.confirm("well? ", False) is True
+
+    monkeypatch.setattr("builtins.input", lambda _prompt="": "n")
+    assert setup.confirm("well? ", False) is False
+
+
+def test_the_flag_that_answers_the_prompt_is_documented():
+    """It existed and appeared in no usage text anywhere, so the only way past
+    the prompt was undiscoverable."""
+    doc = (ROOT / "setup.py").read_text(encoding="utf-8").split('"""')[1]
+    assert "-y" in doc, "setup.py's own usage block never mentions -y"
+    for path in ("README.md", "setup.ps1"):
+        text = (ROOT / path).read_text(encoding="utf-8")
+        assert "-y" in text, f"{path} never mentions -y"

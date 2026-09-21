@@ -42,11 +42,24 @@ inside the console, which keeps working with the assistant killed.
 and version-checks Ollama, pulls the model, creates the database and runs the
 tests. It is safe to run again at any time — every step checks before it acts.
 
-**On Windows it takes two passes.** Ollama ships as an installer, so setup
-downloads it (1.2 GB), launches it, and stops. Finish the installer, then run
-`setup.ps1` again — the second pass finds Ollama and pulls the model. You never
-need to type `ollama` yourself, which is just as well: its installer does not
-add itself to the PATH of a PowerShell window that was already open.
+**On Windows it takes two passes.** Ollama ships as an installer. Setup asks
+before fetching it — it is 1.2 GB — and the default is No, so nothing large is
+downloaded behind your back. Say `y` and it downloads, launches the installer
+and stops. Finish the installer, then run `setup.ps1` again: the second pass
+finds Ollama and pulls the model. You never need to type `ollama` yourself,
+which is just as well, because its installer does not add itself to the PATH
+of a PowerShell window that was already open.
+
+Answer that prompt in advance with `-y`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File setup.ps1 -y
+```
+
+Use it whenever setup is not looking at a terminal — piping the output to a
+file, running it from an editor, running it unattended. Without `-y` in those
+cases setup declines the download and says so, rather than asking a question
+into a log file and waiting forever for an answer.
 
 In a hurry, or on a network that will not carry it? `python setup.py --no-ollama`
 skips both downloads. Everything works except the narration, which is the point

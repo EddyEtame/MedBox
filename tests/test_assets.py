@@ -351,28 +351,30 @@ def test_nothing_tells_a_windows_user_a_command_powershell_refuses(path: str):
     )
 
 
-def test_the_wrapper_probes_an_interpreter_instead_of_trusting_the_path():
-    """Get-Command only proves a file is on PATH.
+def test_the_wrapper_probes_the_version_and_not_merely_that_it_runs():
+    """Get-Command only proves a file is on PATH, and running it only proves
+    it starts. Neither proves it is new enough.
 
-    py.exe lives in C:\\Windows and is left behind when a Python is
-    uninstalled, so `py` can outlive every runtime it could launch; python.exe
-    is often the Microsoft Store stub. Committing to either without running it
-    means never trying the interpreter that does work, and the friendly
-    "no Python" message becomes unreachable.
+    This cost a day. `py -3` on the owner's machine resolved to 3.9.13 and
+    passed a probe that asked no more than "does it start", so the wrapper
+    committed to it and setup stopped at step 1 telling somebody to install a
+    Python that was already on their PATH as 3.11.9. The probe asks the only
+    question that matters.
     """
     ps = (ROOT / "setup.ps1").read_text(encoding="utf-8")
     body = "\n".join(ln for ln in ps.splitlines() if not ln.strip().startswith("#"))
-    assert body.count('-c "pass"') >= 2, (
-        "setup.ps1 does not probe both candidates before committing to one"
+    assert "version_info >= (3, 11)" in body, (
+        "setup.ps1 no longer checks the version, so it will hand setup.py "
+        "whichever interpreter starts first — routinely the oldest one"
     )
+    assert "-c $PROBE" in body, "the version probe is defined and never used"
     assert "2>$null" not in body, (
         "setup.ps1 is back to redirecting native stderr to $null, which is the "
         "construct that made python's banner a fatal error"
     )
-    # If the launcher is found but fails its probe, $prefix must not keep -3.
-    assert body.count("$prefix = @()") >= 2, (
-        "setup.ps1 never resets $prefix, so a dead py launcher followed by a "
-        "working python would run `python -3 setup.py`"
+    assert "$prefix = $cand.prefix" in body, (
+        "$prefix no longer comes from the candidate that passed, so a failed "
+        "`py -3` could leave -3 behind and run `python -3 setup.py`"
     )
 
 
