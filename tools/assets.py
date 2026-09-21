@@ -46,7 +46,37 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+VENV = ROOT / ".venv"
 CHUNK = 1 << 20
+
+
+def python_command(script: str) -> str:
+    """The command a person should actually type to run this.
+
+    Spelled out here rather than imported from server.config, because this file
+    stays free of project imports: it is the thing you run when the install is
+    incomplete, and importing a module that parses config.toml would make it
+    fail for a reason that has nothing to do with the files it fetches. A test
+    asserts this agrees with server.config.python_command.
+    """
+    if sys.platform.startswith("win"):
+        return f".venv\\Scripts\\python {script}"
+    return f".venv/bin/python {script}"
+
+
+def in_venv() -> bool:
+    """Is the interpreter running this the one that has the dependencies?
+
+    By `sys.prefix`, not by the path of `sys.executable`. A venv's `python` is
+    a symlink to the system interpreter, so resolving it walks straight back
+    out of the venv and every check based on the path says no — including for
+    the correct interpreter. `sys.prefix` is the venv directory itself and
+    `sys.base_prefix` is the system one, which is what a venv actually means.
+    """
+    try:
+        return Path(sys.prefix).resolve() == VENV.resolve()
+    except OSError:
+        return False
 
 GREEN, RED, AMBER, DIM, OFF = "\033[32m", "\033[31m", "\033[33m", "\033[2m", "\033[0m"
 if not sys.stdout.isatty():
@@ -338,6 +368,19 @@ def main() -> int:
     ap.add_argument("--record", action="store_true",
                     help="print the SHA-256 of each asset present, to paste into config.toml")
     args = ap.parse_args()
+
+    # Running this with the wrong interpreter is the likeliest mistake there
+    # is, because the server's own message used to say "python tools/assets.py"
+    # and every dependency lives in .venv. Caught here and named exactly, with
+    # the right command, rather than reported later as "faster-whisper is not
+    # installed" — which sends a person to pip, into the wrong environment, and
+    # leaves the server still saying the model is missing.
+    if VENV.is_dir() and not in_venv():
+        bad("this is not the MedBox virtual environment, so it cannot see the "
+            "dependencies")
+        note(f"Run: {python_command('tools/assets.py')}")
+        note("(from the MedBox folder, the one holding setup.py)")
+        return 1
 
     manifest = read_manifest()
 

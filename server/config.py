@@ -15,6 +15,25 @@ else:  # pragma: no cover - Python 3.10 and older
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "config.toml"
+VENV = ROOT / ".venv"
+
+
+def python_command(script: str) -> str:
+    """The command a person should actually type to run one of our scripts.
+
+    Every dependency lives in .venv, so a bare `python tools/assets.py` runs
+    an interpreter that cannot see faster-whisper and reports it as missing.
+    The person then installs it with the wrong pip, into the wrong place, and
+    the server still says it is not there. Telling somebody to run a command
+    that cannot work is worse than telling them nothing, so any message that
+    names a command builds it here.
+
+    The same string is spelled out independently in tools/assets.py, which
+    stays free of project imports on purpose. A test asserts the two agree.
+    """
+    if sys.platform.startswith("win"):
+        return f".venv\\Scripts\\python {script}"
+    return f".venv/bin/python {script}"
 
 
 @dataclass(frozen=True)

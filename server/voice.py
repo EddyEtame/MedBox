@@ -35,7 +35,7 @@ import logging
 import math
 from pathlib import Path
 
-from .config import CONFIG, ROOT
+from .config import CONFIG, ROOT, python_command
 
 log = logging.getLogger("medbox.voice")
 
@@ -90,7 +90,7 @@ class Transcriber:
         if not self.model_dir.is_dir():
             self.last_error = (
                 f"no speech model at {self._where()}. "
-                "Run: python tools/assets.py"
+                f"Run: {python_command('tools/assets.py')}"
             )
             return False
         short = [f for f in MODEL_FILES if not (self.model_dir / f).exists()]
@@ -98,7 +98,7 @@ class Transcriber:
             self.last_error = (
                 f"the speech model at {self._where()} is "
                 f"incomplete ({', '.join(short)} missing). "
-                "Run: python tools/assets.py"
+                f"Run: {python_command('tools/assets.py')}"
             )
             return False
         try:

@@ -39,6 +39,30 @@ tests. It is safe to run again at any time — every step checks before it acts.
 No Ollama, or no patience for a 2 GB download? `python setup.py --no-ollama`.
 Everything works except the narration, which is the point of the next section.
 
+### Hold-to-speak (optional)
+
+The station always talks — the clips are in the repo and need nothing
+installed. To let it *listen*, fetch the speech model once:
+
+**Linux / macOS**
+```bash
+.venv/bin/python tools/assets.py
+```
+
+**Windows**
+```powershell
+.venv\Scripts\python tools\assets.py
+```
+
+Run it from this folder, the one holding `setup.py`, and use the interpreter
+inside `.venv` — a bare `python` has none of the dependencies and will tell you
+faster-whisper is missing when it is sitting right there.
+
+No network in the room? Copy `models/faster-whisper-base` (a folder, or a zip
+of it) onto a USB drive and use `--from /path/to/the/drive`. Either way the
+microphone button stays hidden until a complete model is present, and typing a
+symptom works throughout.
+
 ---
 
 ## The one design decision

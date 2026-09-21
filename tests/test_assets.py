@@ -245,3 +245,50 @@ def test_a_half_copied_model_is_not_offered_as_a_working_microphone(tmp_path):
     assert t.available is False
     assert "incomplete" in (t.last_error or "")
     assert "tools/assets.py" in (t.last_error or ""), "the message names no way out"
+
+
+# ------------------------------------- the commands we tell people to type
+
+def test_both_copies_of_the_command_helper_agree():
+    """tools/assets.py spells this out rather than importing it, so that the
+    script you run when the install is broken does not itself depend on the
+    install. Two copies drift unless something checks."""
+    from server.config import python_command as from_server
+    from tools.assets import python_command as from_tools
+
+    assert from_server("tools/assets.py") == from_tools("tools/assets.py")
+
+
+def test_the_command_we_print_names_the_virtual_environment():
+    """`python tools/assets.py` runs an interpreter with none of the
+    dependencies. It reports faster-whisper as missing, the person installs it
+    with the wrong pip into the wrong place, and the server still says the
+    model is not there. A command that cannot work is worse than no command."""
+    from server.config import python_command
+
+    cmd = python_command("tools/assets.py")
+    assert ".venv" in cmd, f"{cmd!r} does not name the virtual environment"
+    assert not cmd.startswith("python "), f"{cmd!r} is the bare interpreter"
+
+
+def test_the_server_tells_an_operator_a_command_that_can_actually_run():
+    from server.voice import Transcriber
+
+    t = Transcriber(ROOT / "models" / "definitely-not-here")
+    assert t.available is False
+    assert ".venv" in (t.last_error or ""), (
+        f"the server says {t.last_error!r}, which sends a person to an "
+        "interpreter that has none of the dependencies"
+    )
+
+
+def test_running_it_with_the_wrong_interpreter_is_detected():
+    """This test runs under the venv, so in_venv() must say so. If this fails
+    the guard is inverted, and every correct invocation gets refused."""
+    from tools.assets import in_venv
+
+    assert in_venv() is True, (
+        "in_venv() does not recognise the interpreter running the test suite. "
+        "Note a venv's python is a SYMLINK to the system one, so any check "
+        "that resolves sys.executable walks back out of the venv."
+    )
