@@ -128,3 +128,6 @@ main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;padding:16p
 .hyp{border-left:2px solid var(--line2);padding-left:11px;margin-bottom:9px}
 .hyp b{display:block;font-size:13.5px}
 .hyp .conf{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink3)}
+
+/* The Ship link is an anchor styled as a button; keep it from underlining. */
+a.btn{text-decoration:none;display:inline-flex;align-items:center}

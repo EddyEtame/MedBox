@@ -286,9 +286,25 @@ if WEB_DIR.exists():
     app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
 
+def _page(name: str) -> FileResponse:
+    target = WEB_DIR / name
+    if not target.exists():
+        raise HTTPException(500, f"web/{name} is missing")
+    return FileResponse(target)
+
+
+# The ship is the front door. The flat board stays one click away and needs no
+# GPU, so a machine that cannot run WebGL still runs the whole demo.
 @app.get("/")
 async def index() -> FileResponse:
-    target = WEB_DIR / "index.html"
-    if not target.exists():
-        raise HTTPException(500, "web/index.html is missing")
-    return FileResponse(target)
+    return _page("ship.html")
+
+
+@app.get("/ship")
+async def ship() -> FileResponse:
+    return _page("ship.html")
+
+
+@app.get("/board")
+async def board_page() -> FileResponse:
+    return _page("index.html")
