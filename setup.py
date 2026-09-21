@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -30,8 +31,13 @@ IS_WINDOWS = platform.system() == "Windows"
 MIN_PYTHON = (3, 11)
 
 OLLAMA_LINUX_INSTALL = "https://ollama.com/install.sh"
-OLLAMA_WINDOWS_INSTALLER = "https://ollama.com/download/OllamaSetup.exe"
 OLLAMA_DOWNLOAD_PAGE = "https://ollama.com/download"
+# Pinning matters more than convenience here: two developers who install on
+# two different days must end up on the SAME Ollama, or a bug on one machine
+# is unreproducible on the other. The official install script honours
+# OLLAMA_VERSION, and every release has a Windows installer at a stable URL.
+OLLAMA_WINDOWS_PINNED = "https://github.com/ollama/ollama/releases/download/v{v}/OllamaSetup.exe"
+OLLAMA_WINDOWS_LATEST = "https://ollama.com/download/OllamaSetup.exe"
 
 GREEN, YELLOW, RED, DIM, RESET = "\033[32m", "\033[33m", "\033[31m", "\033[2m", "\033[0m"
 if IS_WINDOWS and not os.environ.get("WT_SESSION"):
@@ -78,6 +84,17 @@ def read_required_ollama() -> str:
         if line.startswith("required_ollama"):
             return line.split("=", 1)[1].strip().strip('"').strip("'")
     return ""
+
+
+VERSION_RE = re.compile(r"(\d+\.\d+\.\d+)")
+
+
+def parse_ollama_version(text: str) -> str:
+    """`ollama --version` may also print a warning about the daemon not
+    running, so take the first thing shaped like a version rather than the
+    last token of the combined output."""
+    m = VERSION_RE.search(text or "")
+    return m.group(1) if m else "unknown"
 
 
 def read_model() -> str:
@@ -145,10 +162,14 @@ def ollama_binary() -> str | None:
     return None
 
 
-def install_ollama(assume_yes: bool) -> str | None:
+def install_ollama(assume_yes: bool, required: str = "") -> str | None:
+    """Install Ollama, pinned to `required` when we know which version to want."""
     if IS_WINDOWS:
+        url = OLLAMA_WINDOWS_PINNED.format(v=required) if required else OLLAMA_WINDOWS_LATEST
         warn("Ollama is not installed.")
-        print(f"        Download and run: {OLLAMA_WINDOWS_INSTALLER}")
+        print(f"        Download and run: {url}")
+        if required:
+            print(f"        (pinned to {required} so both machines match)")
         if not assume_yes:
             answer = input("        Download the installer now and launch it? [y/N] ").strip().lower()
             if answer != "y":
@@ -157,9 +178,17 @@ def install_ollama(assume_yes: bool) -> str | None:
         target = ROOT / "OllamaSetup.exe"
         try:
             print("        Downloading (about 200 MB)...")
-            urllib.request.urlretrieve(OLLAMA_WINDOWS_INSTALLER, target)
+            urllib.request.urlretrieve(url, target)
         except (urllib.error.URLError, OSError) as exc:
-            fail(f"Download failed: {exc}. Install manually from {OLLAMA_DOWNLOAD_PAGE}")
+            if required:
+                # The pinned release may not carry that asset name. Say so
+                # plainly rather than silently installing a different version.
+                fail(
+                    f"Could not download the pinned Ollama {required}: {exc}\n"
+                    f"        Check the version in config.toml against {OLLAMA_DOWNLOAD_PAGE}"
+                )
+            else:
+                fail(f"Download failed: {exc}. Install manually from {OLLAMA_DOWNLOAD_PAGE}")
             return None
         print("        Launching the installer. Finish it, then re-run this script.")
         try:
@@ -168,14 +197,20 @@ def install_ollama(assume_yes: bool) -> str | None:
             print(f"        Run it yourself: {target}")
         return None
 
-    # Linux / macOS
+    # Linux / macOS. The official script installs whatever is current unless
+    # OLLAMA_VERSION says otherwise, and "whatever is current" is exactly the
+    # drift we are trying to avoid between two developers.
     warn("Ollama is not installed.")
     if not assume_yes:
         answer = input(f"        Run the official installer from {OLLAMA_LINUX_INSTALL}? [y/N] ").strip().lower()
         if answer != "y":
             print("        Skipped. Install it yourself, then re-run setup.")
             return None
-    r = subprocess.run(f"curl -fsSL {OLLAMA_LINUX_INSTALL} | sh", shell=True)
+    env = dict(os.environ)
+    if required:
+        env["OLLAMA_VERSION"] = required
+        print(f"        Installing Ollama {required} (pinned in config.toml)")
+    r = subprocess.run(f"curl -fsSL {OLLAMA_LINUX_INSTALL} | sh", shell=True, env=env)
     if r.returncode != 0:
         fail("The Ollama installer failed. Install it manually and re-run setup.")
         return None
@@ -191,18 +226,20 @@ def setup_ollama(check_only: bool, assume_yes: bool) -> bool:
         if check_only:
             warn("Ollama not found")
             return False
-        binary = install_ollama(assume_yes)
+        binary = install_ollama(assume_yes, required)
         if binary is None:
             return False
 
     r = run([binary, "--version"])
-    version = (r.stdout + r.stderr).strip().split()[-1] if r.returncode == 0 else "unknown"
+    version = parse_ollama_version(r.stdout + r.stderr) if r.returncode == 0 else "unknown"
     if required and version != required:
         # A mismatch is a warning, not a stop: it usually still works, but both
         # machines and the demo laptop should be identical before Friday.
         warn(
-            f"Ollama {version} installed, config.toml pins {required}. "
-            "Get both machines onto the same version before the demo."
+            f"Ollama {version} installed, config.toml pins {required}.\n"
+            f"        Both machines and the demo laptop should be on {required} before Friday.\n"
+            f"        Linux:   curl -fsSL {OLLAMA_LINUX_INSTALL} | OLLAMA_VERSION={required} sh\n"
+            f"        Windows: {OLLAMA_WINDOWS_PINNED.format(v=required)}"
         )
     else:
         ok(f"Ollama {version}")
@@ -212,7 +249,8 @@ def setup_ollama(check_only: bool, assume_yes: bool) -> bool:
 
     model = read_model()
     tags = run([binary, "list"])
-    if model.split(":")[0] in tags.stdout:
+    pulled = {line.split()[0] for line in tags.stdout.splitlines()[1:] if line.strip()}
+    if model in pulled or f"{model}:latest" in pulled:
         ok(f"model {model} already pulled")
         return True
 
