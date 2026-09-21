@@ -142,7 +142,8 @@ class MedBox:
                     "ship": CONFIG.ship.name,
                     "board": self._board(),
                     "quarantine": self.quarantine.to_dict(),
-                    "ai": {"available": CLIENT.available, "error": CLIENT.last_error},
+                    "ai": {"available": CLIENT.available, "error": CLIENT.last_error,
+                           "stand_in": CLIENT.stand_in},
                     "scenario": self.scenario.name if self.scenario else None,
                 }
             )
@@ -190,6 +191,7 @@ async def status() -> dict:
             "available": CLIENT.available,
             "model": CLIENT.model,
             "error": CLIENT.last_error,
+            "stand_in": CLIENT.stand_in,
         },
         "scenario": STATION.scenario.name if STATION.scenario else None,
         "scenarios": scenarios.available(),

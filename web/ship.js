@@ -301,7 +301,7 @@
 
   var state = {
     board: [], byId: {}, quarantine: null, selected: null,
-    heat: 0, breathHz: 0.25, aiUp: false, sealed: {}
+    heat: 0, breathHz: 0.25, aiUp: false, standIn: false, sealed: {}
   };
   // Rendered positions, eased toward their target so crew glide rather than snap.
   var nodes = {};
@@ -417,7 +417,16 @@
     el("gResp").textContent = meanResp.toFixed(0) + " /min";
     el("gRespHz").textContent = "· ship pulse";
     el("shipSub").textContent = "habitation ring · " + state.board.length + " souls";
-    setChip("aiChip", state.aiUp, state.aiUp ? "assistant" : "assistant offline");
+    state.standIn = !!(m.ai && m.ai.stand_in);
+    // Never let a stand-in read as the assistant. The chip says which it is
+    // before a single assessment has been shown.
+    var aiChip = el("aiChip");
+    if (state.aiUp && state.standIn) {
+      aiChip.className = "chip standin";
+      aiChip.innerHTML = '<i class="led"></i>stand-in, not a model';
+    } else {
+      setChip("aiChip", state.aiUp, state.aiUp ? "assistant" : "assistant offline");
+    }
     el("scChip").textContent = m.scenario ? m.scenario : "no scenario";
 
     if (state.selected) renderPanel();
@@ -570,12 +579,15 @@
       n.sx = px; n.sy = py; n.sz = pz;
 
       var sel = (state.selected === ids[k]) ? 1 : 0;
+      // With someone selected, the rest of the crew fall back so the ring
+      // marks one person rather than a neighbourhood.
+      var focus = (!state.selected || sel) ? 1 : 0.28;
       // The ship breathes: every crew glow swells with the mean respiration rate.
       var pulse = 1 + breath * 0.16 + sel * 0.25;
       gl.uniform3f(uCenter, px, py, pz);
       gl.uniform1f(uSize, n.size * (1 + breath * 0.06) * 3.1);
       gl.uniform3fv(uColor, n.col);
-      gl.uniform1f(uIntensity, n.glow * pulse);
+      gl.uniform1f(uIntensity, n.glow * pulse * focus);
       gl.uniform1f(uRing, sel);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
@@ -682,6 +694,7 @@
     state.selected = id;
     el("aiOut").innerHTML = "";
     el("panel").hidden = false;
+    document.body.classList.add("has-panel");
     flyTo(id);
     renderPanel();
   }
@@ -689,6 +702,7 @@
   function closePanel() {
     state.selected = null;
     el("panel").hidden = true;
+    document.body.classList.remove("has-panel");
     resetCam();
   }
 
@@ -740,7 +754,14 @@
           out.innerHTML = '<div class="fail"><b>Assistant unavailable</b>' + esc(res.body.note || "") + "</div>";
           return;
         }
-        var b = res.body, html = '<p class="sum">' + esc(b.summary || "") + "</p>";
+        var b = res.body, html = "";
+        if (b.stand_in) {
+          html += '<div class="standin-note"><b>Stand-in, not a language model</b>' +
+            'This came from tools/fake_ollama.py, which reads the vitals back and ' +
+            'applies fixed rules. It proves the path works. It is not the assistant ' +
+            'thinking, and must never be presented as such.</div>';
+        }
+        html += '<p class="sum">' + esc(b.summary || "") + "</p>";
         if (b.hypotheses && b.hypotheses.length) {
           html += "<h3>Hypotheses</h3>";
           html += b.hypotheses.map(function (h) {

@@ -25,6 +25,10 @@ class OllamaClient:
         self.timeout = CONFIG.ai.timeout_seconds
         self.available = False
         self.last_error: str | None = None
+        # True when we are talking to tools/fake_ollama.py rather than a model.
+        # The station is required to say so; it must never pass a stand-in off
+        # as the assistant.
+        self.stand_in = False
 
     async def probe(self) -> bool:
         """Check Ollama is up and our model is pulled. Safe to call repeatedly."""
@@ -33,9 +37,18 @@ class OllamaClient:
                 r = await client.get(f"{self.host}/api/tags")
                 r.raise_for_status()
                 tags = {m.get("name", "") for m in r.json().get("models", [])}
+                # Ask who we are actually talking to. The stand-in answers
+                # honestly here so the interface can label itself before it
+                # has shown a single assessment.
+                try:
+                    v = await client.get(f"{self.host}/api/version")
+                    self.stand_in = "stand-in" in str(v.json().get("version", "")).lower()
+                except Exception:
+                    self.stand_in = False
         except Exception as exc:
             self.available = False
             self.last_error = f"{type(exc).__name__}: {exc}"
+            self.stand_in = False
             return False
 
         # Ollama reports "qwen2.5:3b-instruct"; accept a bare name too.
