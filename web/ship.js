@@ -426,6 +426,9 @@
     el("gRespHz").textContent = "· ship pulse";
     el("shipSub").textContent = "habitation ring · " + state.board.length + " souls";
     state.standIn = !!(m.ai && m.ai.stand_in);
+    // The frame carries what to say, decided server-side from measurements.
+    // Usually an empty list.
+    if (m.say && m.say.length) MedBox.voice.say(m.say);
     // Never let a stand-in read as the assistant. The chip says which it is
     // before a single assessment has been shown.
     var aiChip = el("aiChip");
@@ -1023,6 +1026,21 @@
   /* --------------------------------------------------------------- wiring */
   el("aiBtn").addEventListener("click", askAI);
   el("sayForm").addEventListener("submit", sayIt);
+  (function wireVoice() {
+    var btn = el("voiceBtn");
+    function paint() {
+      var on = MedBox.voice.isOn();
+      btn.textContent = on ? "Sound on" : "Sound off";
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+      btn.classList.toggle("primary", on);
+    }
+    // Pressing the button is itself the gesture a browser needs before it will
+    // play anything, so switching sound on and unlocking playback are the same
+    // action rather than two the operator has to discover separately.
+    btn.addEventListener("click", function () { MedBox.voice.setOn(!MedBox.voice.isOn()); paint(); });
+    MedBox.voice.setOn(MedBox.voice.restore());
+    paint();
+  })();
   el("helpBtn").addEventListener("click", openGuide);
   el("cmdForm").addEventListener("submit", function (e) {
     e.preventDefault();

@@ -26,6 +26,7 @@ from .config import CONFIG, ROOT
 from .db import Database
 from .quarantine import QuarantineRegistry
 from .sensors.synthetic import ScenarioSource
+from .speech import Announcer
 from .symptoms import SymptomLog
 from .triage import Urgency, assess
 
@@ -62,6 +63,10 @@ class MedBox:
         # log is handed the recorder rather than importing the database, so
         # nothing in the measurement path depends on it.
         self.symptoms = SymptomLog(on_record=self.db.record_event)
+        # Decides what the station says out loud. Fast track only: every line
+        # comes from what triage.py and quarantine.py computed, never from the
+        # assistant. See server/speech.py.
+        self.announcer = Announcer()
         self.latest: dict[str, dict] = {}
         self.scenario: scenarios.Scenario | None = None
         self.scenario_t0: float | None = None
@@ -75,6 +80,7 @@ class MedBox:
         sc = scenarios.load(name)
         self.source.reset()
         self.symptoms.clear()
+        self.announcer.reset()
         self.quarantine.assignments.clear()
         self.scenario = sc
         self.scenario_t0 = time.monotonic()
@@ -88,6 +94,7 @@ class MedBox:
         self._fired.clear()
         self.source.reset()
         self.symptoms.clear()
+        self.announcer.reset()
         self.quarantine.assignments.clear()
 
     def _advance_scenario(self, now: float) -> None:
@@ -130,6 +137,7 @@ class MedBox:
         while True:
             started = time.perf_counter()
             now = time.time()
+            say: list = []
             self._advance_scenario(now)
 
             for reading in self.source.sample(now):
@@ -151,22 +159,32 @@ class MedBox:
                         "quarantine", json.dumps(change.to_dict()), reading.patient_id
                     )
                     BUS.publish({"type": "quarantine", "change": change.to_dict()})
+                    say.extend(self.announcer.on_quarantine(
+                        change.to_dict(), self.quarantine.sealed_zones()
+                    ))
                 if self._tick % self._persist_every == 0:
                     self.db.record_reading(reading.patient_id, now, v, reading.source)
 
             if self._tick % self._persist_every == 0:
                 self.db.commit()
 
+            rows = self._board()
+            say.extend(self.announcer.on_board(rows))
+            say.extend(self.announcer.on_ai(CLIENT.available, CLIENT.stand_in))
             BUS.publish(
                 {
                     "type": "board",
                     "at": now,
                     "ship": CONFIG.ship.name,
-                    "board": self._board(),
+                    "board": rows,
                     "quarantine": self.quarantine.to_dict(),
                     "ai": {"available": CLIENT.available, "error": CLIENT.last_error,
                            "stand_in": CLIENT.stand_in},
                     "scenario": self.scenario.name if self.scenario else None,
+                    # Usually empty. Only transitions get spoken, because a
+                    # station announcing a HIGH band ten times a second is a
+                    # station whose sound gets turned off inside a minute.
+                    "say": [u.to_dict() for u in say],
                 }
             )
             self._tick += 1

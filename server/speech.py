@@ -1,0 +1,222 @@
+"""What the station says out loud, and the reason it can say it offline.
+
+Two rules hold this module up.
+
+**The station speaks from measurements, never for the model.** Every line
+below is triggered by something `triage.py` or `quarantine.py` computed, and
+the text is fixed in this file. The assistant's words are never spoken. That
+is not squeamishness: a spoken sentence carries far more authority than the
+same sentence on screen, and the one output we cannot constrain is the one
+that should never get a voice. Kill Ollama and the station keeps talking,
+because nothing it says was ever the model's to say.
+
+**The spoken surface is finite, so it is pre-rendered.** `sensors/synthetic.py`
+seeds the crew with a fixed seed, so the forty names are identical on every
+machine, on every run, forever. Add the fixed lines below and the complete set
+of things this station can ever say is about sixty short clips. So they are
+rendered once, with Piper, on a developer's machine, committed as WAVs, and
+served by the static mount that already exists.
+
+Three things fall out of that, and they are why this is the right design
+rather than a shortcut:
+
+- The demo laptop needs no speech engine, no model, no Python audio stack and
+  no network. It plays audio files.
+- It cannot be slow, because there is nothing to synthesise. The latency is a
+  disk read.
+- It solves a licence problem. piper-tts is GPL-3.0-or-later, so shipping the
+  engine would make MedBox GPL-3. We never ship it: it runs offline at build
+  time and what ships is audio. The LJ Speech voice is public domain.
+
+A line is a name clip followed by a phrase clip, played with a short gap
+between them. That is a composition trick — it turns forty names times twenty
+phrases into forty plus twenty — but it also happens to be right. A ship's
+announcement is not a smooth sentence. It is a PA system, and the small pause
+after the name is what a PA sounds like.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+# Twelve words is the cap, and it is a hard one. A spoken line the operator
+# cannot hold in their head while looking at a patient is worse than silence,
+# and anything longer stops being an alert and becomes narration.
+MAX_WORDS = 12
+
+# The fixed phrases. The key is the filename stem under web/speech/.
+PHRASES: dict[str, str] = {
+    # --- urgency, the only clinical thing the station ever says out loud ---
+    "band_high": "NEWS2 seven or above. Emergency response.",
+    "band_medium": "Urgent review. Escalate to the medical officer.",
+    "band_single_param": "One reading alone scored three. Urgent review.",
+    "band_clear": "Back within normal ranges.",
+
+    # --- isolation ---
+    "quarantine_assigned": "Assigned a quarantine berth.",
+    # One per zone. Two zones closing in the same minute sounded like the same
+    # announcement twice, which reads as a stuck machine rather than as the
+    # outbreak spreading. Naming the zone is also simply more useful.
+    "zone_a_sealed": "Zone A is now sealed.",
+    "zone_b_sealed": "Zone B is now sealed.",
+    "zone_c_sealed": "Zone C is now sealed.",
+    "zone_overflow": "Quarantine is full. Overflow cannot be placed.",
+
+    # --- the assistant, which is the beat the demo is built around ---
+    # The station announcing its own assistant's death, in its own voice, while
+    # every number on screen keeps updating, is the clearest possible statement
+    # of the architecture. It is also literally true.
+    "ai_down": "The assistant has stopped. Measurement continues.",
+    "ai_back": "The assistant is running again.",
+    "ai_stand_in": "A stand-in is answering. This is not a language model.",
+    "ai_blocked": "The assistant overstepped. The station suppressed it.",
+
+    # --- the session ---
+    "scenario_started": "Scenario running.",
+    "scenario_stopped": "Scenario stopped. Readings are back to baseline.",
+    "ready": "MedBox ready. Forty souls aboard.",
+}
+
+
+@dataclass(frozen=True)
+class Utterance:
+    """One thing to say: an optional name clip, then a phrase clip."""
+
+    phrase: str                     # a key of PHRASES
+    patient_id: str | None = None   # whose name to say first, if anyone's
+    name: str | None = None
+
+    def to_dict(self) -> dict:
+        return {
+            "phrase": self.phrase,
+            "patient_id": self.patient_id,
+            "name": self.name,
+            "text": (f"{self.name}. " if self.name else "") + PHRASES[self.phrase],
+        }
+
+
+def name_stem(name: str) -> str:
+    """The filename for a crew member's name clip.
+
+    Deliberately not the patient id. A stem built from the name means the
+    rendered clip and the person are obviously connected when you look in
+    web/speech/, and a file that has gone missing is obvious rather than
+    cryptic.
+    """
+    return "name_" + "".join(c if c.isalnum() else "_" for c in name.lower()).strip("_")
+
+
+class Announcer:
+    """Decides what is worth saying, from state changes only.
+
+    It holds the previous band per crew member so it can speak on the
+    *transition* rather than on every frame. A station that announced a HIGH
+    band ten times a second would be turned off inside a minute, and an
+    operator who turns the sound off loses the one channel that works while
+    they are looking at the patient instead of the screen.
+    """
+
+    # How bad each band is, for deciding whether a change is worth saying.
+    RANK = {"routine": 0, "low": 1, "medium": 2, "high": 3}
+
+    def __init__(self) -> None:
+        # The WORST band announced for each crew member since they were last
+        # clear, not simply the previous one. Vitals are noisy, so somebody
+        # sitting on the medium boundary flaps across it, and tracking only
+        # the previous band announced them again on every re-entry. On a real
+        # outbreak that is the same four names over and over, which is how an
+        # operator learns to ignore the thing that is meant to interrupt them.
+        self._worst: dict[str, int] = {}
+        self._band: dict[str, str] = {}
+        self._ai_up: bool | None = None
+        self._sealed: set[str] = set()
+
+    def reset(self) -> None:
+        self._band.clear()
+        self._worst.clear()
+        self._sealed.clear()
+        # Deliberately not clearing _ai_up: the assistant's state is a property
+        # of the machine, not of the scenario, and re-announcing it because
+        # somebody pressed Reset would be noise.
+
+    def on_board(self, rows: list[dict]) -> list[Utterance]:
+        """Called with each board frame. Returns what to say, usually nothing."""
+        out: list[Utterance] = []
+        for row in rows:
+            pid = row["patient"]["id"]
+            name = row["patient"]["name"]
+            triage = row["triage"]
+            band = triage["urgency"]
+            was = self._band.get(pid)
+            self._band[pid] = band
+            if was is None:
+                # First sight. Starting the program is not forty events.
+                self._worst[pid] = self.RANK.get(band, 0)
+                continue
+
+            rank = self.RANK.get(band, 0)
+            worst = self._worst.get(pid, 0)
+
+            if band == "routine" and worst >= self.RANK["medium"]:
+                # Recovery, and the only thing that re-arms the alerts.
+                self._worst[pid] = 0
+                out.append(Utterance("band_clear", pid, name))
+                continue
+
+            # Only a NEW worst is worth saying. Sliding back down and up again
+            # is the same news, and the second telling is what teaches an
+            # operator to stop listening.
+            if rank <= worst:
+                continue
+            self._worst[pid] = rank
+            if band == "high":
+                out.append(Utterance("band_high", pid, name))
+            elif band == "medium":
+                phrase = "band_single_param" if triage.get("single_param_3") else "band_medium"
+                out.append(Utterance(phrase, pid, name))
+        return out
+
+    def on_quarantine(self, change: dict, sealed: list[str]) -> list[Utterance]:
+        out: list[Utterance] = []
+        if change.get("assigned"):
+            out.append(Utterance(
+                "quarantine_assigned", change.get("patient_id"), change.get("name")
+            ))
+        if change.get("overflow"):
+            out.append(Utterance("zone_overflow"))
+        now_sealed = set(sealed)
+        # One announcement per zone that has newly sealed, not one per frame
+        # for as long as it stays sealed.
+        for zone in sorted(now_sealed - self._sealed):
+            key = f"zone_{zone.lower()}_sealed"
+            if key in PHRASES:
+                out.append(Utterance(key))
+        self._sealed = now_sealed
+        return out
+
+    def on_ai(self, available: bool, stand_in: bool) -> list[Utterance]:
+        if self._ai_up == available:
+            return []
+        first = self._ai_up is None
+        self._ai_up = available
+        if first:
+            # Say nothing on the first observation. Starting the program is not
+            # an event, and announcing "the assistant has stopped" because it
+            # had not finished probing yet would be a lie told at boot.
+            return [Utterance("ai_stand_in")] if (available and stand_in) else []
+        if not available:
+            return [Utterance("ai_down")]
+        return [Utterance("ai_stand_in" if stand_in else "ai_back")]
+
+
+def every_clip(crew_names: list[str]) -> dict[str, str]:
+    """Every clip that has to exist, as stem -> text. The renderer's whole job.
+
+    This is also what makes "pre-render everything" checkable rather than
+    hopeful: the set is computable, so a test can assert that the files on disk
+    match it exactly, and a missing one is caught here rather than by silence
+    on stage.
+    """
+    clips = dict(PHRASES)
+    for name in crew_names:
+        clips[name_stem(name)] = name
+    return clips
