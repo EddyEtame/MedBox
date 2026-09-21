@@ -54,6 +54,9 @@
 
     el("ship").textContent = msg.ship || "";
     state.standIn = !!(msg.ai && msg.ai.stand_in);
+    // Guarded for the same reason the 3D view guards it: this is the slow
+    // track, and an absent script must not stop a reading reaching the board.
+    if (msg.ears && MedBox.mic) MedBox.mic.setAvailable(msg.ears.available, msg.ears.error);
     // The board and the 3D console must never disagree about what is
     // answering. Both say "stand-in" the moment it is one.
     var aiChip = el("aiChip");
@@ -282,6 +285,7 @@
     var row = e.target.closest(".row");
     if (row) { e.preventDefault(); select(row.dataset.id); }
   });
+  if (MedBox.mic) MedBox.mic.attach(function () { return state.selected; }, renderReported);
   el("aiBtn").addEventListener("click", askAI);
   el("sayForm").addEventListener("submit", sayIt);
 

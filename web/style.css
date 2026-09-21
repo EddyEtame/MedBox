@@ -185,3 +185,10 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .hyp .unbacked{display:block;font-size:11px;line-height:1.45;color:var(--warn);margin:3px 0 2px}
 .hyp.unbacked-hyp{border-left-color:var(--warn)}
 .hyp.unbacked-hyp b{color:var(--ink2)}
+.btn.mic{width:100%;margin-top:8px}
+.btn.mic.recording{background:var(--crit);border-color:var(--crit);color:#fff;
+  animation:mic-pulse 1.1s ease-in-out infinite}
+@keyframes mic-pulse{0%,100%{opacity:1}50%{opacity:.66}}
+.mic-out{margin:7px 2px 0;font-size:11.5px;line-height:1.5;color:var(--ink2);min-height:1em}
+.mic-out.bad{color:var(--warn)}
+@media (prefers-reduced-motion:reduce){.btn.mic.recording{animation:none}}

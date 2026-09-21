@@ -41,6 +41,7 @@ import shutil
 import sys
 import urllib.error
 import urllib.request
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -89,6 +90,30 @@ def read_manifest() -> list[dict]:
         key, _, value = line.partition("=")
         current[key.strip()] = value.strip().strip('"').strip("'")
     return [a for a in assets if a.get("path")]
+
+
+def unpack(asset: dict, archive: Path) -> bool:
+    """Extract a zip into the directory the asset declares.
+
+    A speech model is a folder, not a file, so it travels as a zip. The
+    extraction is checked member by member: a zip that writes outside its
+    destination is the oldest archive trick there is, and this one arrives
+    from a USB stick that has been in somebody else's laptop.
+    """
+    dest = ROOT / asset["unpack"]
+    dest.mkdir(parents=True, exist_ok=True)
+    try:
+        with zipfile.ZipFile(archive) as z:
+            for member in z.namelist():
+                target = (dest / member).resolve()
+                if not str(target).startswith(str(dest.resolve())):
+                    bad(f"{asset['path']} tries to write outside {asset['unpack']}: {member}")
+                    return False
+            z.extractall(dest)
+    except (zipfile.BadZipFile, OSError) as exc:
+        bad(f"{asset['path']} would not unpack: {exc}")
+        return False
+    return True
 
 
 def digest(path: Path) -> str:
@@ -168,12 +193,26 @@ def main() -> int:
                     help="a folder or USB drive holding the assets; no network needed")
     ap.add_argument("--check", action="store_true",
                     help="report what is present and verified, change nothing")
+    ap.add_argument("--record", action="store_true",
+                    help="print the SHA-256 of each asset present, to paste into config.toml")
     args = ap.parse_args()
 
     manifest = read_manifest()
     if not manifest:
         print("No [[assets]] in config.toml, so there is nothing large to fetch.")
         print("MedBox runs without this: the stand-in assistant needs no weights.")
+        return 0
+
+    if args.record:
+        # The first person to fetch an asset is the one who can record what it
+        # hashed to. After that the hash is in config.toml and everyone else's
+        # copy is checked against it.
+        for asset in manifest:
+            dest = ROOT / asset["path"]
+            if dest.exists():
+                print(f'  # {asset["path"]}\n  sha256 = "{digest(dest)}"')
+            else:
+                print(f"  # {asset['path']}: not here yet")
         return 0
 
     source = Path(args.source).expanduser().resolve() if args.source else None
@@ -202,6 +241,8 @@ def main() -> int:
             missing.append(asset)
             continue
         good, why = verify(asset, dest)
+        if good and asset.get("unpack") and not unpack(asset, dest):
+            good, why = False, "downloaded but would not unpack"
         (ok if good else bad)(f"{asset['path']}  {why}")
         if not good:
             # A file that arrived wrong is worse than one that did not arrive,

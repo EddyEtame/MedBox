@@ -10,10 +10,12 @@ import asyncio
 import contextlib
 import json
 import logging
+import tempfile
 import time
+import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -27,6 +29,7 @@ from .db import Database
 from .quarantine import QuarantineRegistry
 from .sensors.synthetic import ScenarioSource
 from .speech import Announcer
+from .voice import TRANSCRIBER
 from .symptoms import SymptomLog
 from .triage import Urgency, assess
 
@@ -180,6 +183,11 @@ class MedBox:
                     "quarantine": self.quarantine.to_dict(),
                     "ai": {"available": CLIENT.available, "error": CLIENT.last_error,
                            "stand_in": CLIENT.stand_in},
+                    # Whether this machine can transcribe at all. A microphone
+                    # button that appears and then fails is worse than one that
+                    # was never offered.
+                    "ears": {"available": TRANSCRIBER.available,
+                             "error": TRANSCRIBER.last_error},
                     "scenario": self.scenario.name if self.scenario else None,
                     # Usually empty. Only transitions get spoken, because a
                     # station announcing a HIGH band ten times a second is a
@@ -233,6 +241,11 @@ async def status() -> dict:
             "error": CLIENT.last_error,
             "stand_in": CLIENT.stand_in,
         },
+        "ears": {
+            "available": TRANSCRIBER.available,
+            "error": TRANSCRIBER.last_error,
+            "model": str(TRANSCRIBER.model_dir.name),
+        },
         "scenario": STATION.scenario.name if STATION.scenario else None,
         "scenarios": scenarios.available(),
         "screens_connected": BUS.subscriber_count,
@@ -278,6 +291,67 @@ async def report_symptom(patient_id: str, body: dict) -> dict:
         raise HTTPException(400, str(exc)) from exc
     BUS.publish({"type": "symptom", "reported": entry.to_dict()})
     return {"reported": STATION.symptoms.for_patient(patient_id)}
+
+
+# A few seconds of speech is well under a megabyte. The cap is not about disk,
+# it is that an endpoint which accepts an unbounded upload from a browser is a
+# way to wedge the machine the demo runs on.
+MAX_AUDIO_BYTES = 4 * 1024 * 1024
+
+
+@app.post("/api/patient/{patient_id}/listen")
+async def listen(patient_id: str, request: Request) -> JSONResponse:
+    """Transcribe a recording and file it as something the crew member said.
+
+    Slow track. It can fail, it can be missing, it can take four seconds, and
+    none of that touches a measurement: the board keeps streaming at ten hertz
+    throughout because the work happens in a thread.
+
+    What comes back is a guess, and it is stored as one — source "voice" with
+    the confidence attached, which the interface shows. An operator acting on a
+    misheard symptom should be able to see that it was misheard.
+    """
+    if patient_id not in STATION.latest:
+        raise HTTPException(404, f"No crew member {patient_id}")
+
+    # The raw body, not a multipart form. The browser posts the Blob directly,
+    # which means python-multipart is not a dependency — one fewer thing to
+    # install on a machine whose only job on Friday is to work.
+    raw = await request.body()
+    if len(raw) > MAX_AUDIO_BYTES:
+        raise HTTPException(413, "That recording is too long. Keep it to a few seconds.")
+    if not raw:
+        raise HTTPException(400, "The recording was empty.")
+
+    # A real file on disk, because PyAV demuxes from a path and a container it
+    # cannot seek in is a container it may refuse. Deleted either way.
+    tmp = Path(tempfile.gettempdir()) / f"medbox-{uuid.uuid4().hex}.webm"
+    try:
+        tmp.write_bytes(raw)
+        heard = await TRANSCRIBER.listen(tmp)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+    if heard is None:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "Nothing was transcribed",
+                "detail": TRANSCRIBER.last_error or "no speech was found in the recording",
+                "note": "Type it instead. Vitals and triage are unaffected.",
+            },
+        )
+
+    text, confidence = heard
+    try:
+        entry = STATION.symptoms.add(patient_id, text, source="voice", confidence=confidence)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    BUS.publish({"type": "symptom", "reported": entry.to_dict()})
+    return JSONResponse(content={
+        "heard": entry.to_dict(),
+        "reported": STATION.symptoms.for_patient(patient_id),
+    })
 
 
 # This must be declared BEFORE /api/scenario/{name}. Starlette matches routes

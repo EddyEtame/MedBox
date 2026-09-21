@@ -428,7 +428,12 @@
     state.standIn = !!(m.ai && m.ai.stand_in);
     // The frame carries what to say, decided server-side from measurements.
     // Usually an empty list.
-    if (m.say && m.say.length) MedBox.voice.say(m.say);
+    // Guarded: these two scripts are the slow track, and a slow track that
+    // is missing must never stop a measurement reaching the screen. Without
+    // the check, one absent file throws here ten times a second and every
+    // number below this line stops updating.
+    if (m.say && m.say.length && MedBox.voice) MedBox.voice.say(m.say);
+    if (m.ears && MedBox.mic) MedBox.mic.setAvailable(m.ears.available, m.ears.error);
     // Never let a stand-in read as the assistant. The chip says which it is
     // before a single assessment has been shown.
     var aiChip = el("aiChip");
@@ -1028,6 +1033,10 @@
   el("sayForm").addEventListener("submit", sayIt);
   (function wireVoice() {
     var btn = el("voiceBtn");
+    // Same rule as the frame path. This block runs at load, so without the
+    // check an absent voice.js throws here and everything wired below it —
+    // the microphone, the guide button, the command bar — never gets wired.
+    if (!MedBox.voice) { if (btn) btn.hidden = true; return; }
     function paint() {
       var on = MedBox.voice.isOn();
       btn.textContent = on ? "Sound on" : "Sound off";
@@ -1041,6 +1050,7 @@
     MedBox.voice.setOn(MedBox.voice.restore());
     paint();
   })();
+  if (MedBox.mic) MedBox.mic.attach(function () { return state.selected; }, renderReported);
   el("helpBtn").addEventListener("click", openGuide);
   el("cmdForm").addEventListener("submit", function (e) {
     e.preventDefault();

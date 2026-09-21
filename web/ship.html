@@ -85,6 +85,9 @@
              placeholder="What did they say?" aria-label="Reported symptom">
       <button class="btn" type="submit">Add</button>
     </form>
+    <button class="btn mic" type="button" id="micBtn" hidden
+            title="Hold to record what they said" aria-label="Record what they said">Hold to speak</button>
+    <p class="mic-out" id="micOut"></p>
   </section>
 
   <button id="aiBtn" class="btn primary wide">Ask the assistant</button>
@@ -111,6 +114,7 @@
 </footer>
 
 <script src="/static/voice.js"></script>
+<script src="/static/mic.js"></script>
 <script src="/static/assessment.js"></script>
 <script src="/static/ship.js"></script>
 </body>
