@@ -445,6 +445,18 @@
     }
     el("scChip").textContent = m.scenario ? m.scenario : "no scenario";
 
+    /* Hidden at zero, loud at one. The bulkheads already show which
+       zones are closed; nothing on this view showed a crew member the
+       ship has no berth for, which is the one number that means the
+       quarantine plan has run out. Same rule on the flat board. */
+    var waiting = state.quarantine ? (state.quarantine.awaiting_bed || 0) : 0;
+    var bedChip = el("bedChip");
+    bedChip.hidden = !waiting;
+    if (waiting) {
+      bedChip.textContent = waiting +
+        (waiting === 1 ? " crew member awaiting a bed" : " crew awaiting a bed");
+    }
+
     if (state.selected) renderPanel();
   }
 

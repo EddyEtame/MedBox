@@ -112,6 +112,46 @@ def test_the_microphone_is_hidden_until_the_station_says_it_can_listen():
         assert "hidden" in tag.group(0), f"{page} ships the microphone button visible"
 
 
+def body_of(source: str, name: str) -> str:
+    """The text of one top-level function in mic.js, brace-matched."""
+    start = source.index(f"function {name}(")
+    depth, i = 0, source.index("{", start)
+    for j in range(i, len(source)):
+        if source[j] == "{":
+            depth += 1
+        elif source[j] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[i : j + 1]
+    raise AssertionError(f"{name} in mic.js is not brace-balanced")
+
+
+def test_only_the_station_may_reveal_the_microphone():
+    """The markup test above passed for a long time while the button was
+    visible anyway, because it measured the HTML and the bug was in the JS.
+
+    `attach()` unhid the button as soon as the BROWSER could record, and
+    `setAvailable()` then greyed it out. Those are two different questions,
+    and on a machine with no speech model the answer to the second is no. A
+    real browser showed a dead grey button in the middle of the patient panel
+    with its reason in a tooltip. Whether it is hidden must be decided by the
+    one function that is told what the station can do.
+    """
+    js = (ROOT / "web" / "mic.js").read_text(encoding="utf-8")
+
+    attach = body_of(js, "attach")
+    assert not re.search(r"\.hidden\s*=", attach), (
+        "attach() decides visibility from what the browser supports, which is "
+        "not the same question as whether this machine can transcribe"
+    )
+
+    available = body_of(js, "setAvailable")
+    assert re.search(r"btn\.hidden\s*=\s*!ok", available), (
+        "setAvailable() is the only place that knows whether the station can "
+        "listen, so it is the only place that may show or hide the button"
+    )
+
+
 def test_nothing_in_the_browser_sends_audio_off_this_machine():
     """The Web Speech API in Chrome ships the recording to Google, which would
     quietly undo the one claim the whole project rests on."""

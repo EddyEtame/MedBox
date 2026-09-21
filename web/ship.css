@@ -80,6 +80,7 @@ select:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-
 .chip.up{color:var(--ok)} .chip.down{color:var(--crit)}
 .chip.standin{color:var(--warn);border-color:rgba(240,196,89,.45)}
 .chip.standin .led{background:var(--warn)}
+.chip.overflow{color:var(--crit);border-color:rgba(255,92,110,.45)}
 
 .panel{
   top:0;right:0;bottom:0;width:330px;max-width:88vw;overflow-y:auto;

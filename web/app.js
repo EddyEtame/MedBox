@@ -130,13 +130,27 @@
   function renderZones() {
     if (!state.quarantine) return;
     var zones = state.quarantine.zones;
-    el("zones").innerHTML = Object.keys(zones).map(function (z) {
+    var html = Object.keys(zones).map(function (z) {
       var d = zones[z], pct = Math.round((d.occupied / d.capacity) * 100);
       return '<div class="zone' + (d.sealed ? ' sealed' : '') + '">' +
         '<span class="zn">' + z + '</span>' +
         '<span class="zbar"><span class="zfill" style="width:' + pct + '%"></span></span>' +
         '<span class="zc">' + d.occupied + '/' + d.capacity + '</span></div>';
     }).join("");
+
+    /* A crew member with nowhere to go is the most important fact this panel
+       can carry, and until now it was reachable only by typing `isolated` on
+       the other view: the server counted them, nothing drew them. Rendered
+       only when it is non-zero, because a permanent "0 awaiting a bed" row
+       teaches an operator to stop reading this line. */
+    var waiting = state.quarantine.awaiting_bed || 0;
+    if (waiting) {
+      html += '<div class="zone overflow"><span class="zn">!</span>' +
+        '<span class="zover">' + waiting +
+        (waiting === 1 ? " crew member awaiting a bed" : " crew awaiting a bed") +
+        '</span><span class="zc">every zone full</span></div>';
+    }
+    el("zones").innerHTML = html;
   }
 
   /* ---------- patient detail ---------- */

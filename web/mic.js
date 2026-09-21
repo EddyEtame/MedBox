@@ -112,7 +112,9 @@
   function attach(getPatient, onReported) {
     var btn = el("micBtn");
     if (!btn || !supported()) return;
-    btn.hidden = false;
+    // Deliberately does NOT reveal the button. Whether this browser can
+    // record and whether this machine can transcribe are different
+    // questions, and only setAvailable knows the second one.
 
     function begin(e) {
       e.preventDefault();
@@ -148,6 +150,13 @@
   function setAvailable(ok, why) {
     var btn = el("micBtn");
     if (!btn || !supported()) return;
+    /* Hidden, not merely disabled. attach() used to reveal the button the
+       moment the BROWSER could record, and this function then greyed it out
+       — so a machine with no speech model showed a dead button in the middle
+       of the patient panel, with the reason buried in a tooltip nobody hovers
+       during a consultation. The markup ships it hidden and it stays hidden
+       until the station says it can listen. */
+    btn.hidden = !ok;
     btn.disabled = !ok;
     btn.title = ok ? "Hold to record what they said"
                    : (why || "No speech model on this machine");

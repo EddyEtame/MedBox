@@ -43,11 +43,13 @@ CAPABILITIES = [
     },
     {
         "id": "quarantine",
-        "title": "Assign isolation and seal a zone when it fills",
+        "title": "Assign isolation and seal the zone behind them",
         "does": (
             "A febrile crew member with falling oxygen or rising respiration is "
-            "assigned a quarantine berth. Zones seal when full and overflow is "
-            "reported rather than hidden."
+            "assigned a quarantine berth. A zone counts as sealed from the "
+            "moment one person is inside it, stops taking new arrivals once it "
+            "is at capacity, and anyone left over is reported as awaiting a bed "
+            "rather than quietly dropped."
         ),
         "needs_ai": False,
         "how": "Automatic. Watch the bulkheads close on the ship view.",
