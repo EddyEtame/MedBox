@@ -96,6 +96,10 @@ class OllamaClient:
             "model": self.model,
             "stream": False,
             "format": ASSESSMENT_SCHEMA,
+            # Without keep_alive the first question after an idle gap spends
+            # five to fifteen seconds loading the weights off disk, which on
+            # stage looks exactly like a crash.
+            "keep_alive": CONFIG.ai.keep_alive,
             "options": {"temperature": CONFIG.ai.temperature},
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
@@ -142,6 +146,7 @@ class OllamaClient:
         body = {
             "model": self.model,
             "stream": False,
+            "keep_alive": CONFIG.ai.keep_alive,
             "options": {"temperature": CONFIG.ai.temperature},
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},

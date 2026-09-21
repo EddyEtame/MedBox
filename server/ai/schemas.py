@@ -24,6 +24,16 @@ The schema is the strongest control channel available, stronger than the system
 prompt, because Ollama puts it in band and the decoder enforces it. So the rules
 now live in the shape wherever they can, in the descriptions where they cannot,
 and in `validate.enforce()` for what neither can guarantee.
+
+Every array is capped and every string has a maxLength, and that is a latency
+decision as much as a safety one. On a laptop, CPU decoding is bound by memory
+bandwidth: tokens per second is roughly the machine's effective bandwidth
+divided by the size of the weights, which puts a small model somewhere around
+ten to twenty tokens a second. Under a grammar, a model with nothing left to
+say will cheerfully keep emitting array elements until something stops it, and
+the only thing that would have stopped it here was the twenty-second timeout —
+which the operator experiences as the assistant dying. Capping the answer is
+worth more than any change of model.
 """
 
 # The instruments this station actually has. A supporting sign must name one of
@@ -48,8 +58,9 @@ ASSESSMENT_SCHEMA = {
     "properties": {
         "summary": {
             "type": "string",
+            "maxLength": 200,
             "description": (
-                "One sentence describing what the instruments recorded. Do not "
+                "ONE sentence describing what the instruments recorded. Do not "
                 "restate the urgency band and do not use the words routine, low, "
                 "medium, high, mild, reassuring or stable."
             ),
@@ -67,7 +78,7 @@ ASSESSMENT_SCHEMA = {
             # Zero, deliberately. A crew member whose every measured parameter is
             # normal must be allowed to have nothing wrong with them.
             "minItems": 0,
-            "maxItems": 4,
+            "maxItems": 3,
             "description": "Possible explanations, most supported first. May be empty.",
             "items": {
                 "type": "object",
@@ -75,6 +86,7 @@ ASSESSMENT_SCHEMA = {
                 "properties": {
                     "name": {
                         "type": "string",
+                        "maxLength": 60,
                         "description": (
                             "A pattern, not a diagnosis. Name what the measurements "
                             "look like, e.g. 'fever with respiratory involvement'."
@@ -91,7 +103,7 @@ ASSESSMENT_SCHEMA = {
                     "supporting_signs": {
                         "type": "array",
                         "minItems": 1,
-                        "maxItems": 4,
+                        "maxItems": 3,
                         "items": {
                             "type": "object",
                             "additionalProperties": False,
@@ -107,9 +119,10 @@ ASSESSMENT_SCHEMA = {
                                 },
                                 "text": {
                                     "type": "string",
+                                    "maxLength": 90,
                                     "description": (
                                         "The sign, quoting the recorded number when "
-                                        "an instrument is the source."
+                                        "an instrument is the source. A few words."
                                     ),
                                 },
                             },
@@ -127,7 +140,7 @@ ASSESSMENT_SCHEMA = {
                 "What to ask them next. This box measures four things and a person "
                 "can tell you a hundred, so this is the most useful thing you do."
             ),
-            "items": {"type": "string"},
+            "items": {"type": "string", "maxLength": 120},
         },
         "information_to_gather": {
             "type": "array",
@@ -139,6 +152,7 @@ ASSESSMENT_SCHEMA = {
                 # decoder has in front of it while it writes each entry, and it
                 # is the strongest lever this project has over the one field
                 # that can hurt somebody.
+                "maxLength": 120,
                 "description": (
                     "An OBSERVATION or a MEASUREMENT to take, e.g. 'repeat the "
                     "full set of observations in 15 minutes'. Never a treatment, "

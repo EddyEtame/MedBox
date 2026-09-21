@@ -162,10 +162,10 @@ def enforce(result: dict, urgency: str = "") -> dict:
         hypotheses.append({
             "name": name,
             "fit": fit if measured else FIT_LEVELS[0],
-            "supporting_signs": signs[:4],
+            "supporting_signs": signs[:3],
             "no_measured_support": not measured,
         })
-    out["hypotheses"] = hypotheses[:4]
+    out["hypotheses"] = hypotheses[:3]
 
     questions = [
         str(q).strip()

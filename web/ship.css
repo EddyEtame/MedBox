@@ -204,6 +204,12 @@ select:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-
 /* With the panel open, the ring is no longer centred in what the operator
    can see, so the things that sit over it move out from under the panel
    rather than hiding behind it. */
+/* The guide is 390px down the left, and the brand and the status chips live
+   under it. Half a chip poking out from behind a panel reads as broken, so
+   the header content moves out of its way the same way it does for the panel
+   on the right. */
+body.has-guide .top{padding-left:402px}
+body.has-guide .legend{left:402px}
 body.has-panel .cmd{left:calc(50% - 165px)}
 body.has-panel .legend{right:330px}
 body.has-panel .top{padding-right:342px}
@@ -213,7 +219,10 @@ body.has-panel .top{padding-right:342px}
      it, over the crew member's own readings. They come back the moment the
      panel closes, and the panel carries everything they offered. */
   body.has-panel .cmd,
-  body.has-panel .legend{display:none}
+  body.has-panel .legend,
+  body.has-guide .cmd,
+  body.has-guide .legend{display:none}
+  body.has-guide .top{padding-left:14px}
   body.has-panel .top{padding-right:14px}
 }
 @media (max-width:760px){.legend .hint{display:none}

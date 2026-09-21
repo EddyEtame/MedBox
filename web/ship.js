@@ -829,6 +829,7 @@
 
   function openGuide() {
     el("guide").hidden = false;
+    document.body.classList.add("has-guide");
     el("introOut").innerHTML = "";
     fetch("/api/assistant/help")
       .then(function (r) { return r.json(); })
@@ -839,7 +840,10 @@
       });
   }
 
-  function closeGuide() { el("guide").hidden = true; }
+  function closeGuide() {
+    el("guide").hidden = true;
+    document.body.classList.remove("has-guide");
+  }
 
   function introduce() {
     var out = el("introOut"), btn = el("introBtn");

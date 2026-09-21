@@ -14,15 +14,44 @@ sample_hz = 20
 # it and warns loudly on a mismatch, but does not stop: refusing to finish
 # setup on the demo laptop an hour before the defence would be a worse failure
 # than the mismatch it was guarding against.
-required_ollama = "0.5.4"
+#
+# 0.13.1 is not an arbitrary number and not just "recent". It is the LAST
+# release whose Linux archive is a .tgz. From 0.14.0 onward Ollama ships
+# ollama-linux-amd64.tar.zst, and Python 3.11 cannot open zstd — the stdlib
+# `compression.zstd` module is 3.14+, and no zstd binary is on a stock
+# machine's PATH. setup.py is stdlib-only on purpose, so 0.13.1 is the newest
+# version where one script unpacks the archive on BOTH Windows and Linux with
+# nothing installed first and no admin rights. Verified by asking GitHub for
+# each asset directly: 0.13.1 linux .tgz 1.93 GB, windows .zip 1.93 GB;
+# 0.14.0 .tgz is 404 and .tar.zst is 206.
+required_ollama = "0.13.1"
 host = "http://127.0.0.1:11434"
-# Exact model tag. Small enough for a laptop CPU, good at structured output.
-model = "qwen2.5:3b-instruct"
-# If the pull above fails, these are known-good alternates.
-fallback_models = ["llama3.2:3b", "gemma2:2b"]
+
+# Exact model tag. Apache-2.0, which matters more here than a benchmark.
+#
+# This was qwen2.5:3b-instruct, and 3B is the one size in the Qwen2.5 family
+# that is NOT Apache-2.0 — it carries a bespoke Alibaba research licence.
+# 0.5B, 1.5B, 7B, 14B and 32B are all Apache-2.0. For a project whose pitch is
+# open, offline and auditable, standing in front of a jury on a non-commercial
+# research weight is a hole one question opens up, and the fix costs nothing:
+# same family, same chat template, same prompt, same schema, same grammar
+# behaviour, so nothing needs re-tuning. It is also smaller, and on a laptop
+# CPU decode is memory-bandwidth bound, so smaller is literally faster.
+model = "qwen2.5:1.5b-instruct"
+# If the pull above fails. Also Apache-2.0, so every licence a jury can read
+# in this file is an OSI one.
+fallback_models = ["qwen2.5:0.5b-instruct"]
 # Hard ceiling. The AI is never allowed to hold up a measurement.
 timeout_seconds = 20.0
-temperature = 0.2
+# Zero, not 0.2. Under a schema the grammar already guarantees valid JSON, so
+# sampling randomness buys nothing but variance — and a demo you can rehearse
+# is worth more than a demo that surprises you. The same crew member gives the
+# same assessment twice.
+temperature = 0.0
+# Keep the weights resident between questions. Without this the first
+# assessment after an idle gap pays five to fifteen seconds loading the model
+# off the laptop's disk, which on stage is indistinguishable from a crash.
+keep_alive = "30m"
 
 [database]
 path = "data/medbox.db"

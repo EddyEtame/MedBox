@@ -27,12 +27,16 @@ class ServerConfig:
 
 @dataclass(frozen=True)
 class AIConfig:
-    required_ollama: str = "0.5.4"
+    required_ollama: str = "0.13.1"
     host: str = "http://127.0.0.1:11434"
-    model: str = "qwen2.5:3b-instruct"
+    model: str = "qwen2.5:1.5b-instruct"
     fallback_models: tuple[str, ...] = ()
     timeout_seconds: float = 20.0
-    temperature: float = 0.2
+    # Zero: the schema already guarantees valid JSON, so randomness buys
+    # variance and nothing else, and a demo you can rehearse is worth more.
+    temperature: float = 0.0
+    # How long Ollama holds the weights in memory after a question.
+    keep_alive: str = "30m"
 
 
 @dataclass(frozen=True)

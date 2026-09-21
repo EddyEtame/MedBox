@@ -33,7 +33,10 @@ import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-MODEL_NAMES = ["qwen2.5:3b-instruct", "llama3.2:3b", "gemma2:2b"]
+# What this stand-in claims to have pulled. OllamaClient.probe() accepts a tag
+# whose family matches the configured model, so these have to stay in the same
+# family as config.toml or the break-glass demo path silently stops working.
+MODEL_NAMES = ["qwen2.5:1.5b-instruct", "qwen2.5:0.5b-instruct", "qwen2.5:3b-instruct"]
 
 # --rogue makes this stand-in behave like a small model that has gone wrong:
 # it prescribes, it diagnoses, it invents a condition for a healthy person, it
@@ -201,7 +204,7 @@ def _assessment(prompt: str) -> dict:
     return {
         "summary": summary,
         "insufficient_data": insufficient,
-        "hypotheses": hypotheses[:4],
+        "hypotheses": hypotheses[:3],
         "questions_for_patient": questions[:4],
         "information_to_gather": gather[:3],
     }

@@ -140,3 +140,42 @@ def test_every_supporting_sign_names_a_measurement(stand_in):
             assert sign["source"] in SIGN_SOURCES, (
                 f"supporting sign cites no instrument: {sign!r}"
             )
+
+
+def test_the_configured_model_matches_what_the_stand_in_advertises():
+    """Changing model family silently breaks the break-glass path.
+
+    probe() accepts a tag whose family matches the configured model, so
+    switching config.toml to a different family makes the stand-in stop being
+    recognised — and the failure looks like "model not pulled", which is
+    exactly what you would see if the real Ollama were misconfigured. The one
+    thing that always works would appear broken, ten minutes before a defence,
+    for a reason nobody would think to check.
+    """
+    from server.config import CONFIG
+    from tools.fake_ollama import MODEL_NAMES
+
+    wanted = CONFIG.ai.model.split(":")[0]
+    assert any(t.split(":")[0] == wanted for t in MODEL_NAMES), (
+        f"config.toml asks for {CONFIG.ai.model!r} but tools/fake_ollama.py "
+        f"advertises {MODEL_NAMES}. Add a matching tag there, or the stand-in "
+        f"stops being usable as the demo's fallback."
+    )
+
+
+def test_every_model_named_in_config_is_openly_licensed():
+    """A non-commercial research weight is a hole one jury question opens up.
+
+    Qwen2.5 is Apache-2.0 at 0.5B, 1.5B, 7B, 14B and 32B, and NOT at 3B or
+    72B, which carry bespoke Alibaba licences. Nothing here can check a licence
+    over the network, so this guards the specific sizes we know about rather
+    than pretending to verify.
+    """
+    from server.config import CONFIG
+
+    NOT_OPEN = {"qwen2.5:3b", "qwen2.5:3b-instruct", "qwen2.5:72b", "qwen2.5:72b-instruct"}
+    for tag in (CONFIG.ai.model, *CONFIG.ai.fallback_models):
+        assert tag not in NOT_OPEN, (
+            f"{tag} is under a bespoke research licence, not Apache-2.0. "
+            f"This project's pitch is open, offline and auditable."
+        )
