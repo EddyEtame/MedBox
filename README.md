@@ -32,6 +32,12 @@ powershell -ExecutionPolicy Bypass -File setup.ps1
 
 Then open <http://127.0.0.1:8080>.
 
+**If you are here to use the station rather than build it, read
+[`docs/USER_GUIDE.md`](docs/USER_GUIDE.md).** It is the operator's guide, and
+it is generated from the product by `python tools/guide.py`, so it cannot
+describe a MedBox that does not exist. The same facts are on the Help button
+inside the console, which keeps working with the assistant killed.
+
 `setup` creates the virtual environment, installs pinned dependencies, installs
 and version-checks Ollama, pulls the model, creates the database and runs the
 tests. It is safe to run again at any time — every step checks before it acts.
@@ -136,6 +142,11 @@ web/                   the 2D console (always works — the fallback)
 scenarios/             YAML timelines: demo, tests and training data
 tasks/                 who is building what this week
 tests/                 pytest
+
+docs/
+  USER_GUIDE.md        the operator's guide — GENERATED, do not hand-edit
+tools/
+  guide.py             builds it; --check fails the suite when it drifts
 ```
 
 ---
