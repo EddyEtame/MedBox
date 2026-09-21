@@ -31,6 +31,9 @@
       var msg;
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
       if (msg.type === "board") onBoard(msg);
+      // A symptom reported from the other view, or another screen entirely.
+      else if (msg.type === "symptom" && msg.reported &&
+               msg.reported.patient_id === state.selected) loadReported();
     };
   }
 
@@ -227,8 +230,55 @@
   function select(id) {
     state.selected = id;
     el("aiOut").innerHTML = "";
+    el("sayInput").value = "";
+    el("sayInput").disabled = false;
+    el("sayBtn").disabled = false;
+    renderReported([]);
+    loadReported();
     renderRows();
     renderDetail();
+  }
+
+  /* --------------------------------------------- what the crew member said */
+  function renderReported(list) {
+    var box = el("pSaid");
+    if (!list || !list.length) {
+      box.innerHTML = '<p class="none">Nothing reported yet.</p>';
+      return;
+    }
+    box.innerHTML = list.map(function (r) {
+      var who = r.source === "voice" ? "heard" : "typed";
+      if (r.source === "voice" && r.confidence != null) {
+        who = 'heard · <span class="heard">' + Math.round(r.confidence * 100) + '% sure</span>';
+      }
+      return '<div class="quote ' + (r.source === "voice" ? "voice" : "") + '">' +
+             "<p>&ldquo;" + esc(r.text) + "&rdquo;</p>" +
+             '<span class="who">' + who + "</span></div>";
+    }).join("");
+  }
+
+  function loadReported() {
+    var id = state.selected;
+    if (!id) return;
+    fetch("/api/patient/" + encodeURIComponent(id))
+      .then(function (r) { return r.json(); })
+      .then(function (d) { if (state.selected === id) renderReported(d.reported || []); })
+      .catch(function () { /* the board is unaffected either way */ });
+  }
+
+  function sayIt(e) {
+    e.preventDefault();
+    var input = el("sayInput"), text = input.value.trim();
+    if (!text || !state.selected) return;
+    input.value = "";
+    fetch("/api/patient/" + encodeURIComponent(state.selected) + "/symptom", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text, source: "typed" })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { renderReported(d.reported || []); })
+      .catch(function () { input.value = text; });
   }
 
   el("rows").addEventListener("click", function (e) {
@@ -241,6 +291,7 @@
     if (row) { e.preventDefault(); select(row.dataset.id); }
   });
   el("aiBtn").addEventListener("click", askAI);
+  el("sayForm").addEventListener("submit", sayIt);
 
   el("runBtn").addEventListener("click", function () {
     var name = el("scenarioPick").value;

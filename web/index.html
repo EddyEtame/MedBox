@@ -62,6 +62,18 @@
       </div>
       <div class="vitals" id="vitals"></div>
       <div class="why" id="why"></div>
+
+      <section class="said">
+        <h3>In their own words</h3>
+        <p class="said-rule">Reported, not measured. Never changes the NEWS2 score.</p>
+        <div id="pSaid"></div>
+        <form class="say" id="sayForm">
+          <input id="sayInput" type="text" maxlength="200"
+                 placeholder="What did they say?" aria-label="Reported symptom" disabled>
+          <button class="btn" type="submit" id="sayBtn" disabled>Add</button>
+        </form>
+      </section>
+
       <button id="aiBtn" class="btn primary wide" disabled>Ask the assistant</button>
       <div class="ai" id="aiOut"></div>
     </section>
