@@ -14,12 +14,25 @@ written and tested, so neither of you is blocked waiting for the other.
 | Owner | Files |
 |---|---|
 | **Eddy** | `web/**`, `server/ai/**`, `server/symptoms.py`, `tools/**`, `docs/pitch.md` |
-| **Dev 2** | `server/sensors/**`, `server/db.py`, `server/quarantine.py`, `scenarios/**`, `tests/**` |
+| **Dev 2** | `server/sensors/**`, `server/db.py`, `server/quarantine.py`, `scenarios/**` |
 | **Shared — discuss before editing** | `server/app.py`, `server/triage.py`, `config.toml` |
 
+Tests belong to whoever owns the code they test, not to one person. A test is
+how you say what your own module promises, and handing that to someone else
+means the promise gets written by whoever understands it least. So
+`tests/test_triage.py` and the sensor and quarantine tests are Dev 2's, the AI
+and console tests are Eddy's, and neither of you needs permission to add one.
+
 If you need something changed in a shared file, say so rather than editing
-around each other. `server/triage.py` in particular is tested and demoed — it
-should not need to change at all.
+around each other.
+
+`server/triage.py` is tested and demoed and should change as little as
+possible. It has changed once, on 21 September: `to_dict()` now also reports
+`single_param_3` and `worst_param`. Nothing about the scoring moved. Those two
+go into the AI prompt, because a model told only "aggregate 3, band medium"
+sees a small number beside a serious word and writes "a low aggregate of 3,
+overall reassuring" underneath a MEDIUM band. It has to be given the reason,
+not just the number.
 
 ## Working agreement
 
