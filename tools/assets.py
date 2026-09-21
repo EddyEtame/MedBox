@@ -60,7 +60,9 @@ def python_command(script: str) -> str:
     asserts this agrees with server.config.python_command.
     """
     if sys.platform.startswith("win"):
-        return f".venv\\Scripts\\python {script}"
+        # The leading .\ is required: PowerShell will not run a relative path
+        # without it. See the note in server/config.py.
+        return f".\\.venv\\Scripts\\python {script.replace('/', chr(92))}"
     return f".venv/bin/python {script}"
 
 
@@ -326,7 +328,7 @@ def fetch_speech(source: Path | None) -> bool:
         from faster_whisper import download_model
     except ImportError:
         bad("faster-whisper is not installed, so the speech model cannot be fetched")
-        note("Install it: pip install -r requirements-speech.txt")
+        note(f"Install it: {python_command('-m pip install -r requirements-speech.txt')}")
         note("Or copy models/faster-whisper-base from a machine that has it and use --from.")
         return False
 
@@ -375,7 +377,14 @@ def main() -> int:
     # the right command, rather than reported later as "faster-whisper is not
     # installed" — which sends a person to pip, into the wrong environment, and
     # leaves the server still saying the model is missing.
-    if VENV.is_dir() and not in_venv():
+    if not VENV.is_dir():
+        # Nothing is installed yet, so every later message would be a red
+        # herring about a missing package. Say the actual thing.
+        bad("there is no virtual environment here yet, so nothing is installed")
+        note("Run: python setup.py")
+        note("(from the MedBox folder, the one holding setup.py)")
+        return 1
+    if not in_venv():
         bad("this is not the MedBox virtual environment, so it cannot see the "
             "dependencies")
         note(f"Run: {python_command('tools/assets.py')}")

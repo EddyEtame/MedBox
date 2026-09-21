@@ -14,6 +14,8 @@ import sys
 import zipfile
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -292,3 +294,129 @@ def test_running_it_with_the_wrong_interpreter_is_detected():
         "Note a venv's python is a SYMLINK to the system one, so any check "
         "that resolves sys.executable walks back out of the venv."
     )
+
+
+def test_the_windows_command_can_actually_be_typed_into_powershell(monkeypatch):
+    """PowerShell refuses to run a relative path without a leading `.\\`.
+
+    E hit this on his own machine: `.venv\\Scripts\\python tools\\assets.py`
+    came back as "the term ... is not recognized", and because the path starts
+    with a dot PowerShell tried to load it as a MODULE, so the error did not
+    even mention paths. This test runs the Windows branch on any platform,
+    which the earlier version of it did not — it only ever checked whichever
+    branch the test machine happened to take, and CI here is Linux.
+    """
+    import server.config as config
+    import tools.assets as assets
+
+    for module in (config, assets):
+        monkeypatch.setattr(module.sys, "platform", "win32")
+        cmd = module.python_command("tools/assets.py")
+        assert cmd.startswith(".\\.venv\\Scripts\\python"), (
+            f"{module.__name__} produced {cmd!r}, which PowerShell will not run"
+        )
+        assert "/" not in cmd, f"{module.__name__} left a forward slash in {cmd!r}"
+
+    for module in (config, assets):
+        monkeypatch.setattr(module.sys, "platform", "linux")
+        assert module.python_command("tools/assets.py") == ".venv/bin/python tools/assets.py"
+
+
+@pytest.mark.parametrize("path", ["README.md", "setup.py", "setup.ps1", "docs"])
+def test_nothing_tells_a_windows_user_a_command_powershell_refuses(path: str):
+    """Scoped to the README first, which missed the one that mattered.
+
+    setup.py prints the run command as the LAST line of a successful setup,
+    and it had the broken form — the single place a person is most likely to
+    copy from, unguarded, because setup.py is stdlib-only and does not use
+    either python_command() helper.
+    """
+    target = ROOT / path
+    files = sorted(target.rglob("*")) if target.is_dir() else [target]
+    bad = []
+    for f in files:
+        if not f.is_file() or f.suffix not in {".md", ".py", ".ps1", ".txt"}:
+            continue
+        for n, ln in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            if "venv\\\\Scripts" not in ln and "venv\\Scripts" not in ln:
+                continue
+            # The guarded form, in source or in prose.
+            if ".\\\\.venv" in ln or ".\\.venv" in ln:
+                continue
+            bad.append(f"{f.relative_to(ROOT)}:{n}  {ln.strip()}")
+    assert not bad, (
+        "these hand a Windows user a command PowerShell will not run "
+        "(needs a leading .\\):\n  " + "\n  ".join(bad)
+    )
+
+
+def test_the_wrapper_probes_an_interpreter_instead_of_trusting_the_path():
+    """Get-Command only proves a file is on PATH.
+
+    py.exe lives in C:\\Windows and is left behind when a Python is
+    uninstalled, so `py` can outlive every runtime it could launch; python.exe
+    is often the Microsoft Store stub. Committing to either without running it
+    means never trying the interpreter that does work, and the friendly
+    "no Python" message becomes unreachable.
+    """
+    ps = (ROOT / "setup.ps1").read_text(encoding="utf-8")
+    body = "\n".join(ln for ln in ps.splitlines() if not ln.strip().startswith("#"))
+    assert body.count('-c "pass"') >= 2, (
+        "setup.ps1 does not probe both candidates before committing to one"
+    )
+    assert "2>$null" not in body, (
+        "setup.ps1 is back to redirecting native stderr to $null, which is the "
+        "construct that made python's banner a fatal error"
+    )
+    # If the launcher is found but fails its probe, $prefix must not keep -3.
+    assert body.count("$prefix = @()") >= 2, (
+        "setup.ps1 never resets $prefix, so a dead py launcher followed by a "
+        "working python would run `python -3 setup.py`"
+    )
+
+
+def test_the_windows_wrapper_does_not_trip_over_powershell_native_stderr():
+    """setup.ps1 set $ErrorActionPreference to Stop and then ran python to
+    probe its version. Python prints its banner to stderr, PowerShell 5.1 turns
+    native stderr into an error record, and under Stop that is terminating — so
+    setup died before creating the virtual environment and every later command
+    failed for the obvious downstream reason.
+
+    It also assigned to $args, which is an automatic variable holding the
+    caller's arguments."""
+    ps = (ROOT / "setup.ps1").read_text(encoding="utf-8")
+    body = "\n".join(ln for ln in ps.splitlines() if not ln.strip().startswith("#"))
+    assert 'ErrorActionPreference = "Stop"' not in body, (
+        "setup.ps1 is back on Stop, which makes python's banner a fatal error"
+    )
+    assert "$args =" not in body, "setup.ps1 assigns to the automatic $args again"
+    assert "setup.py" in body, "setup.ps1 no longer hands over to setup.py"
+
+
+def test_a_fresh_clone_is_told_to_run_setup_not_pip(tmp_path, capsys, monkeypatch):
+    """Before setup has run there is no .venv, and the wrong-interpreter guard
+    used to be skipped entirely in that case. It fell through to "faster-whisper
+    is not installed" and pointed at a bare pip — which installs into whichever
+    interpreter is on PATH, leaving the server still saying the model is
+    missing. That is the loop this guard exists to break."""
+    import tools.assets as assets
+
+    monkeypatch.setattr(assets, "VENV", tmp_path / "nope")
+    monkeypatch.setattr(assets.sys, "argv", ["assets.py"])
+    assert assets.main() == 1
+    out = capsys.readouterr().out
+    assert "no virtual environment" in out
+    assert "setup.py" in out
+    assert "pip install" not in out, "a fresh clone is still being sent to pip"
+
+
+def test_nothing_in_the_installer_recommends_a_bare_pip():
+    """A bare `pip` is the same wrong-environment mistake by another route."""
+    src = (ROOT / "tools" / "assets.py").read_text(encoding="utf-8")
+    for n, ln in enumerate(src.splitlines(), 1):
+        if ln.strip().startswith("#"):
+            continue
+        if "pip install" in ln:
+            assert "python_command" in ln, (
+                f"tools/assets.py:{n} recommends a bare pip: {ln.strip()}"
+            )

@@ -27,7 +27,7 @@ account and no internet connection at any point.
 **Windows**
 ```powershell
 powershell -ExecutionPolicy Bypass -File setup.ps1
-.venv\Scripts\python medbox.py
+.\.venv\Scripts\python medbox.py
 ```
 
 Then open <http://127.0.0.1:8080>.
@@ -36,8 +36,16 @@ Then open <http://127.0.0.1:8080>.
 and version-checks Ollama, pulls the model, creates the database and runs the
 tests. It is safe to run again at any time — every step checks before it acts.
 
-No Ollama, or no patience for a 2 GB download? `python setup.py --no-ollama`.
-Everything works except the narration, which is the point of the next section.
+**On Windows it takes two passes.** Ollama ships as an installer, so setup
+downloads it (1.2 GB), launches it, and stops. Finish the installer, then run
+`setup.ps1` again — the second pass finds Ollama and pulls the model. You never
+need to type `ollama` yourself, which is just as well: its installer does not
+add itself to the PATH of a PowerShell window that was already open.
+
+In a hurry, or on a network that will not carry it? `python setup.py --no-ollama`
+skips both downloads. Everything works except the narration, which is the point
+of the next section. (A plain `python` is right here — `setup.py` uses only the
+standard library, because it is what runs before anything is installed.)
 
 ### Hold-to-speak (optional)
 
@@ -51,7 +59,7 @@ installed. To let it *listen*, fetch the speech model once:
 
 **Windows**
 ```powershell
-.venv\Scripts\python tools\assets.py
+.\.venv\Scripts\python tools\assets.py
 ```
 
 Run it from this folder, the one holding `setup.py`, and use the interpreter
@@ -174,7 +182,7 @@ not who.
 
 ```bash
 .venv/bin/python -m pytest tests/ -q      # Linux
-.venv\Scripts\python -m pytest tests\ -q  # Windows
+.\.venv\Scripts\python -m pytest tests\ -q  # Windows
 ```
 
 The triage tests matter more than they look: the score is what the jury sees and

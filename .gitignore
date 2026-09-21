@@ -27,6 +27,13 @@ recordings/
 models/
 *.gguf
 
+# --- Installers setup.py downloads into this folder ---
+# The pinned Ollama installer is 1.22 GB and lands in the repo root. Untracked
+# it merely clutters `git status`; committed, GitHub rejects the push for
+# exceeding the 100 MB blob limit, which is a confusing way to find out.
+OllamaSetup.exe
+*.exe
+
 # --- Editors / OS ---
 .vscode/
 .idea/

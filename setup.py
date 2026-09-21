@@ -118,7 +118,11 @@ def check_python() -> bool:
             f"Install it from python.org and re-run."
         )
         return False
+    # The path, not just the number. When a wheel fails to build later, the
+    # first question is always which interpreter ran, and on Windows `py -3`
+    # may have picked a different one than the person expected.
     ok(f"Python {v.major}.{v.minor}.{v.micro} on {platform.system()}")
+    print(f"        {sys.executable}")
     return True
 
 
@@ -194,8 +198,22 @@ def install_ollama(assume_yes: bool, required: str = "") -> str | None:
                 return None
         target = ROOT / "OllamaSetup.exe"
         try:
-            print("        Downloading (about 200 MB)...")
-            urllib.request.urlretrieve(url, target)
+            # The size is printed from the response, not guessed. This said
+            # "about 200 MB" for a long time and the pinned installer is
+            # 1.22 GB, so somebody on a school network watched a silent
+            # progress-free download run six times longer than promised, which
+            # is indistinguishable from a hang.
+            def progress(block: int, size: int, total: int) -> None:
+                if total <= 0:
+                    return
+                done = min(block * size, total)
+                print(f"\r        {done / 1e6:>7.0f} / {total / 1e6:.0f} MB",
+                      end="", flush=True)
+
+            print("        Downloading the Ollama installer. This is over a")
+            print("        gigabyte, so give it a few minutes.")
+            urllib.request.urlretrieve(url, target, reporthook=progress)
+            print()
         except (urllib.error.URLError, OSError) as exc:
             if required:
                 # The pinned release may not carry that asset name. Say so
@@ -265,13 +283,31 @@ def setup_ollama(check_only: bool, assume_yes: bool) -> bool:
         return True
 
     model = read_model()
-    tags = run([binary, "list"])
-    pulled = {line.split()[0] for line in tags.stdout.splitlines()[1:] if line.strip()}
+
+    def installed_tags() -> set[str]:
+        tags = run([binary, "list"])
+        return {ln.split()[0] for ln in tags.stdout.splitlines()[1:] if ln.strip()}
+
+    def report(pulled: set[str]) -> None:
+        """Print the tags Ollama actually holds, not the one we asked for.
+
+        server/ai/ollama.py matches the configured model against this list by
+        name, and a tag that differs by so much as a suffix makes the probe
+        decide the model is not there — at which point the stand-in answers and
+        says so, quietly, instead of the real model. Printing what Ollama
+        really reports is how a mismatch gets noticed here rather than on
+        stage.
+        """
+        if pulled:
+            print(f"        ollama list: {', '.join(sorted(pulled))}")
+
+    pulled = installed_tags()
     if model in pulled or f"{model}:latest" in pulled:
         ok(f"model {model} already pulled")
+        report(pulled)
         return True
 
-    print(f"        Pulling {model}. First time this downloads ~2 GB.")
+    print(f"        Pulling {model}. First time this downloads about 1 GB.")
     r = subprocess.run([binary, "pull", model])
     if r.returncode != 0:
         warn(
@@ -280,6 +316,7 @@ def setup_ollama(check_only: bool, assume_yes: bool) -> bool:
         )
         return False
     ok(f"pulled {model}")
+    report(installed_tags())
     return True
 
 
@@ -355,7 +392,14 @@ def main() -> int:
     else:
         print(f"{GREEN}Ready.{RESET}")
 
-    runner = ".venv\\Scripts\\python medbox.py" if IS_WINDOWS else ".venv/bin/python medbox.py"
+    # The leading .\ is required on Windows: PowerShell will not run a command
+    # from the current directory without a path qualifier, and because this one
+    # starts with a dot it falls through to module auto-loading and reports
+    # "The module '.venv' could not be loaded" — an error that never mentions
+    # paths. This is the last line a successful setup prints, so getting it
+    # wrong hands somebody a broken command at the exact moment they trust it.
+    runner = (".\\.venv\\Scripts\\python medbox.py" if IS_WINDOWS
+              else ".venv/bin/python medbox.py")
     print(f"\n  Start the station:   {runner}")
     print(f"  Then open:           http://127.0.0.1:8080\n")
     return 0

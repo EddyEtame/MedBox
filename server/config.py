@@ -32,7 +32,11 @@ def python_command(script: str) -> str:
     stays free of project imports on purpose. A test asserts the two agree.
     """
     if sys.platform.startswith("win"):
-        return f".venv\\Scripts\\python {script}"
+        # The leading .\ is not decoration. PowerShell refuses to run a
+        # relative path without it — "the term .venv\Scripts\python is not
+        # recognized" — and it tries to load anything starting with a bare dot
+        # as a module, so the error it gives does not even mention paths.
+        return f".\\.venv\\Scripts\\python {script.replace('/', chr(92))}"
     return f".venv/bin/python {script}"
 
 
