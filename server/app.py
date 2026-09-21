@@ -24,6 +24,7 @@ from .config import CONFIG, ROOT
 from .db import Database
 from .quarantine import QuarantineRegistry
 from .sensors.synthetic import ScenarioSource
+from .symptoms import SymptomLog
 from .triage import assess
 
 log = logging.getLogger("medbox")
@@ -40,6 +41,10 @@ class MedBox:
             CONFIG.ship.quarantine_zones, CONFIG.ship.zone_capacity
         )
         self.db.upsert_patients(self.source.roster())
+        # What crew members say, kept apart from what the box measures. The
+        # log is handed the recorder rather than importing the database, so
+        # nothing in the measurement path depends on it.
+        self.symptoms = SymptomLog(on_record=self.db.record_event)
         self.latest: dict[str, dict] = {}
         self.scenario: scenarios.Scenario | None = None
         self.scenario_t0: float | None = None
@@ -52,6 +57,7 @@ class MedBox:
     def load_scenario(self, name: str) -> scenarios.Scenario:
         sc = scenarios.load(name)
         self.source.reset()
+        self.symptoms.clear()
         self.quarantine.assignments.clear()
         self.scenario = sc
         self.scenario_t0 = time.monotonic()
@@ -64,6 +70,7 @@ class MedBox:
         self.scenario_t0 = None
         self._fired.clear()
         self.source.reset()
+        self.symptoms.clear()
         self.quarantine.assignments.clear()
 
     def _advance_scenario(self, now: float) -> None:
@@ -209,7 +216,35 @@ async def patient(patient_id: str) -> dict:
     entry = STATION.latest.get(patient_id)
     if entry is None:
         raise HTTPException(404, f"No crew member {patient_id}")
-    return {**entry, "history": STATION.db.history(patient_id, limit=120)}
+    return {
+        **entry,
+        "history": STATION.db.history(patient_id, limit=120),
+        "reported": STATION.symptoms.for_patient(patient_id),
+    }
+
+
+@app.post("/api/patient/{patient_id}/symptom")
+async def report_symptom(patient_id: str, body: dict) -> dict:
+    """Record something the crew member said.
+
+    This is the only way a human statement enters MedBox, and it enters as a
+    quotation. It reaches the assistant as context and the screen as words in
+    quotation marks. It does not touch triage: NEWS2 is computed from the
+    instruments in the loop above and never reads this.
+    """
+    if patient_id not in STATION.latest:
+        raise HTTPException(404, f"No crew member {patient_id}")
+    try:
+        entry = STATION.symptoms.add(
+            patient_id,
+            body.get("text", ""),
+            source=body.get("source", "typed"),
+            confidence=body.get("confidence"),
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    BUS.publish({"type": "symptom", "reported": entry.to_dict()})
+    return {"reported": STATION.symptoms.for_patient(patient_id)}
 
 
 @app.post("/api/scenario/{name}")
@@ -233,7 +268,9 @@ async def ai_assess(patient_id: str) -> JSONResponse:
     entry = STATION.latest.get(patient_id)
     if entry is None:
         raise HTTPException(404, f"No crew member {patient_id}")
-    result = await CLIENT.assess(entry["patient"], entry["triage"])
+    result = await CLIENT.assess(
+        entry["patient"], entry["triage"], STATION.symptoms.prompt_note(patient_id)
+    )
     if result is None:
         return JSONResponse(
             status_code=503,

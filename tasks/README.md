@@ -13,7 +13,7 @@ written and tested, so neither of you is blocked waiting for the other.
 
 | Owner | Files |
 |---|---|
-| **Eddy** | `web/**`, `server/ai/**`, `docs/pitch.md` |
+| **Eddy** | `web/**`, `server/ai/**`, `server/symptoms.py`, `tools/**`, `docs/pitch.md` |
 | **Dev 2** | `server/sensors/**`, `server/db.py`, `server/quarantine.py`, `scenarios/**`, `tests/**` |
 | **Shared — discuss before editing** | `server/app.py`, `server/triage.py`, `config.toml` |
 

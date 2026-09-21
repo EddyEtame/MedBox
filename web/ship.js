@@ -356,6 +356,10 @@
     ws.onmessage = function (ev) {
       var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
       if (m.type === "board") onBoard(m);
+      // Someone reported a symptom, possibly from another screen. If it is
+      // the crew member on show, their words appear without a refresh.
+      else if (m.type === "symptom" && m.reported &&
+               m.reported.patient_id === state.selected) loadReported();
     };
   }
 
@@ -693,6 +697,9 @@
   function selectCrew(id) {
     state.selected = id;
     el("aiOut").innerHTML = "";
+    el("sayInput").value = "";
+    renderReported([]);
+    loadReported();
     el("panel").hidden = false;
     document.body.classList.add("has-panel");
     flyTo(id);
@@ -733,6 +740,50 @@
       return '<div class="vc s' + score + '"><span class="k">' + c[0] + '</span>' +
              '<div class="v">' + c[1] + '</div><div class="r">' + esc(reason) + '</div></div>';
     }).join("");
+  }
+
+  /* --------------------------------------------- what the crew member said */
+  function renderReported(list) {
+    var box = el("pSaid");
+    if (!list || !list.length) {
+      box.innerHTML = '<p class="none">Nothing reported yet.</p>';
+      return;
+    }
+    box.innerHTML = list.map(function (r) {
+      var who = r.source === "voice" ? "heard" : "typed";
+      // A transcript is a guess about what was said. Show the confidence so an
+      // operator can see when the box may simply have misheard.
+      if (r.source === "voice" && r.confidence != null) {
+        who = 'heard · <span class="heard">' + Math.round(r.confidence * 100) + '% sure</span>';
+      }
+      return '<div class="quote ' + (r.source === "voice" ? "voice" : "") + '">' +
+             "<p>&ldquo;" + esc(r.text) + "&rdquo;</p>" +
+             '<span class="who">' + who + "</span></div>";
+    }).join("");
+  }
+
+  function loadReported() {
+    var id = state.selected;
+    if (!id) return;
+    fetch("/api/patient/" + encodeURIComponent(id))
+      .then(function (r) { return r.json(); })
+      .then(function (d) { if (state.selected === id) renderReported(d.reported || []); })
+      .catch(function () { /* the board is unaffected either way */ });
+  }
+
+  function sayIt(e) {
+    e.preventDefault();
+    var input = el("sayInput"), text = input.value.trim();
+    if (!text || !state.selected) return;
+    input.value = "";
+    fetch("/api/patient/" + encodeURIComponent(state.selected) + "/symptom", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text, source: "typed" })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { renderReported(d.reported || []); })
+      .catch(function () { input.value = text; });
   }
 
   function bandColor(u) {
@@ -791,6 +842,7 @@
 
   /* --------------------------------------------------------------- wiring */
   el("aiBtn").addEventListener("click", askAI);
+  el("sayForm").addEventListener("submit", sayIt);
   el("closeBtn").addEventListener("click", closePanel);
   el("aiOut").addEventListener("click", function (e) {
     if (e.target.closest(".hyp") && state.selected) flyTo(state.selected);
