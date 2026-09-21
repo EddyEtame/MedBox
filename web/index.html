@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MedBox · ESA Horizon</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"></span>
+    <div>
+      <h1>MedBox</h1>
+      <p class="ship" id="ship">ESA Horizon</p>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><span class="k">Crew</span><span class="v" id="crewTotal">&ndash;</span></div>
+    <div class="stat"><span class="k">Impaired</span><span class="v warn" id="crewImpaired">&ndash;</span></div>
+    <div class="stat"><span class="k">Isolated</span><span class="v crit" id="crewIsolated">&ndash;</span></div>
+  </div>
+
+  <div class="ctl">
+    <select id="scenarioPick" aria-label="Scenario"></select>
+    <button id="runBtn" class="btn primary">Run</button>
+    <button id="stopBtn" class="btn">Reset</button>
+  </div>
+</header>
+
+<div class="ribbon">
+  <span class="chip" id="linkChip"><i class="led"></i>Screen link</span>
+  <span class="chip" id="aiChip"><i class="led"></i>AI narration</span>
+  <span class="chip" id="scenarioChip">No scenario running</span>
+  <span class="chip note">Research instrument &mdash; not a medical device. Does not diagnose.</span>
+</div>
+
+<main>
+  <section class="panel board">
+    <div class="phead">
+      <h2>Crew triage</h2>
+      <p class="sub">Ordered by NEWS2 aggregate. Computed on the fast track, with no model involved.</p>
+    </div>
+    <div class="rows" id="rows"></div>
+    <p class="empty" id="empty">Waiting for the station&hellip;</p>
+  </section>
+
+  <aside class="side">
+    <section class="panel">
+      <div class="phead"><h2>Quarantine</h2></div>
+      <div class="zones" id="zones"></div>
+    </section>
+
+    <section class="panel detail">
+      <div class="phead">
+        <h2 id="detailName">No crew member selected</h2>
+        <p class="sub" id="detailRole">Select a row to inspect.</p>
+      </div>
+      <div class="vitals" id="vitals"></div>
+      <div class="why" id="why"></div>
+      <button id="aiBtn" class="btn primary wide" disabled>Ask the assistant</button>
+      <div class="ai" id="aiOut"></div>
+    </section>
+  </aside>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

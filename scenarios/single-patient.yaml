@@ -1,0 +1,16 @@
+# A single consultation, for testing the AI path and the patient detail view.
+name: Single patient consultation
+description: One crew member develops a fever while being monitored.
+crew: 40
+
+timeline:
+  - at: 0s
+    do: note
+    text: "Routine check, crew member reports a headache."
+  - at: 12s
+    do: afflict
+    patients: 1
+    temperature: 38.7
+    pulse: 96
+    respiration: 21
+    over: 40

@@ -1,0 +1,32 @@
+# MedBox configuration.
+# Everything the system needs to start is in this one file.
+
+[server]
+host = "127.0.0.1"
+port = 8080
+# The board snapshot rate pushed to every connected screen.
+board_hz = 10
+# The internal sensor sampling rate.
+sample_hz = 20
+
+[ai]
+# Ollama must be this version on BOTH machines and on the demo laptop.
+# setup.py checks this and refuses to continue on a mismatch.
+required_ollama = "0.5.4"
+host = "http://127.0.0.1:11434"
+# Exact model tag. Small enough for a laptop CPU, good at structured output.
+model = "qwen2.5:3b-instruct"
+# If the pull above fails, these are known-good alternates.
+fallback_models = ["llama3.2:3b", "gemma2:2b"]
+# Hard ceiling. The AI is never allowed to hold up a measurement.
+timeout_seconds = 20.0
+temperature = 0.2
+
+[database]
+path = "data/medbox.db"
+
+[ship]
+name = "ESA Horizon"
+crew_size = 40
+quarantine_zones = ["A", "B", "C"]
+zone_capacity = 4

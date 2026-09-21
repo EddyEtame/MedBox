@@ -1,0 +1,45 @@
+# The crisis the brief specifies: 15% of the crew contaminated.
+# This is the scenario to demo on Friday. Run it, do not improvise.
+name: Contamination outbreak
+description: >
+  Six of forty crew develop a respiratory infection over ninety seconds.
+  The board re-orders itself by NEWS2 urgency, quarantine zones fill, and
+  partway through the AI is killed to show the station keeps working without it.
+crew: 40
+
+timeline:
+  - at: 0s
+    do: note
+    text: "Nominal. All forty crew within normal ranges."
+
+  # First two cases: fever and a cough, oxygen still fine.
+  - at: 10s
+    do: afflict
+    patients: 2
+    temperature: 38.4
+    pulse: 98
+    respiration: 22
+    over: 25
+
+  - at: 20s
+    do: note
+    text: "Two crew febrile. Hydroponics deck."
+
+  # Four more, and these are worse: oxygen starts dropping.
+  - at: 28s
+    do: afflict
+    patients: 4
+    temperature: 39.1
+    spo2: 92
+    pulse: 118
+    respiration: 25
+    over: 30
+
+  - at: 45s
+    do: note
+    text: "Six of forty. 15% of the crew. Quarantine protocol active."
+
+  # From here the operator kills Ollama by hand, live.
+  - at: 60s
+    do: note
+    text: "AI narration offline. Vitals, triage and quarantine unaffected."

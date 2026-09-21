@@ -1,0 +1,35 @@
+# --- Workshop material: NEVER commit these ---
+*.pdf
+*.pptx
+*.docx
+Workshop*/
+docs/material/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# --- MedBox runtime state ---
+data/
+*.db
+*.db-journal
+*.db-wal
+recordings/
+*.medbox
+
+# --- Models (huge, pulled by setup) ---
+models/
+*.gguf
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
