@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, scenarios
+from .ai.capabilities import manifest, self_explanation_prompt
 from .ai.ollama import CLIENT
 from .bus import BUS
 from .config import CONFIG, ROOT
@@ -281,6 +282,33 @@ async def ai_assess(patient_id: str) -> JSONResponse:
             },
         )
     return JSONResponse(content=result)
+
+
+@app.get("/api/assistant/help")
+async def assistant_help() -> dict:
+    """What this box can and cannot do.
+
+    Served from data the station owns, so the guide survives the assistant
+    being killed. When the assistant is up it narrates the same facts in its
+    own words; it is the voice, never the source.
+    """
+    return manifest(ai_available=CLIENT.available, stand_in=CLIENT.stand_in)
+
+
+@app.post("/api/assistant/introduce")
+async def assistant_introduce() -> JSONResponse:
+    """Let the assistant introduce itself, from facts it is handed."""
+    text = await CLIENT.freeform(self_explanation_prompt())
+    if text is None:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "AI unavailable",
+                "detail": CLIENT.last_error,
+                "note": "The guide above is unaffected: it is the station's own, not the model's.",
+            },
+        )
+    return JSONResponse(content={"text": text, "stand_in": CLIENT.stand_in})
 
 
 @app.get("/api/interconnect/health")

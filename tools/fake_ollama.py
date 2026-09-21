@@ -145,6 +145,23 @@ def _assessment(prompt: str) -> dict:
     }
 
 
+def _plain(prompt: str) -> str:
+    """The honest answer to any free-text prompt: there is nobody here.
+
+    The one place MedBox asks for free text is the assistant introducing
+    itself, and that screen already carries the station's own guide. So the
+    stand-in points at it instead of pretending to be a voice.
+    """
+    return (
+        "There is no language model running. This is the stand-in, which reads "
+        "instrument values back and applies fixed rules, so it has nothing of "
+        "its own to say about the station. Everything listed on this screen is "
+        "the station's own description of what it does, and all of it is true "
+        "whether or not a model is running. Start Ollama and ask again to hear "
+        "it in the assistant's words."
+    )
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "FakeOllama/1.0"
 
@@ -180,7 +197,13 @@ class Handler(BaseHTTPRequestHandler):
         prompt = "\n".join(
             m.get("content", "") for m in body.get("messages", []) if m.get("role") == "user"
         )
-        content = json.dumps(_assessment(prompt))
+        if body.get("format"):
+            content = json.dumps(_assessment(prompt))
+        else:
+            # A free-text request. A stand-in has no words of its own, so it
+            # says exactly that rather than improvising something that would
+            # read like the assistant talking.
+            content = _plain(prompt)
         self._send(200, {
             "model": body.get("model", MODEL_NAMES[0]),
             "done": True,

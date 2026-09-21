@@ -102,4 +102,35 @@ class OllamaClient:
             return None
 
 
+    async def freeform(self, prompt: str) -> str | None:
+        """Plain text, no schema. Used only where there is nothing to parse.
+
+        Same contract as everything else here: returns None on any failure and
+        never raises. The one place this is used — the assistant introducing
+        itself — has a complete non-AI fallback already on screen, so losing
+        it costs nothing.
+        """
+        body = {
+            "model": self.model,
+            "stream": False,
+            "options": {"temperature": CONFIG.ai.temperature},
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+        }
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                r = await client.post(f"{self.host}/api/chat", json=body)
+                r.raise_for_status()
+                text = r.json().get("message", {}).get("content", "")
+        except Exception as exc:
+            log.warning("AI unavailable for free text: %s", exc)
+            self.available = False
+            self.last_error = f"{type(exc).__name__}: {exc}"
+            return None
+        text = (text or "").strip()
+        return text or None
+
+
 CLIENT = OllamaClient()

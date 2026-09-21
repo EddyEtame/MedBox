@@ -43,6 +43,7 @@
     <select id="scenarioPick" aria-label="Scenario"></select>
     <button id="runBtn" class="btn primary">Run</button>
     <button id="stopBtn" class="btn">Reset</button>
+    <button id="helpBtn" class="btn" title="What can this do?">Help</button>
     <a class="btn ghost" href="/board" title="Flat board — always works">Board</a>
   </div>
 
@@ -53,6 +54,17 @@
 </div>
 </header>
 
+
+<aside class="hud guide" id="guide" hidden>
+  <button class="x" id="guideClose" aria-label="Close">&times;</button>
+  <h2>What this box does</h2>
+  <p class="guide-lead" id="guideLead">Most of it works whether or not the assistant is running.</p>
+
+  <div id="guideBody"></div>
+
+  <button id="introBtn" class="btn primary wide">Ask the assistant to explain itself</button>
+  <div class="ai" id="introOut"></div>
+</aside>
 
 <aside class="hud panel" id="panel" hidden>
   <button class="x" id="closeBtn" aria-label="Close">&times;</button>
@@ -77,6 +89,15 @@
   <button id="aiBtn" class="btn primary wide">Ask the assistant</button>
   <div class="ai" id="aiOut"></div>
 </aside>
+
+<div class="hud cmd" id="cmd">
+  <form id="cmdForm">
+    <span class="cmd-mark" aria-hidden="true">&rsaquo;</span>
+    <input id="cmdInput" type="text" autocomplete="off" spellcheck="false" maxlength="220"
+           placeholder="type a command, or press / — try: worst" aria-label="Command">
+  </form>
+  <p class="cmd-out" id="cmdOut"></p>
+</div>
 
 <footer class="hud legend">
   <span><i class="sw routine"></i>routine</span>

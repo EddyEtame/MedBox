@@ -786,6 +786,177 @@
       .catch(function () { input.value = text; });
   }
 
+  /* ------------------------------------------------------- the guide */
+  function renderGuide(m) {
+    var withAI = m.capabilities.filter(function (c) { return c.needs_ai; });
+    var without = m.capabilities.filter(function (c) { return !c.needs_ai; });
+
+    function item(c) {
+      return '<div class="gitem ' + (c.needs_ai ? "ai" : "") + '">' +
+        "<b>" + esc(c.title) + "</b><p>" + esc(c.does) + "</p>" +
+        '<span class="how">' + esc(c.how) + "</span></div>";
+    }
+
+    var html =
+      '<div class="gsec"><h3>Works with the assistant dead</h3>' +
+      without.map(item).join("") + "</div>" +
+      '<div class="gsec"><h3>Needs the assistant</h3>' +
+      withAI.map(item).join("") + "</div>" +
+      '<div class="gsec"><h3>What it will never do</h3>' +
+      m.refusals.map(function (r) {
+        return '<div class="gno"><b>' + esc(r.never) + "</b><p>" + esc(r.why) + "</p></div>";
+      }).join("") + "</div>" +
+      '<div class="gsec"><h3>Type or say</h3><div class="keys">' +
+      m.shortcuts.map(function (k) {
+        return "<kbd" + (k.needs_ai ? ' class="ai"' : "") + ">" + esc(k.phrase) + "</kbd>" +
+               "<span>" + esc(k.does) + "</span>";
+      }).join("") + "</div></div>";
+
+    el("guideBody").innerHTML = html;
+    el("guideLead").textContent = m.ai_available
+      ? (m.stand_in
+          ? "A stand-in is answering, not a model. Everything below is the station's own, and all of it is true either way."
+          : "Most of this works whether or not the assistant is running. Anything in cyan needs it.")
+      : "The assistant is not running. Everything in the first list still works, which is most of it.";
+  }
+
+  function openGuide() {
+    el("guide").hidden = false;
+    el("introOut").innerHTML = "";
+    fetch("/api/assistant/help")
+      .then(function (r) { return r.json(); })
+      .then(renderGuide)
+      .catch(function () {
+        el("guideBody").innerHTML =
+          '<p class="guide-lead">The station is not answering. Reload the page.</p>';
+      });
+  }
+
+  function closeGuide() { el("guide").hidden = true; }
+
+  function introduce() {
+    var out = el("introOut"), btn = el("introBtn");
+    out.innerHTML = '<p class="sum">Asking…</p>';
+    btn.disabled = true;
+    fetch("/api/assistant/introduce", { method: "POST" })
+      .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+      .then(function (res) {
+        btn.disabled = false;
+        if (!res.ok) {
+          out.innerHTML = '<div class="fail"><b>The assistant cannot answer</b>' +
+            esc(res.body.note || "") + "</div>";
+          return;
+        }
+        var html = "";
+        if (res.body.stand_in) {
+          html += '<div class="standin-note"><b>Stand-in, not a language model</b>' +
+            "These are not an assistant's words. The list above is the station's own." +
+            "</div>";
+        }
+        out.innerHTML = html + '<p class="sum">' + esc(res.body.text || "") + "</p>";
+      })
+      .catch(function () {
+        btn.disabled = false;
+        out.innerHTML = '<div class="fail"><b>The assistant is unreachable</b>' +
+          "Everything above is unaffected.</div>";
+      });
+  }
+
+  /* ---------------------------------------------------------- commands */
+  /* A phrase is a phrase whether it was typed or heard, so speech will
+     arrive through this same function rather than a parallel one. Six of the
+     eight commands do not touch the assistant, which is the point: an
+     operator should not have to learn which of their tools stop working when
+     the model does. */
+  function say(text, bad) {
+    var out = el("cmdOut");
+    out.textContent = text || "";
+    out.className = "cmd-out" + (bad ? " bad" : "");
+  }
+
+  function ordered() {
+    // The board arrives sorted by NEWS2 descending, worst first.
+    return state.board.map(function (r) { return r.patient.id; });
+  }
+
+  function describe(id) {
+    var row = state.byId[id];
+    if (!row) return id;
+    return row.patient.name + " · NEWS2 " + row.triage.total + " " + row.triage.urgency;
+  }
+
+  function runCommand(raw, spoken) {
+    var text = String(raw || "").trim();
+    if (!text) return;
+    var word = text.split(/\s+/)[0].toLowerCase();
+    var rest = text.slice(word.length).trim();
+    var ids = ordered();
+
+    if (word === "help") { openGuide(); say("Opened the guide."); return; }
+
+    if (word === "worst") {
+      if (!ids.length) return say("No crew on the board yet.", true);
+      selectCrew(ids[0]);
+      return say("Worst: " + describe(ids[0]));
+    }
+
+    if (word === "next") {
+      if (!ids.length) return say("No crew on the board yet.", true);
+      var at = ids.indexOf(state.selected);
+      var nxt = ids[(at + 1) % ids.length];
+      selectCrew(nxt);
+      return say(describe(nxt));
+    }
+
+    if (word === "why") {
+      if (!state.selected) return say("Select a crew member first, or say 'worst'.", true);
+      var t = state.byId[state.selected].triage;
+      var parts = (t.params || []).filter(function (q) { return q.score > 0; })
+        .map(function (q) { return q.name + " +" + q.score + " (" + q.reason + ")"; });
+      return say(parts.length
+        ? "NEWS2 " + t.total + " = " + parts.join(", ")
+        : "NEWS2 0. Every measured parameter is in its normal range.");
+    }
+
+    if (word === "isolated") {
+      var q = state.quarantine;
+      if (!q) return say("No quarantine data yet.", true);
+      var zones = Object.keys(q.zones).map(function (z) {
+        return z + " " + q.zones[z].occupied + "/" + q.zones[z].capacity +
+               (q.zones[z].sealed ? " sealed" : "");
+      });
+      return say(q.assignments.length + " isolated · " + zones.join(" · ") +
+                 (q.awaiting_bed ? " · " + q.awaiting_bed + " awaiting a bed" : ""));
+    }
+
+    if (word === "said") {
+      if (!state.selected) return say("Select a crew member first, or say 'worst'.", true);
+      if (!rest) return say("Say what they told you: said I have a headache", true);
+      fetch("/api/patient/" + encodeURIComponent(state.selected) + "/symptom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(spoken
+          ? { text: rest, source: "voice", confidence: spoken }
+          : { text: rest, source: "typed" })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { renderReported(d.reported || []); say("Recorded: \u201c" + rest + "\u201d"); })
+        .catch(function () { say("Could not record that.", true); });
+      return;
+    }
+
+    if (word === "assess" || word === "ask") {
+      if (!state.selected) return say("Select a crew member first, or say 'worst'.", true);
+      if (!state.aiUp) {
+        return say("The assistant is not running. Everything else still works — try 'why'.", true);
+      }
+      askAI();
+      return say("Asking the assistant about " + state.byId[state.selected].patient.name + "…");
+    }
+
+    say("I do not know \u201c" + word + "\u201d. Press Help for the list.", true);
+  }
+
   function bandColor(u) {
     return { routine:"#4a6b78", low:"#7fc6d6", medium:"#f0c459", high:"#ff5c6e" }[u] || "#4a6b78";
   }
@@ -843,6 +1014,15 @@
   /* --------------------------------------------------------------- wiring */
   el("aiBtn").addEventListener("click", askAI);
   el("sayForm").addEventListener("submit", sayIt);
+  el("helpBtn").addEventListener("click", openGuide);
+  el("cmdForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var input = el("cmdInput"), text = input.value;
+    input.value = "";
+    runCommand(text, 0);
+  });
+  el("guideClose").addEventListener("click", closeGuide);
+  el("introBtn").addEventListener("click", introduce);
   el("closeBtn").addEventListener("click", closePanel);
   el("aiOut").addEventListener("click", function (e) {
     if (e.target.closest(".hyp") && state.selected) flyTo(state.selected);
@@ -855,7 +1035,13 @@
     fetch("/api/scenario/stop", { method: "POST" });
     el("aiOut").innerHTML = "";
   });
-  window.addEventListener("keydown", function (e) { if (e.key === "Escape") closePanel(); });
+  window.addEventListener("keydown", function (e) {
+    var typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target.tagName || ""));
+    if (e.key === "/" && !typing) { e.preventDefault(); el("cmdInput").focus(); return; }
+    if (e.key !== "Escape") return;
+    if (typing) { e.target.blur(); return; }
+    if (!el("guide").hidden) closeGuide(); else closePanel();
+  });
   window.addEventListener("resize", resize);
 
   fetch("/api/status").then(function (r) { return r.json(); }).then(function (s) {
