@@ -72,6 +72,38 @@ def write_placeholder(path: Path, text: str) -> None:
         w.writeframes(struct.pack(f"<{frames}h", *([0] * frames)))
 
 
+# How a line is SAID, where that differs from how it is written. Applied to the
+# synthesis only; the text the station shows and logs does not change. Found by
+# transcribing every rendered clip back with the station's own speech model:
+# "Zone A is now sealed" came back as "Zora is now sealed", because the voice
+# reads a lone A as the article, and "NEWS2 seven or above" came back as "News
+# 27 or above", which on stage is a different and wrong number.
+SPOKEN = {
+    "Zone A": "Zone eigh",
+    "NEWS2": "News two score",
+    "MedBox": "Medbox",
+}
+
+
+def spoken(text: str) -> str:
+    for written, said in SPOKEN.items():
+        text = text.replace(written, said)
+    return text
+
+
+def is_silent(path: Path) -> bool:
+    """True for a placeholder: no sample louder than the faintest hiss.
+
+    --check used to compare file names only, so 56 files of pure silence passed
+    it, were committed, and the handover described them as rendered speech.
+    """
+    import array
+
+    with wave.open(str(path), "rb") as w:
+        samples = array.array("h", w.readframes(w.getnframes()))
+    return max((abs(s) for s in samples), default=0) < 64
+
+
 def render_with_piper(voice_path: Path, clips: dict[str, str]) -> int:
     from piper import PiperVoice  # imported here: never a runtime dependency
 
@@ -80,7 +112,7 @@ def render_with_piper(voice_path: Path, clips: dict[str, str]) -> int:
     for stem, text in sorted(clips.items()):
         target = OUT / f"{stem}.wav"
         with wave.open(str(target), "wb") as w:
-            voice.synthesize_wav(text, w)
+            voice.synthesize_wav(spoken(text), w)
         written += 1
         print(f"  {stem}.wav  {text}")
     return written
@@ -103,8 +135,11 @@ def main() -> int:
             print(f"  MISSING  {stem}.wav  \"{clips[stem]}\"")
         for stem in extra:
             print(f"  EXTRA    {stem}.wav  (nothing can ever play this)")
-        if not missing and not extra:
-            print(f"All {len(clips)} clips present.")
+        silent = sorted(s for s in set(clips) & have if is_silent(OUT / f"{s}.wav"))
+        for stem in silent:
+            print(f"  SILENT   {stem}.wav  a placeholder, not speech")
+        if not missing and not extra and not silent:
+            print(f"All {len(clips)} clips present, and none of them silent.")
             return 0
         return 1
 
