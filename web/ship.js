@@ -810,7 +810,8 @@
       return;
     }
     box.innerHTML = list.map(function (r) {
-      var who = r.source === "voice" ? "heard" : "typed";
+      var who = r.source === "voice" ? "heard" :
+                r.source === "answer" ? "answered" : "typed";
       // A transcript is a guess about what was said. Show the confidence so an
       // operator can see when the box may simply have misheard.
       if (r.source === "voice" && r.confidence != null) {
@@ -1081,6 +1082,11 @@
 
   /* --------------------------------------------------------------- wiring */
   el("aiBtn").addEventListener("click", askAI);
+  // Replies to the assistant's questions. Not guarded: the assessment
+  // panel cannot exist without assessment.js, see CLAUDE.md.
+  MedBox.assessment.wireAnswers(el("aiOut"), function (pid, list) {
+    if (state.selected === pid) renderReported(list);
+  });
   el("sayForm").addEventListener("submit", sayIt);
   (function wireVoice() {
     var btn = el("voiceBtn");

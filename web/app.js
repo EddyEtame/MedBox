@@ -304,7 +304,8 @@
       return;
     }
     box.innerHTML = list.map(function (r) {
-      var who = r.source === "voice" ? "heard" : "typed";
+      var who = r.source === "voice" ? "heard" :
+                r.source === "answer" ? "answered" : "typed";
       if (r.source === "voice" && r.confidence != null) {
         who = 'heard · <span class="heard">' + Math.round(r.confidence * 100) + '% sure</span>';
       }
@@ -354,6 +355,11 @@
   });
   if (MedBox.mic) MedBox.mic.attach(function () { return state.selected; }, renderReported);
   el("aiBtn").addEventListener("click", askAI);
+  // Replies to the assistant's questions. Not guarded: the assessment
+  // panel cannot exist without assessment.js, see CLAUDE.md.
+  MedBox.assessment.wireAnswers(el("aiOut"), function (pid, list) {
+    if (state.selected === pid) renderReported(list);
+  });
   el("sayForm").addEventListener("submit", sayIt);
 
   el("runBtn").addEventListener("click", function () {

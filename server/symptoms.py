@@ -38,7 +38,17 @@ PER_PATIENT = 8
 # holding the console. See SymptomLog.prompt_note.
 PER_PATIENT_IN_PROMPT = 3
 
-SOURCES = ("typed", "voice")
+# "answer" is a reply to one of the assistant's questions. It is the same kind
+# of thing as a reported symptom, a person talking that no instrument measured,
+# so it lives in the same log, reaches the model inside the same markers, and
+# never reaches triage. Appending it after the markers instead would have read
+# to the model as the station speaking.
+SOURCES = ("typed", "voice", "answer")
+
+# Long enough for a real question and a real reply; short enough that the
+# prompt stays a prompt.
+QUESTION_CHARS = 120
+REPLY_CHARS = 200
 
 
 @dataclass(frozen=True)
@@ -111,6 +121,21 @@ class SymptomLog:
                 detail = f"[{source} {confidence:.0%}] {text}"
             self.on_record("symptom", detail, patient_id)
         return entry
+
+    def answer(self, patient_id: str, question: str, reply: str) -> Reported:
+        """Record the crew member's reply to a question the assistant asked.
+
+        Stored as one quoted line, question and reply together, because a
+        reply means nothing without what it answers: "yes" to "any chest
+        pain?" is not "yes" to "did you sleep?". It goes through add(), so the
+        same sanitising that stops a symptom closing the prompt's markers
+        applies to both halves.
+        """
+        question = " ".join(str(question).split())[:QUESTION_CHARS]
+        reply = " ".join(str(reply).split())[:REPLY_CHARS]
+        if not question or not reply:
+            raise ValueError("an answer needs the question and the reply")
+        return self.add(patient_id, f'Asked "{question}", answered "{reply}"', source="answer")
 
     def for_patient(self, patient_id: str) -> list[dict]:
         """Newest first, because that is the order an operator reads them."""

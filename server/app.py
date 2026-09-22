@@ -335,6 +335,26 @@ async def report_symptom(patient_id: str, body: dict) -> dict:
     return {"reported": STATION.symptoms.for_patient(patient_id)}
 
 
+@app.post("/api/patient/{patient_id}/answer")
+async def record_answer(patient_id: str, body: dict) -> dict:
+    """The crew member's reply to one of the assistant's questions.
+
+    It enters exactly as a reported symptom does, as a quotation: the next
+    assessment sees it inside the untrusted span, the screen shows it as their
+    words, and NEWS2 never reads it.
+    """
+    if patient_id not in STATION.latest:
+        raise HTTPException(404, f"No crew member {patient_id}")
+    try:
+        entry = STATION.symptoms.answer(
+            patient_id, body.get("question", ""), body.get("answer", "")
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    BUS.publish({"type": "symptom", "reported": entry.to_dict()})
+    return {"reported": STATION.symptoms.for_patient(patient_id)}
+
+
 # A few seconds of speech is well under a megabyte. The cap is not about disk,
 # it is that an endpoint which accepts an unbounded upload from a browser is a
 # way to wedge the machine the demo runs on.

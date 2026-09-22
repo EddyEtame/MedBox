@@ -123,9 +123,21 @@
     }
 
     if (b.questions_for_patient && b.questions_for_patient.length) {
-      html += "<h3>Ask the patient</h3><ul>" +
-        b.questions_for_patient.map(function (q) { return "<li>" + esc(q) + "</li>"; }).join("") +
-        "</ul>";
+      // Each question can be answered where it is asked. The reply is sent for
+      // the crew member this assessment is ABOUT, carried on the element,
+      // never for whoever happens to be selected when the button is pressed.
+      html += '<h3>Ask the patient</h3><ul class="asks">' +
+        b.questions_for_patient.map(function (q) {
+          return '<li class="ask" data-pid="' + esc(b.patient_id) + '" data-q="' + esc(q) + '">' +
+            '<span class="q">' + esc(q) + "</span>" +
+            '<span class="ans-row">' +
+            '<button type="button" class="ans" data-a="yes">Yes</button>' +
+            '<button type="button" class="ans" data-a="no">No</button>' +
+            '<button type="button" class="ans" data-a="unsure">Unsure</button>' +
+            '<input class="ans-text" maxlength="200" placeholder="Or their words, then Enter"' +
+            ' aria-label="Their answer, in their own words">' +
+            "</span></li>";
+        }).join("") + "</ul>";
     }
 
     if (b.information_to_gather && b.information_to_gather.length) {
@@ -164,11 +176,61 @@
       esc(note || "Vitals and triage are unaffected.") + "</div>";
   }
 
+  /* Answering the assistant's questions, for both views.
+   *
+   * Delegated on the container the assessment is drawn into, once, so it
+   * survives every re-render. A reply is a person talking: the server files it
+   * with what they reported, the next assessment reads it inside the untrusted
+   * span, and NEWS2 never sees it. The assessment on screen was written before
+   * the answer, so the row says to ask again rather than implying it already
+   * took the answer into account.
+   *
+   * `onRecorded(patientId, reported)` lets the view redraw "In their own
+   * words" at once. */
+  function wireAnswers(container, onRecorded) {
+    function send(li, reply) {
+      reply = String(reply || "").trim();
+      if (!li || !reply || li.classList.contains("answered") || li.classList.contains("sending")) return;
+      var pid = li.getAttribute("data-pid");
+      li.classList.add("sending");
+      fetch("/api/patient/" + encodeURIComponent(pid) + "/answer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: li.getAttribute("data-q"), answer: reply })
+      })
+        .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+        .then(function (d) {
+          li.classList.remove("sending");
+          li.classList.add("answered");
+          li.querySelector(".ans-row").innerHTML = '<span class="done">Answered “' +
+            esc(reply) + "”. Ask the assistant again to use it.</span>";
+          if (onRecorded) onRecorded(pid, d.reported || []);
+        })
+        .catch(function () {
+          li.classList.remove("sending");
+          var row = li.querySelector(".ans-row");
+          if (row && !row.querySelector(".err")) {
+            row.insertAdjacentHTML("beforeend", '<span class="err">Not recorded. Try again.</span>');
+          }
+        });
+    }
+    container.addEventListener("click", function (e) {
+      var b = e.target.closest ? e.target.closest(".ans") : null;
+      if (b) send(b.closest(".ask"), b.getAttribute("data-a"));
+    });
+    container.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter" || !e.target.classList || !e.target.classList.contains("ans-text")) return;
+      e.preventDefault();
+      send(e.target.closest(".ask"), e.target.value);
+    });
+  }
+
   root.MedBox = root.MedBox || {};
   root.MedBox.assessment = {
     render: render,
     staleness: staleness,
     failure: failure,
+    wireAnswers: wireAnswers,
     MAX_AGE_MS: MAX_AGE_MS
   };
 })(window);
