@@ -15,7 +15,7 @@ what. This file is the handover.
 
 | | |
 |---|---|
-| **Tue 23, Wed 24 Sep** | the only building days left |
+| **Tue 22, Wed 23 Sep** | the only building days left |
 | **Thu 24 Sep** | deliverables in. No new features on Thursday. |
 | **Fri 25 Sep** | local defence, jury |
 | **Wed 30 Sep** | national final |

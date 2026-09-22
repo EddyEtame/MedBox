@@ -156,8 +156,9 @@ def build() -> str:
       "because the guide on the screen marks them and so does this one. But "
       "when somebody asks you on Friday what happens if the AI fails, the "
       "answer is: the vitals keep updating, the ordering holds, quarantine "
-      "still assigns berths, the session still records, and the box stops "
-      "talking. That is all.")
+      "still assigns berths, the session still records, and the assistant "
+      "stops narrating. The station's own spoken alerts carry on, starting "
+      "with one that says the assistant has stopped. That is all.")
     w("")
 
     # -- 2 ---------------------------------------------------------------
@@ -187,8 +188,10 @@ def build() -> str:
     w(f"| `{url}/board` | The flat board. Same data, no 3D. | A machine with "
       "no working WebGL, or a projector that hates you. |")
     w("")
-    w("Both read the same feed and update together. Nothing is lost by using "
-      "the flat one.")
+    w("Both read the same feed and update together: the readings, the "
+      "ordering, quarantine and the assistant are the same on both. The flat "
+      "one has no Help panel, no command box and no spoken alerts, so on a "
+      "machine that can run the ship, present from the ship.")
     w("")
 
     # -- 3 ---------------------------------------------------------------
@@ -308,8 +311,9 @@ def build() -> str:
     w("Kill Ollama mid-consultation. Nothing on the fast track notices.")
     w("")
     w("What changes: the **AI narration** indicator goes dark, **Ask the "
-      "assistant** reports that it is unavailable, and the station stops "
-      "speaking. Every other feature in this guide keeps working, including "
+      "assistant** reports that it is unavailable, and the station says out "
+      "loud that the assistant has stopped. Every other feature in this guide "
+      "keeps working, including "
       "the guide on the screen \u2014 it is rendered from data the station owns, "
       "not from the model, so the thing explaining the system does not vanish "
       "at the moment the system is proving it does not need it.")
@@ -379,10 +383,11 @@ def build() -> str:
         w("")
 
     # -- 11 --------------------------------------------------------------
-    w("## 11. What you can type or say")
+    w("## 11. What you can type")
     w("")
-    w("The ship view has a command box. A phrase is the same phrase whether "
-      "you typed it or said it.")
+    w("The ship view has a command box: press `/` and type. The microphone is "
+      "for what a crew member tells you, and files it as their own words, so a "
+      "phrase spoken into it is recorded, not run.")
     w("")
     w("| Phrase | Does | Needs the assistant |")
     w("|---|---|---|")

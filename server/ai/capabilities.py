@@ -220,7 +220,7 @@ def self_explanation_prompt() -> str:
         "that is not listed here:\n\n"
         f"WHAT IT DOES:\n{can}\n\n"
         f"WHAT IT WILL NOT DO:\n{wont}\n\n"
-        f"SHORTCUTS THEY CAN TYPE OR SAY: {keys}\n\n"
+        f"SHORTCUTS THEY CAN TYPE: {keys}\n\n"
         "Introduce yourself and the station in four sentences at most. Be plain "
         "and calm. Say early that most of this works whether or not you are "
         "running, and that the urgency ranking is never yours. Do not use bullet "

@@ -103,7 +103,7 @@ Two tracks run side by side:
 | **Does** | sensors → NEWS2 score → screen | hypotheses, questions, protocol |
 | **Speed** | milliseconds, every tick | hundreds of milliseconds, on demand |
 | **Model** | none, anywhere | Ollama, schema-constrained |
-| **If it fails** | it doesn't — it has no dependencies | the station stops talking, nothing else |
+| **If it fails** | it doesn't — it has no dependencies | the narration stops, nothing else |
 
 Kill Ollama mid-consultation and the vitals keep updating, the triage ordering
 holds, quarantine still works and the session keeps recording. Only the

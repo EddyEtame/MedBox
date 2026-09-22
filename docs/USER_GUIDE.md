@@ -14,7 +14,7 @@ The **fast track** reads the sensors, scores each crew member with NEWS2 and red
 
 The **slow track** is the assistant. It suggests, it narrates, it listens. It is allowed to be slow and it is allowed to die.
 
-You do not need to remember which of your tools belong to which track, because the guide on the screen marks them and so does this one. But when somebody asks you on Friday what happens if the AI fails, the answer is: the vitals keep updating, the ordering holds, quarantine still assigns berths, the session still records, and the box stops talking. That is all.
+You do not need to remember which of your tools belong to which track, because the guide on the screen marks them and so does this one. But when somebody asks you on Friday what happens if the AI fails, the answer is: the vitals keep updating, the ordering holds, quarantine still assigns berths, the session still records, and the assistant stops narrating. The station's own spoken alerts carry on, starting with one that says the assistant has stopped. That is all.
 
 ## 2. Starting the station
 
@@ -36,7 +36,7 @@ You get two views of the same station, live at the same time:
 | `http://127.0.0.1:8080/` | The ship. A 3D deck plan, crew at their stations, bulkheads that close. | The demo. |
 | `http://127.0.0.1:8080/board` | The flat board. Same data, no 3D. | A machine with no working WebGL, or a projector that hates you. |
 
-Both read the same feed and update together. Nothing is lost by using the flat one.
+Both read the same feed and update together: the readings, the ordering, quarantine and the assistant are the same on both. The flat one has no Help panel, no command box and no spoken alerts, so on a machine that can run the ship, present from the ship.
 
 ## 3. Reading the board
 
@@ -98,7 +98,7 @@ The model is `qwen2.5:1.5b-instruct`, running on this machine through Ollama. It
 
 Kill Ollama mid-consultation. Nothing on the fast track notices.
 
-What changes: the **AI narration** indicator goes dark, **Ask the assistant** reports that it is unavailable, and the station stops speaking. Every other feature in this guide keeps working, including the guide on the screen — it is rendered from data the station owns, not from the model, so the thing explaining the system does not vanish at the moment the system is proving it does not need it.
+What changes: the **AI narration** indicator goes dark, **Ask the assistant** reports that it is unavailable, and the station says out loud that the assistant has stopped. Every other feature in this guide keeps working, including the guide on the screen — it is rendered from data the station owns, not from the model, so the thing explaining the system does not vanish at the moment the system is proving it does not need it.
 
 This is why the two lists in section 9 are split the way they are.
 
@@ -162,9 +162,9 @@ Not policy, not a prompt asking it nicely. Each of these is enforced somewhere i
 
 **Reach the network.** The model runs locally. The vessel has no contact with Earth.
 
-## 11. What you can type or say
+## 11. What you can type
 
-The ship view has a command box. A phrase is the same phrase whether you typed it or said it.
+The ship view has a command box: press `/` and type. The microphone is for what a crew member tells you, and files it as their own words, so a phrase spoken into it is recorded, not run.
 
 | Phrase | Does | Needs the assistant |
 |---|---|---|
