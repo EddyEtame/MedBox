@@ -21,7 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from server.ai.schemas import ASSESSMENT_SCHEMA, SYSTEM_PROMPT  # noqa: E402
+from server.ai.schemas import ASSESSMENT_SCHEMA, MAX_TO_GATHER, SYSTEM_PROMPT  # noqa: E402
 from server.ai.validate import enforce  # noqa: E402
 from server.symptoms import SymptomLog  # noqa: E402
 
@@ -104,7 +104,7 @@ def test_no_field_is_named_like_an_order_set():
     """
     assert "suggested_protocol" not in ASSESSMENT_SCHEMA["properties"]
     gather = ASSESSMENT_SCHEMA["properties"]["information_to_gather"]
-    assert gather["maxItems"] == 3
+    assert gather["maxItems"] == MAX_TO_GATHER <= 3
     assert "Never a treatment" in gather["items"]["description"]
 
 
@@ -321,3 +321,10 @@ def test_a_hypothesis_resting_only_on_what_was_said_is_marked_as_such():
 def test_a_hypothesis_with_one_real_measurement_is_not_marked():
     out = enforce(_ok())
     assert out["hypotheses"][0]["no_measured_support"] is False
+
+
+def test_a_summary_cut_by_the_grammar_says_it_was_cut():
+    """maxLength ends the string wherever the model is: "...117.5 bpm, as"."""
+    out = enforce(_ok(summary="Temperature 39.1 C and SpO2 91.6 % were recorded, with pulse at 117.5 bpm, as"))
+    assert out["summary"].endswith("bpm…"), out["summary"]
+    assert enforce(_ok())["summary"].endswith("recorded."), "a whole sentence was touched"

@@ -27,6 +27,20 @@ log = logging.getLogger("medbox.ai")
 _TLS = httpx.create_ssl_context()
 
 
+def _options() -> dict:
+    """The same generation options on every call.
+
+    Ollama reloads the model when a request asks for a different thread count
+    from the one it was loaded with, so assess() and introduce() taking
+    different options would pay a reload, seconds of it, each time the operator
+    switched between them.
+    """
+    opts: dict = {"temperature": CONFIG.ai.temperature}
+    if CONFIG.ai.num_thread > 0:
+        opts["num_thread"] = CONFIG.ai.num_thread
+    return opts
+
+
 class OllamaClient:
     def __init__(self) -> None:
         self.host = CONFIG.ai.host.rstrip("/")
@@ -117,7 +131,7 @@ class OllamaClient:
             # five to fifteen seconds loading the weights off disk, which on
             # stage looks exactly like a crash.
             "keep_alive": CONFIG.ai.keep_alive,
-            "options": {"temperature": CONFIG.ai.temperature},
+            "options": _options(),
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
@@ -164,7 +178,7 @@ class OllamaClient:
             "model": self.model,
             "stream": False,
             "keep_alive": CONFIG.ai.keep_alive,
-            "options": {"temperature": CONFIG.ai.temperature},
+            "options": _options(),
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},

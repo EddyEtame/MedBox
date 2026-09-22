@@ -52,15 +52,27 @@ FIT_LEVELS = [
     "all measured parameters fit",
 ]
 
+# How much the assistant may say, in one place: the schema, validate.enforce()
+# and the tests all read these. Measured on the demo laptop: at 3 hypotheses of
+# 3 signs, 4 questions and 3 things to gather, a HIGH assessment ran to ~330
+# tokens and 22-23 s, over the timeout, so the real model never answered once.
+# At these caps, with the summary held to one short sentence and the thread
+# count in config.toml, three HIGH assessments through the station took 10.4,
+# 11.8 and 12.9 s, on battery.
+MAX_HYPOTHESES = 2
+MAX_SIGNS = 2
+MAX_QUESTIONS = 2
+MAX_TO_GATHER = 2
+
 ASSESSMENT_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
         "summary": {
             "type": "string",
-            "maxLength": 200,
+            "maxLength": 140,
             "description": (
-                "ONE sentence describing what the instruments recorded. Do not "
+                "ONE short sentence, under 20 words, on what the instruments recorded. Do not "
                 "restate the urgency band and do not use the words routine, low, "
                 "medium, high, mild, reassuring or stable."
             ),
@@ -78,7 +90,7 @@ ASSESSMENT_SCHEMA = {
             # Zero, deliberately. A crew member whose every measured parameter is
             # normal must be allowed to have nothing wrong with them.
             "minItems": 0,
-            "maxItems": 3,
+            "maxItems": MAX_HYPOTHESES,
             "description": "Possible explanations, most supported first. May be empty.",
             "items": {
                 "type": "object",
@@ -103,7 +115,7 @@ ASSESSMENT_SCHEMA = {
                     "supporting_signs": {
                         "type": "array",
                         "minItems": 1,
-                        "maxItems": 3,
+                        "maxItems": MAX_SIGNS,
                         "items": {
                             "type": "object",
                             "additionalProperties": False,
@@ -119,7 +131,7 @@ ASSESSMENT_SCHEMA = {
                                 },
                                 "text": {
                                     "type": "string",
-                                    "maxLength": 90,
+                                    "maxLength": 60,
                                     "description": (
                                         "The sign, quoting the recorded number when "
                                         "an instrument is the source. A few words."
@@ -135,16 +147,16 @@ ASSESSMENT_SCHEMA = {
         },
         "questions_for_patient": {
             "type": "array",
-            "maxItems": 4,
+            "maxItems": MAX_QUESTIONS,
             "description": (
                 "What to ask them next. This box measures four things and a person "
                 "can tell you a hundred, so this is the most useful thing you do."
             ),
-            "items": {"type": "string", "maxLength": 120},
+            "items": {"type": "string", "maxLength": 90},
         },
         "information_to_gather": {
             "type": "array",
-            "maxItems": 3,
+            "maxItems": MAX_TO_GATHER,
             "description": "What to find out next. Not what to do to them.",
             "items": {
                 "type": "string",
@@ -152,7 +164,7 @@ ASSESSMENT_SCHEMA = {
                 # decoder has in front of it while it writes each entry, and it
                 # is the strongest lever this project has over the one field
                 # that can hurt somebody.
-                "maxLength": 120,
+                "maxLength": 90,
                 "description": (
                     "An OBSERVATION or a MEASUREMENT to take, e.g. 'repeat the "
                     "full set of observations in 15 minutes'. Never a treatment, "

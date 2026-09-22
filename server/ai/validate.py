@@ -21,7 +21,15 @@ from __future__ import annotations
 
 import re
 
-from .schemas import ASSESSMENT_SCHEMA, FIT_LEVELS, SIGN_SOURCES
+from .schemas import (
+    ASSESSMENT_SCHEMA,
+    FIT_LEVELS,
+    MAX_HYPOTHESES,
+    MAX_QUESTIONS,
+    MAX_SIGNS,
+    MAX_TO_GATHER,
+    SIGN_SOURCES,
+)
 
 # A dose is a number next to a unit. This catches "1g", "500 mL", "2 L/min",
 # "0.5mg" and the spaced variants, which is what a small model actually writes.
@@ -116,6 +124,14 @@ def enforce(result: dict, urgency: str = "") -> dict:
     out: dict = {}
 
     summary = str(result.get("summary") or "").strip()
+    # The grammar ends the string at maxLength wherever the model is, so a
+    # long sentence arrived cut mid-word: "... elevated at 117.5 bpm, as". Say
+    # it was cut rather than show a sentence that stops, and drop the last word,
+    # which may be half of one.
+    if summary and not summary.endswith((".", "!", "?", "…")):
+        if " " in summary:
+            summary = summary.rsplit(" ", 1)[0]
+        summary = summary.rstrip(" ,;:-") + "…"
     if summary and _contradicts_the_band(summary, urgency):
         summary = ""
         blocked.append(SUPPRESSED_SUMMARY)
@@ -175,17 +191,17 @@ def enforce(result: dict, urgency: str = "") -> dict:
         hypotheses.append({
             "name": name,
             "fit": fit if measured else FIT_LEVELS[0],
-            "supporting_signs": signs[:3],
+            "supporting_signs": signs[:MAX_SIGNS],
             "no_measured_support": not measured,
         })
-    out["hypotheses"] = hypotheses[:3]
+    out["hypotheses"] = hypotheses[:MAX_HYPOTHESES]
 
     questions = [
         str(q).strip()
         for q in (result.get("questions_for_patient") or [])
         if isinstance(q, (str, int, float)) and str(q).strip()
     ]
-    out["questions_for_patient"] = questions[:4]
+    out["questions_for_patient"] = questions[:MAX_QUESTIONS]
 
     gather = [
         str(g).strip()
@@ -199,7 +215,7 @@ def enforce(result: dict, urgency: str = "") -> dict:
         # order set reads more authoritative than a full one.
         gather = []
         blocked.append(SUPPRESSED_PROTOCOL)
-    out["information_to_gather"] = gather[:3]
+    out["information_to_gather"] = gather[:MAX_TO_GATHER]
 
     out["blocked"] = blocked
     out["ok"] = bool(

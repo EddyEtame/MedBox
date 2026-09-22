@@ -60,6 +60,9 @@ class AIConfig:
     temperature: float = 0.0
     # How long Ollama holds the weights in memory after a question.
     keep_alive: str = "30m"
+    # CPU threads for generation. 0 lets Ollama choose, which on a laptop with
+    # performance and efficiency cores is not the fastest choice.
+    num_thread: int = 0
 
 
 @dataclass(frozen=True)
