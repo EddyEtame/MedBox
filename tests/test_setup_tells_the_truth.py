@@ -66,7 +66,7 @@ def test_the_fallback_model_comes_from_config_not_from_this_file():
     )
     for tag in fallbacks:
         assert tag.startswith("qwen"), (
-            f"fallback {tag} is outside the family the probe matches on"
+            f"fallback {tag} is not a Qwen2.5 tag, the family whose licences were checked"
         )
 
 
@@ -184,3 +184,32 @@ def test_the_flag_that_answers_the_prompt_is_documented():
     for path in ("README.md", "setup.ps1"):
         text = (ROOT / path).read_text(encoding="utf-8")
         assert "-y" in text, f"{path} never mentions -y"
+
+
+def test_a_quoted_path_is_shown_as_a_command_powershell_accepts(monkeypatch):
+    """A quoted path followed by arguments is a parse error in PowerShell: it
+    is an expression, not a command. The fallback command setup printed on the
+    owner's machine was exactly that, because the path holds a space."""
+    s = _setup()
+    monkeypatch.setattr(s, "IS_WINDOWS", True)
+    shown = s.typed(r"C:\Users\Mommy Jayce\AppData\Local\Programs\Ollama\ollama.exe", "pull", "x")
+    assert shown.startswith('& "'), shown
+    monkeypatch.setattr(s, "IS_WINDOWS", False)
+    assert s.typed("/usr/local/bin/ollama", "serve") == '"/usr/local/bin/ollama" serve'
+
+
+def test_an_ollama_that_does_not_answer_is_not_ready(monkeypatch):
+    """Right after the Windows installer, the tray app is still starting and
+    `ollama list` fails. That used to end in "Ready", exit 0, no model."""
+    import subprocess
+
+    s = _setup()
+    monkeypatch.setattr(s, "ollama_binary", lambda: "ollama")
+    monkeypatch.setattr(s, "read_required_ollama", lambda: "")
+    monkeypatch.setattr(
+        s, "run",
+        lambda cmd, **kw: subprocess.CompletedProcess(
+            cmd, 0 if "--version" in cmd else 1, "ollama version is 0.13.1", ""),
+    )
+    assert s.setup_ollama(check_only=False, assume_yes=False) is False
+    assert s.unfinished, "setup would have said Ready with no model pulled"

@@ -16,6 +16,29 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
+def port_is_free(host: str, port: int) -> bool:
+    """Whether a listening socket could take this address right now.
+
+    uvicorn sets SO_REUSEADDR, and on Windows a bind with that option onto a
+    port in use fails with WSAEACCES, "forbidden by its access permissions",
+    rather than "address already in use". Measured here: 10013 with the option,
+    10048 without. That is why the error never mentioned the port. So on
+    Windows the probe is a plain bind, the strictest test there is. Elsewhere
+    it sets the option as uvicorn does, so a station restarted a second after
+    stopping, its old port still in TIME_WAIT, is not refused.
+    """
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        if not sys.platform.startswith("win"):
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind((host, port))
+        except OSError:
+            return False
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="medbox", description="MedBox station")
     parser.add_argument("--host", default=None)
@@ -46,6 +69,24 @@ def main() -> int:
 
     host = args.host or CONFIG.server.host
     port = args.port or CONFIG.server.port
+    if not port_is_free(host, port):
+        # Without this, uvicorn says "[WinError 10013] an attempt was made to
+        # access a socket in a way forbidden by its access permissions", which
+        # never mentions that something else has the port, and the address it
+        # printed a line earlier opens whatever that something is. On the
+        # machine this was written for, 8080 belongs to an auto-start Apache
+        # that comes with EDB Postgres, and its page reads "Server is up and
+        # running." Nobody would guess that is not MedBox.
+        from server.config import python_command
+
+        # Offer a port that is free now, not merely a different number.
+        spare = next((p for p in range(port + 10, port + 200, 10) if port_is_free(host, p)), None)
+        print(f"\n  Port {port} is already taken by another program on this machine,", file=sys.stderr)
+        print("  so MedBox cannot listen there. Nothing is wrong with MedBox itself.\n", file=sys.stderr)
+        if spare:
+            print(f"  Start it on a free port:  {python_command('medbox.py')} --port {spare}", file=sys.stderr)
+        print("  To change it for good, set `port` under [server] in config.toml.\n", file=sys.stderr)
+        return 1
     print(f"\n  MedBox  ->  http://{host}:{port}\n")
     uvicorn.run(
         "server.app:app",

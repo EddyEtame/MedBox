@@ -84,6 +84,18 @@ def venv_python() -> Path:
     return VENV / ("Scripts/python.exe" if IS_WINDOWS else "bin/python")
 
 
+def typed(binary: str, *args: str) -> str:
+    """A command to show somebody, as their shell will accept it.
+
+    The path is quoted because it can hold a space ("C:\\Users\\Mommy Jayce"),
+    and in PowerShell a quoted string followed by arguments is an expression,
+    not a command: pasting `"C:\\...\\ollama.exe" pull x` gives "Unexpected
+    token 'pull'". The call operator is what makes it a command.
+    """
+    quoted = f'"{binary}" ' + " ".join(args)
+    return f"& {quoted}" if IS_WINDOWS else quoted
+
+
 def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, **kw)
 
@@ -120,6 +132,26 @@ def read_model() -> str:
         if s.startswith("model") and "=" in s:
             return s.split("=", 1)[1].strip().strip('"').strip("'")
     return "qwen2.5:3b-instruct"
+
+
+def read_port() -> int:
+    """`port` under [server] in config.toml. Section-aware, because `host`
+    already appears under two sections and `port` could follow it."""
+    try:
+        text = (ROOT / "config.toml").read_text(encoding="utf-8")
+    except OSError:
+        return 8080
+    section = ""
+    for line in text.splitlines():
+        s = line.split("#", 1)[0].strip()
+        if s.startswith("["):
+            section = s.strip("[]").strip()
+        elif section == "server" and s.startswith("port") and "=" in s:
+            try:
+                return int(s.split("=", 1)[1].strip())
+            except ValueError:
+                return 8080
+    return 8080
 
 
 def read_fallback_models() -> list[str]:
@@ -196,7 +228,16 @@ def setup_venv(check_only: bool) -> bool:
     if speech.exists():
         r = run([py, "-m", "pip", "install", "-q", "-r", str(speech)])
         if r.returncode == 0:
-            ok("speech dependencies installed (hold-to-speak available)")
+            ok("speech dependencies installed")
+            # The dependencies are not the model. "hold-to-speak available"
+            # here sent a fresh clone to the demo with the microphone hidden,
+            # because nothing fetched the weights.
+            if not (ROOT / "models" / "faster-whisper-base" / "model.bin").exists():
+                runner = (".\\.venv\\Scripts\\python tools\\assets.py" if IS_WINDOWS
+                          else ".venv/bin/python tools/assets.py")
+                warn("the speech model is not on this machine yet, so the microphone "
+                     "stays hidden. Fetch it (about 140 MB, or --from a USB stick):\n"
+                     f"        {runner}")
         else:
             why = r.stderr.strip().splitlines()[-1][:160] if r.stderr.strip() else ""
             warn("speech dependencies would not install, so the microphone "
@@ -279,7 +320,11 @@ def install_ollama(assume_yes: bool, required: str = "") -> str | None:
         if required:
             print(f"        (pinned to {required} so both machines match)")
         if not confirm("        Download the installer now and launch it? [y/N] ", assume_yes):
-            print(f"        Skipped. Install it yourself from {OLLAMA_DOWNLOAD_PAGE}, then re-run setup.")
+            # Not finished, rather than "Ready" with a warning. Nobody chose to
+            # go without the assistant; --no-ollama is how you choose that.
+            pending(f"Ollama was not installed. Run setup again and answer y (or pass -y), "
+                    f"install it from {OLLAMA_DOWNLOAD_PAGE}, or pass --no-ollama to "
+                    f"set up without the assistant on purpose.")
             return None
         target = ROOT / "OllamaSetup.exe"
         staging = target.with_suffix(".exe.part")
@@ -317,6 +362,12 @@ def install_ollama(assume_yes: bool, required: str = "") -> str | None:
             if total and seen < total:
                 raise OSError(f"download stopped early at {seen} of {total} bytes")
             staging.replace(target)
+        except KeyboardInterrupt:
+            # The likeliest way a 1.2 GB download ends early is somebody
+            # pressing Ctrl+C, and that is not an OSError: without this the
+            # partial file stayed behind, next to the repo's own files.
+            staging.unlink(missing_ok=True)
+            raise
         except (urllib.error.URLError, OSError) as exc:
             # A truncated installer is worse than none, because the next run
             # would launch it.
@@ -343,7 +394,8 @@ def install_ollama(assume_yes: bool, required: str = "") -> str | None:
     # drift we are trying to avoid between two developers.
     warn("Ollama is not installed.")
     if not confirm(f"        Run the official installer from {OLLAMA_LINUX_INSTALL}? [y/N] ", assume_yes):
-        print("        Skipped. Install it yourself, then re-run setup.")
+        pending("Ollama was not installed. Run setup again and answer y (or pass -y), "
+                "or pass --no-ollama to set up without the assistant on purpose.")
         return None
     env = dict(os.environ)
     if required:
@@ -418,11 +470,14 @@ def setup_ollama(check_only: bool, assume_yes: bool) -> bool:
 
     pulled = installed_tags()
     if pulled is None:
-        warn(
+        # Pending, not a warning: no model has been pulled, so "Ready" here
+        # was the station starting with no assistant. It happens right after
+        # the Windows installer, while the tray app is still starting.
+        start = ("start Ollama from the Start menu" if IS_WINDOWS
+                 else f"run {typed(binary, 'serve')}")
+        pending(
             "Ollama is installed but not answering, so it is probably not "
-            "running.\n"
-            "        Start the Ollama app (or run `ollama serve`), then run "
-            "setup again."
+            f"running yet. Wait a few seconds or {start}, then run setup again."
         )
         return False
     if model in pulled or f"{model}:latest" in pulled:
@@ -444,10 +499,12 @@ def setup_ollama(check_only: bool, assume_yes: bool) -> bool:
         # model choice was settled on in the first place.
         alt = read_fallback_models()
         suggestion = alt[0] if alt else model
-        warn(
-            f"Could not pull {model}. Try the fallback from config.toml:\n"
-            f'        "{binary}" pull {suggestion}\n'
-            f"        then set it as `model` in config.toml"
+        # The station now uses the first declared fallback it finds pulled
+        # (server/ai/ollama.py, probe()), so no config edit is needed.
+        pending(
+            f"Could not pull {model}. Run setup again when the network allows, "
+            f"or pull the fallback, which the station uses on its own:\n"
+            f"        {typed(binary, 'pull', suggestion)}"
         )
         return False
     ok(f"pulled {model}")
@@ -496,6 +553,55 @@ def run_tests(check_only: bool) -> bool:
     return True
 
 
+def port_is_free(port: int) -> bool:
+    """Same probe as medbox.py, which says why SO_REUSEADDR is left off on
+    Windows. Duplicated rather than imported: setup.py runs before anything is
+    installed and imports nothing from the project."""
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        if not IS_WINDOWS:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+    return True
+
+
+def check_port() -> int:
+    """Whether the station will be able to listen where setup says to open it,
+    and the port the closing lines should name.
+
+    Written after "Ready" sent somebody to http://127.0.0.1:8080 on a machine
+    where an auto-start Apache (bundled with EDB Postgres) owned 8080. The page
+    that opened said "Server is up and running.", and the station itself
+    refused to start with an error about access permissions. Setup is the one
+    place that can say so before anybody is standing in front of a jury.
+    """
+    step("6. Port")
+    port = read_port()
+    if port_is_free(port):
+        ok(f"port {port} is free for the station")
+        return port
+    # Taken. By MedBox itself is fine: setup is safe to re-run with the
+    # station up, and calling that a problem would be the opposite lie.
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status", timeout=2) as r:
+            if "ship" in json.loads(r.read().decode("utf-8") or "{}"):
+                ok(f"port {port}: MedBox is already running there")
+                return port
+    except Exception:
+        pass
+    spare = next((p for p in range(port + 10, port + 200, 10) if port_is_free(p)), None)
+    warn(
+        f"port {port} is taken by another program, so the station cannot start there.\n"
+        f"        The command below uses {spare or 'another port'} instead. To change it\n"
+        f"        for good, set `port` under [server] in config.toml."
+    )
+    return spare or port
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Set up MedBox on this machine.")
     ap.add_argument("--check", action="store_true", help="report only, change nothing")
@@ -519,6 +625,7 @@ def main() -> int:
         setup_ollama(args.check, args.yes)
     setup_database(args.check)
     run_tests(args.check)
+    port = check_port()
 
     print(f"\n{'=' * 58}")
     if failures:
@@ -556,8 +663,12 @@ def main() -> int:
     # wrong hands somebody a broken command at the exact moment they trust it.
     runner = (".\\.venv\\Scripts\\python medbox.py" if IS_WINDOWS
               else ".venv/bin/python medbox.py")
+    # The port that will actually work, which on a machine where something
+    # else owns the configured one is not the configured one.
+    if port != read_port():
+        runner += f" --port {port}"
     print(f"\n  Start the station:   {runner}")
-    print(f"  Then open:           http://127.0.0.1:8080\n")
+    print(f"  Then open:           http://127.0.0.1:{port}\n")
     return 0
 
 

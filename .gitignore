@@ -33,6 +33,12 @@ models/
 # exceeding the 100 MB blob limit, which is a confusing way to find out.
 OllamaSetup.exe
 *.exe
+# The download is staged under this name until it is complete. A Ctrl+C in
+# the middle used to leave up to 1.2 GB of it here, untracked and unignored.
+*.part
+
+# --- Internal notes: audits, research, decisions. Never on GitHub. ---
+.research/
 
 # --- Editors / OS ---
 .vscode/

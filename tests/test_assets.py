@@ -239,6 +239,7 @@ def test_the_installer_and_the_server_agree_on_what_a_model_is():
 def test_a_half_copied_model_is_not_offered_as_a_working_microphone(tmp_path):
     """A button that appears and then fails is worse than one that was never
     offered, and a directory that exists is not a model."""
+    from server.config import python_command
     from server.voice import MODEL_FILES, Transcriber
 
     half = tmp_path / "faster-whisper-base"
@@ -247,7 +248,13 @@ def test_a_half_copied_model_is_not_offered_as_a_working_microphone(tmp_path):
     t = Transcriber(half)
     assert t.available is False
     assert "incomplete" in (t.last_error or "")
-    assert "tools/assets.py" in (t.last_error or ""), "the message names no way out"
+    # The command as this platform spells it, not a literal "tools/assets.py".
+    # The literal only ever matched on Linux: on Windows the message correctly
+    # says tools\assets.py, so this one assertion failed the suite, and with it
+    # setup, on exactly the machine the demo runs on.
+    assert python_command("tools/assets.py") in (t.last_error or ""), (
+        "the message names no way out"
+    )
 
 
 # ------------------------------------- the commands we tell people to type
