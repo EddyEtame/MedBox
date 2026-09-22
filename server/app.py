@@ -108,7 +108,18 @@ class MedBox:
             if i in self._fired or step.at > elapsed:
                 continue
             self._fired.add(i)
-            self._run_step(step, now)
+            # A step that cannot run is skipped out loud, not allowed to end
+            # the loop. `temperature: 39,5` is a string in YAML, float() raises
+            # here, and before this guard the board stopped dead with the last
+            # numbers still on it while /api/status went on answering.
+            try:
+                self._run_step(step, now)
+            except Exception as exc:
+                log.warning("scenario step at %ss skipped: %s", step.at, exc)
+                # "warning", not "note": the views show warnings to the
+                # operator. Scenario notes are narration and are not drawn.
+                BUS.publish({"type": "event", "kind": "warning",
+                             "text": f"Scenario step at {step.at:g}s skipped: {exc}"})
 
     def _run_step(self, step: scenarios.Step, now: float) -> None:
         p = step.payload
@@ -137,72 +148,97 @@ class MedBox:
     async def loop(self) -> None:
         """Sample, score, quarantine, broadcast. Never awaits the AI."""
         interval = 1.0 / max(1, CONFIG.server.board_hz)
+        last_failure = ""
         while True:
             started = time.perf_counter()
-            now = time.time()
-            say: list = []
-            self._advance_scenario(now)
-
-            for reading in self.source.sample(now):
-                v = reading.vitals()
-                result = assess(**v)
-                patient = self.source.patients[reading.patient_id]
-                self.latest[reading.patient_id] = {
-                    "patient": {
-                        "id": patient.id,
-                        "name": patient.name,
-                        "role": patient.role,
-                        **{k: val for k, val in v.items()},
-                    },
-                    "triage": result.to_dict(),
-                }
-                change = self.quarantine.evaluate(reading.patient_id, v, result)
-                if change is not None:
-                    self.db.record_event(
-                        "quarantine", json.dumps(change.to_dict()), reading.patient_id
-                    )
-                    BUS.publish({"type": "quarantine", "change": change.to_dict()})
-                    say.extend(self.announcer.on_quarantine(
-                        change.to_dict(), self.quarantine.sealed_zones()
-                    ))
-                if self._tick % self._persist_every == 0:
-                    self.db.record_reading(reading.patient_id, now, v, reading.source)
-
-            if self._tick % self._persist_every == 0:
-                self.db.commit()
-
-            rows = self._board()
-            say.extend(self.announcer.on_board(rows))
-            say.extend(self.announcer.on_ai(CLIENT.available, CLIENT.stand_in))
-            BUS.publish(
-                {
-                    "type": "board",
-                    "at": now,
-                    "ship": CONFIG.ship.name,
-                    "board": rows,
-                    "quarantine": self.quarantine.to_dict(),
-                    "ai": {"available": CLIENT.available, "error": CLIENT.last_error,
-                           "stand_in": CLIENT.stand_in},
-                    # Whether this machine can transcribe at all. A microphone
-                    # button that appears and then fails is worse than one that
-                    # was never offered.
-                    "ears": {"available": TRANSCRIBER.available,
-                             "error": TRANSCRIBER.last_error},
-                    "scenario": self.scenario.name if self.scenario else None,
-                    # Usually empty. Only transitions get spoken, because a
-                    # station announcing a HIGH band ten times a second is a
-                    # station whose sound gets turned off inside a minute.
-                    "say": [u.to_dict() for u in say],
-                }
-            )
+            # This task IS the fast track, and an exception that escapes it
+            # ends it without a word: the socket stays open, /api/status keeps
+            # answering, and the board freezes on plausible numbers. So one
+            # tick that fails is logged and the next tick runs anyway. Logged
+            # once per distinct failure, because at ten ticks a second a
+            # repeating one would bury everything else in the console.
+            try:
+                self._frame()
+            except Exception as exc:
+                if repr(exc) != last_failure:
+                    last_failure = repr(exc)
+                    log.exception("fast track: a tick failed; carrying on")
             self._tick += 1
             elapsed = time.perf_counter() - started
             await asyncio.sleep(max(0.0, interval - elapsed))
+
+    def _frame(self) -> None:
+        """One tick of the fast track. Synchronous: nothing here may wait."""
+        now = time.time()
+        say: list = []
+        self._advance_scenario(now)
+
+        for reading in self.source.sample(now):
+            v = reading.vitals()
+            result = assess(**v)
+            patient = self.source.patients[reading.patient_id]
+            self.latest[reading.patient_id] = {
+                "patient": {
+                    "id": patient.id,
+                    "name": patient.name,
+                    "role": patient.role,
+                    **{k: val for k, val in v.items()},
+                },
+                "triage": result.to_dict(),
+            }
+            change = self.quarantine.evaluate(reading.patient_id, v, result)
+            if change is not None:
+                self.db.record_event(
+                    "quarantine", json.dumps(change.to_dict()), reading.patient_id
+                )
+                BUS.publish({"type": "quarantine", "change": change.to_dict()})
+                say.extend(self.announcer.on_quarantine(
+                    change.to_dict(), self.quarantine.sealed_zones()
+                ))
+            if self._tick % self._persist_every == 0:
+                self.db.record_reading(reading.patient_id, now, v, reading.source)
+
+        if self._tick % self._persist_every == 0:
+            self.db.commit()
+
+        rows = self._board()
+        say.extend(self.announcer.on_board(rows))
+        say.extend(self.announcer.on_ai(CLIENT.available, CLIENT.stand_in))
+        BUS.publish(
+            {
+                "type": "board",
+                "at": now,
+                "ship": CONFIG.ship.name,
+                "board": rows,
+                "quarantine": self.quarantine.to_dict(),
+                "ai": {"available": CLIENT.available, "error": CLIENT.last_error,
+                       "stand_in": CLIENT.stand_in},
+                # Whether this machine can transcribe at all. A microphone
+                # button that appears and then fails is worse than one that
+                # was never offered.
+                "ears": {"available": TRANSCRIBER.available,
+                         "error": TRANSCRIBER.last_error},
+                "scenario": self.scenario.name if self.scenario else None,
+                # Usually empty. Only transitions get spoken, because a
+                # station announcing a HIGH band ten times a second is a
+                # station whose sound gets turned off inside a minute.
+                "say": [u.to_dict() for u in say],
+            }
+        )
 
     async def watch_ai(self) -> None:
         """Poll Ollama so the screen shows its true state within a few seconds."""
         while True:
             await CLIENT.probe()
+            # A cancel that lands while httpx is mid-request can be swallowed
+            # in there: probe() returns normally, and this task, already marked
+            # as cancelling, polls forever. Shutdown waits for it, so the
+            # station hung at "Waiting for application shutdown" every time
+            # its port was taken, because the first probe is always in flight
+            # at that moment. Measured, on Windows: probe returned True with
+            # cancelling() == 1, three laps running.
+            if asyncio.current_task().cancelling():
+                raise asyncio.CancelledError
             await asyncio.sleep(5.0)
 
 
@@ -220,13 +256,19 @@ async def lifespan(app: FastAPI):
     finally:
         for t in (loop_task, ai_task):
             t.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await t
+        # Bounded. Stopping the station must not depend on every task agreeing
+        # to stop; see watch_ai for the one that once did not.
+        await asyncio.wait((loop_task, ai_task), timeout=3.0)
         STATION.source.stop()
         STATION.db.close()
 
 
-app = FastAPI(title="MedBox", version=__version__, lifespan=lifespan)
+# No /docs, no /redoc. FastAPI serves both by default, and both pull Swagger or
+# ReDoc from cdn.jsdelivr.net and fonts from Google: on a station sold as
+# needing no internet at any point, the one page a curious juror might open
+# would be the one page that is broken offline.
+app = FastAPI(title="MedBox", version=__version__, lifespan=lifespan,
+              docs_url=None, redoc_url=None)
 
 
 @app.get("/api/status")

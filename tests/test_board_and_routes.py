@@ -82,3 +82,14 @@ def test_ties_break_on_id_so_the_board_does_not_shuffle():
     a = _row("P-05", temperature=36.8, spo2=98.0, pulse=72.0, respiration=16.0)
     b = _row("P-03", temperature=36.8, spo2=98.0, pulse=72.0, respiration=16.0)
     assert [r["patient"]["id"] for r in sorted([a, b], key=triage_order)] == ["P-03", "P-05"]
+
+
+def test_nothing_served_reaches_for_the_internet():
+    """FastAPI's /docs and /redoc load Swagger, ReDoc and fonts from CDNs.
+
+    On a station whose claim is "no internet at any point", those were the
+    only pages that could not work offline.
+    """
+    served = {getattr(r, "path", "") for r in app.routes}
+    for path in ("/docs", "/redoc"):
+        assert path not in served, f"{path} is still served"

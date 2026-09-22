@@ -59,6 +59,10 @@ SUPPRESSED_SUMMARY = (
     "The assistant restated the urgency in its own words. It was suppressed: "
     "urgency is NEWS2, shown above, and the assistant does not get a second vote."
 )
+SUPPRESSED_NOTHING = (
+    "The assistant said the readings support no hypothesis, under a band NEWS2 "
+    "raised from those same readings. The station does not repeat that."
+)
 
 
 def _looks_like_a_prescription(text: str) -> bool:
@@ -117,7 +121,16 @@ def enforce(result: dict, urgency: str = "") -> dict:
         blocked.append(SUPPRESSED_SUMMARY)
     out["summary"] = summary
 
-    out["insufficient_data"] = bool(result.get("insufficient_data"))
+    # `is True`, not bool(): bool("false") is True. And only under a routine
+    # band. "Nothing to go on" beside a HIGH band is the model contradicting
+    # the measurements, and the panel used to answer it in the station's own
+    # voice with "the four measured parameters are all in range", under a
+    # NEWS2 of 9. An unknown urgency ("") is left alone: nothing to check.
+    insufficient = result.get("insufficient_data") is True
+    if insufficient and urgency not in ("", "routine"):
+        insufficient = False
+        blocked.append(SUPPRESSED_NOTHING)
+    out["insufficient_data"] = insufficient
 
     hypotheses = []
     raw_hypotheses = result.get("hypotheses")

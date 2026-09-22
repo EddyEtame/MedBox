@@ -190,6 +190,25 @@ def test_an_empty_assessment_is_still_a_usable_answer():
     assert out["insufficient_data"] is True
 
 
+def test_nothing_to_go_on_is_refused_under_a_raised_band():
+    """P-03, NEWS2 9, HIGH, and the model says the readings support nothing.
+
+    The panel answered that in the station's own voice: "The four measured
+    parameters are all in range", directly under a HIGH band.
+    """
+    from server.ai.validate import SUPPRESSED_NOTHING
+
+    out = enforce(_ok(insufficient_data=True, hypotheses=[]), "high")
+    assert out["insufficient_data"] is False
+    assert SUPPRESSED_NOTHING in out["blocked"], "refused silently"
+    assert enforce(_ok(insufficient_data=True, hypotheses=[]), "routine")["insufficient_data"] is True
+
+
+def test_the_string_false_is_not_true():
+    """bool("false") is True, and a small model will return a string."""
+    assert enforce(_ok(insufficient_data="false"), "routine")["insufficient_data"] is False
+
+
 # ------------------------------------------------- contradicting the score
 
 def test_the_assistant_cannot_call_a_medium_band_reassuring():

@@ -143,20 +143,19 @@ def test_every_supporting_sign_names_a_measurement(stand_in):
 
 
 def test_the_configured_model_matches_what_the_stand_in_advertises():
-    """Changing model family silently breaks the break-glass path.
+    """Changing the model silently breaks the break-glass path.
 
-    probe() accepts a tag whose family matches the configured model, so
-    switching config.toml to a different family makes the stand-in stop being
-    recognised — and the failure looks like "model not pulled", which is
-    exactly what you would see if the real Ollama were misconfigured. The one
-    thing that always works would appear broken, ten minutes before a defence,
-    for a reason nobody would think to check.
+    probe() accepts only the exact configured tag or a declared fallback, so
+    switching config.toml to a tag the stand-in does not advertise makes the
+    stand-in stop being recognised — and the failure looks like "model not
+    pulled", which is exactly what you would see if the real Ollama were
+    misconfigured. The one thing that always works would appear broken, ten
+    minutes before a defence, for a reason nobody would think to check.
     """
     from server.config import CONFIG
     from tools.fake_ollama import MODEL_NAMES
 
-    wanted = CONFIG.ai.model.split(":")[0]
-    assert any(t.split(":")[0] == wanted for t in MODEL_NAMES), (
+    assert CONFIG.ai.model in MODEL_NAMES, (
         f"config.toml asks for {CONFIG.ai.model!r} but tools/fake_ollama.py "
         f"advertises {MODEL_NAMES}. Add a matching tag there, or the stand-in "
         f"stops being usable as the demo's fallback."
@@ -179,3 +178,38 @@ def test_every_model_named_in_config_is_openly_licensed():
             f"{tag} is under a bespoke research licence, not Apache-2.0. "
             f"This project's pitch is open, offline and auditable."
         )
+
+
+def test_the_probe_uses_a_declared_fallback_and_nothing_else(monkeypatch):
+    """Only the fallback pulled: the station must use it, by its own name.
+
+    The probe used to accept any tag of the same family, so the indicator lit
+    for qwen2.5:0.5b while every question asked for 1.5b and got a 404. And a
+    qwen2.5 tag nobody declared (the 3B carries a research licence) must not
+    count at all.
+    """
+    import httpx
+
+    from server.ai import ollama
+    from server.config import CONFIG
+
+    def serving(*names):
+        def handler(request):
+            if request.url.path == "/api/tags":
+                return httpx.Response(200, json={"models": [{"name": n} for n in names]})
+            return httpx.Response(200, json={"version": "0.13.1"})
+        return httpx.MockTransport(handler)
+
+    real = httpx.AsyncClient
+
+    def probe_against(*names):
+        monkeypatch.setattr(ollama.httpx, "AsyncClient",
+                            lambda **kw: real(transport=serving(*names)))
+        client = ollama.OllamaClient()
+        return asyncio.run(client.probe()), client.model
+
+    fallback = CONFIG.ai.fallback_models[0]
+    assert probe_against(fallback) == (True, fallback)
+    assert probe_against(CONFIG.ai.model, fallback) == (True, CONFIG.ai.model)
+    ok, _ = probe_against("qwen2.5:3b-instruct")
+    assert ok is False, "an undeclared tag of the same family was accepted"

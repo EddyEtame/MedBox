@@ -17,6 +17,15 @@ from .schemas import ASSESSMENT_SCHEMA, SYSTEM_PROMPT
 
 log = logging.getLogger("medbox.ai")
 
+# Built once, here, at import, before the fast track starts. Every
+# httpx.AsyncClient() otherwise builds a fresh SSL context from certifi's
+# bundle, synchronously, on the event loop: 600 to 1100 ms on the demo laptop,
+# for a plain-http connection to localhost that never uses it. probe() runs
+# every five seconds, so the board lost about ten frames every five seconds:
+# the slow track stalling the fast one, which is the one thing it may not do.
+# With the context passed in, making a client takes a third of a millisecond.
+_TLS = httpx.create_ssl_context()
+
 
 class OllamaClient:
     def __init__(self) -> None:
@@ -33,7 +42,7 @@ class OllamaClient:
     async def probe(self) -> bool:
         """Check Ollama is up and our model is pulled. Safe to call repeatedly."""
         try:
-            async with httpx.AsyncClient(timeout=3.0) as client:
+            async with httpx.AsyncClient(timeout=3.0, verify=_TLS) as client:
                 r = await client.get(f"{self.host}/api/tags")
                 r.raise_for_status()
                 tags = {m.get("name", "") for m in r.json().get("models", [])}
@@ -51,12 +60,20 @@ class OllamaClient:
             self.stand_in = False
             return False
 
-        # Ollama reports "qwen2.5:3b-instruct"; accept a bare name too.
-        wanted = self.model.split(":")[0]
-        if not any(t == self.model or t.split(":")[0] == wanted for t in tags):
+        # Exact tags, then the fallbacks config.toml declares, in order; a bare
+        # name is Ollama's ":latest". This used to accept any tag of the same
+        # family, so with only qwen2.5:0.5b pulled the indicator lit up and
+        # then every question asked for 1.5b by name and got a 404, while the
+        # guide promised the fallback would be used. Now it is, and
+        # /api/status names the model actually answering.
+        for candidate in (CONFIG.ai.model, *CONFIG.ai.fallback_models):
+            if candidate in tags or f"{candidate}:latest" in tags:
+                self.model = candidate
+                break
+        else:
             self.available = False
             self.last_error = (
-                f"model {self.model!r} is not pulled. Run: ollama pull {self.model}"
+                f"model {CONFIG.ai.model!r} is not pulled. Run: ollama pull {CONFIG.ai.model}"
             )
             return False
 
@@ -107,7 +124,7 @@ class OllamaClient:
             ],
         }
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, verify=_TLS) as client:
                 r = await client.post(f"{self.host}/api/chat", json=body)
                 r.raise_for_status()
                 content = r.json().get("message", {}).get("content", "")
@@ -154,7 +171,7 @@ class OllamaClient:
             ],
         }
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, verify=_TLS) as client:
                 r = await client.post(f"{self.host}/api/chat", json=body)
                 r.raise_for_status()
                 text = r.json().get("message", {}).get("content", "")
