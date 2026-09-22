@@ -93,7 +93,11 @@
     if (b.summary) html += '<p class="sum">' + esc(b.summary) + "</p>";
 
     if (b.insufficient_data && !(b.hypotheses || []).length) {
-      html += '<div class="nothing">The four measured parameters are all in range. ' +
+      // "All in range" is the station talking, so it is said only when NEWS2
+      // agrees. The server now refuses the flag under any other band; this is
+      // the second lock, for a response from before that rule existed.
+      html += '<div class="nothing">' +
+        (b.urgency_at_assessment === "routine" ? "The four measured parameters are all in range. " : "") +
         "The assistant has no hypothesis to offer, and says so rather than inventing " +
         "one. What they reported is not something this box can measure.</div>";
     }

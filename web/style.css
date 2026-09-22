@@ -5,11 +5,17 @@
 :root{
   --bg:#080d11; --panel:#111a20; --sunk:#0b1317; --line:#1e2d36; --line2:#2b404c;
   --ink:#e4eff3; --ink2:#9cb3bd; --ink3:#65808c;
-  --ok:#5ad48e; --low:#7fc6d6; --warn:#f0c459; --crit:#ff6577; --accent:#4fd8e2;
+  --ok:#5ad48e; --low:#7fc6d6; --warn:#f0c459; --crit:#ff5c6e; --accent:#4fd8e2;
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
 }
 *{box-sizing:border-box}
+/* Same rule as ship.css: an author display value beats the hidden attribute,
+   so without this anything given display:flex or grid can never be hidden. */
+[hidden]{display:none !important}
+/* No completed repaint for two seconds: the numbers are old, so they look old.
+   The red link chip above them says why. See the watchdog in app.js. */
+.stale-feed main,.stale-feed .stats{opacity:.4;transition:opacity .3s}
 html,body{height:100%}
 body{
   margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
@@ -83,7 +89,10 @@ main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;padding:16p
 }
 .row:last-child{border-bottom:0}
 .row:hover{background:var(--sunk)}
-.row.sel{background:var(--sunk);border-left-color:var(--accent)}
+/* An outline, not only the left border: .row.u-medium and .row.u-high come
+   later with the same specificity and took the border back, so an open urgent
+   row looked exactly like a hovered one. The urgency stripe stays as it is. */
+.row.sel{background:var(--sunk);border-left-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 .row.u-medium{border-left-color:var(--warn)}
 .row.u-high{border-left-color:var(--crit)}
 .pid{font-family:var(--mono);font-size:12px;color:var(--ink3)}
@@ -98,7 +107,9 @@ main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;padding:16p
 }
 .b-routine{color:var(--ink3)} .b-low{color:var(--low)}
 .b-medium{color:var(--warn)} .b-high{color:var(--crit)}
-.iso{font-size:10px;color:var(--crit);font-family:var(--mono)}
+/* .who .iso, not .iso: `.who span` outranks a bare class, so ZONE A came out
+   grey like the role text beside it, on exactly the rows that matter. */
+.who .iso{font-size:10px;color:var(--crit);font-family:var(--mono)}
 .empty{padding:22px 16px;color:var(--ink3);font-size:13px;margin:0}
 
 .zones{display:flex;flex-direction:column;gap:1px;background:var(--line)}

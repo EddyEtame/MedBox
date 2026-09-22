@@ -9,7 +9,7 @@
   var el = function (id) { return document.getElementById(id); };
   // `held` is the assessment currently on screen, as the server stamped it,
   // so the detail pane can tell when the readings it describes have moved on.
-  var state = { board: [], selected: null, quarantine: null, aiUp: false, held: null };
+  var state = { board: [], selected: null, quarantine: null, aiUp: false, held: null, asking: false };
 
   /* ---------- websocket, with automatic reconnect ---------- */
   var ws = null, retry = 0;
@@ -36,6 +36,11 @@
       // A symptom reported from the other view, or another screen entirely.
       else if (msg.type === "symptom" && msg.reported &&
                msg.reported.patient_id === state.selected) loadReported();
+      // Something the station could not do, e.g. a scenario step it skipped.
+      // Held for fifteen seconds, because the chip it lands in is rewritten
+      // on every frame and would otherwise show it for a tenth of a second.
+      else if (msg.type === "event" && msg.kind === "warning")
+        state.warning = { text: String(msg.text || ""), until: Date.now() + 15000 };
     };
   }
 
@@ -45,6 +50,23 @@
     c.className = "chip " + (up ? "up" : "down");
     c.innerHTML = '<i class="led"></i>' + text;
   }
+
+  /* ---------- a frozen board must not look like a calm one ---------- */
+  /* Stamped at the END of a repaint, not when a frame arrives: a frame that
+     arrives and then throws half way through rendering leaves the board just as
+     frozen. Either way, after two seconds the link chip stops saying all is
+     well and the numbers dim, so nobody reads a stale SpO2 as a current one.
+     Before this, a stalled server kept a green "Screen link" over the last
+     numbers it had sent, for as long as anyone cared to look. */
+  var lastPainted = 0;
+  setInterval(function () {
+    if (!ws || ws.readyState !== 1 || !lastPainted) return;  // onclose says it
+    var gap = Date.now() - lastPainted;
+    var stale = gap > 2000;
+    document.body.classList.toggle("stale-feed", stale);
+    if (stale) setChip("linkChip", false, "No update for " + Math.round(gap / 1000) + " s");
+    else if (el("linkChip").className !== "chip up") setChip("linkChip", true, "Screen link");
+  }, 500);
 
   /* ---------- board ---------- */
   function onBoard(msg) {
@@ -66,7 +88,11 @@
     } else {
       setChip("aiChip", state.aiUp, state.aiUp ? "AI narration" : "AI offline — triage unaffected");
     }
-    el("scenarioChip").textContent = msg.scenario ? ("Running: " + msg.scenario) : "No scenario running";
+    var warning = state.warning && Date.now() < state.warning.until ? state.warning.text : "";
+    var scChip = el("scenarioChip");
+    scChip.textContent = warning ||
+      (msg.scenario ? ("Running: " + msg.scenario) : "No scenario running");
+    scChip.classList.toggle("down", !!warning);
 
     var impaired = 0;
     state.board.forEach(function (r) {
@@ -80,6 +106,7 @@
     renderRows();
     renderZones();
     if (state.selected) renderDetail();
+    lastPainted = Date.now();
   }
 
   var isolatedSet = function () {
@@ -124,7 +151,16 @@
         '<span class="badge b-' + t.urgency + '">' + t.urgency + ' ' + t.total + '</span>' +
         '</div>';
     }).join("");
+    // The rows are rebuilt ten times a second, which takes keyboard focus with
+    // them: Tab to a row and it was gone 100 ms later. Put it back on the row
+    // with the same id.
+    var active = document.activeElement;
+    var focused = active && host.contains(active) ? active.getAttribute("data-id") : null;
     host.innerHTML = html;
+    if (focused) {
+      var again = host.querySelector('[data-id="' + focused + '"]');
+      if (again) again.focus();
+    }
   }
 
   function renderZones() {
@@ -165,7 +201,9 @@
 
     el("detailName").textContent = p.name;
     el("detailRole").textContent = p.id + " · " + p.role;
-    el("aiBtn").disabled = false;
+    // Not simply re-enabled: this runs every frame, so the button came back
+    // 100 ms after a press and a second request could overlap the first.
+    el("aiBtn").disabled = state.asking;
 
     var cells = [
       ["Temperature", num(p.temperature, 1) + " °C", "temperature"],
@@ -190,14 +228,22 @@
   /* ---------- the slow track, on demand only ---------- */
   function askAI() {
     if (!state.selected) return;
+    // Pinned now. The answer takes seconds, the operator may have moved on by
+    // the time it lands, and drawn under whoever is selected then it read as
+    // that person's assessment: one crew member's hypotheses under another's
+    // name, band and vitals, with no stale warning.
+    var id = state.selected;
     var out = el("aiOut");
     out.innerHTML = '<p class="sum">Thinking…</p>';
+    state.asking = true;
     el("aiBtn").disabled = true;
 
-    fetch("/api/assess/" + encodeURIComponent(state.selected), { method: "POST" })
+    fetch("/api/assess/" + encodeURIComponent(id), { method: "POST" })
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
       .then(function (res) {
+        state.asking = false;
         el("aiBtn").disabled = false;
+        if (state.selected !== id) return;
         if (!res.ok) {
           state.held = null;
           out.innerHTML = MedBox.assessment.failure(res.body.note);
@@ -207,7 +253,9 @@
         out.innerHTML = MedBox.assessment.render(res.body);
       })
       .catch(function () {
+        state.asking = false;
         el("aiBtn").disabled = false;
+        if (state.selected !== id) return;
         state.held = null;
         out.innerHTML = MedBox.assessment.failure("Vitals and triage are unaffected.");
       });
@@ -290,7 +338,12 @@
       .catch(function () { input.value = text; });
   }
 
-  el("rows").addEventListener("click", function (e) {
+  // pointerdown, not click. A click needs the same element under the pointer
+  // when the button goes down and when it comes up, and the rows are rebuilt
+  // ten times a second: a rebuild in between swallowed the click, so a row
+  // pressed in front of the jury sometimes simply did not open.
+  el("rows").addEventListener("pointerdown", function (e) {
+    if (e.button !== 0) return;
     var row = e.target.closest(".row");
     if (row) select(row.dataset.id);
   });

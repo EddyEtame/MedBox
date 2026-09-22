@@ -31,6 +31,19 @@
     return;
   }
 
+  // The context can be taken away at any moment: a driver reset, a sleep and
+  // resume, a projector plugged in mid-demo. Nothing listened for it, so the
+  // ship became a silent black void with the HUD still floating over it. Say
+  // what happened and offer the board, which needs no GPU at all.
+  canvas.addEventListener("webglcontextlost", function (e) {
+    e.preventDefault();
+    var fb = document.getElementById("fallback");
+    fb.querySelector("h2").textContent = "The 3D view lost its graphics context";
+    fb.querySelector("p").textContent = "The graphics driver reset. Nothing else " +
+      "did: every reading is live on the flat board. Reload to try the 3D view again.";
+    fb.hidden = false;
+  });
+
   /* ----------------------------------------------------------- tiny mat4 */
   function mat4() { return new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]); }
 
@@ -347,6 +360,21 @@
   }
 
   var ws = null, retry = 0;
+
+  /* A frozen ship must not look like a calm one. Same watchdog as app.js:
+     stamped at the end of a repaint, and after two seconds without one the
+     link chip goes red and the HUD dims. The ring keeps turning either way,
+     which is exactly why the numbers on it need saying are old. */
+  var lastPainted = 0;
+  setInterval(function () {
+    if (!ws || ws.readyState !== 1 || !lastPainted) return;
+    var gap = Date.now() - lastPainted;
+    var stale = gap > 2000;
+    document.body.classList.toggle("stale-feed", stale);
+    if (stale) setChip("linkChip", false, "no update for " + Math.round(gap / 1000) + " s");
+    else if (el("linkChip").className !== "chip up") setChip("linkChip", true, "link");
+  }, 500);
+
   function connect() {
     var proto = location.protocol === "https:" ? "wss:" : "ws:";
     ws = new WebSocket(proto + "//" + location.host + "/ws");
@@ -364,6 +392,10 @@
       // the crew member on show, their words appear without a refresh.
       else if (m.type === "symptom" && m.reported &&
                m.reported.patient_id === state.selected) loadReported();
+      // Something the station could not do, e.g. a scenario step it skipped.
+      // The command line's output stays until the next command, which is
+      // long enough to be read.
+      else if (m.type === "event" && m.kind === "warning") say(String(m.text || ""), true);
     };
   }
 
@@ -458,6 +490,7 @@
     }
 
     if (state.selected) renderPanel();
+    lastPainted = Date.now();
   }
 
   /* --------------------------------------------------------------- render */
@@ -833,7 +866,7 @@
       m.refusals.map(function (r) {
         return '<div class="gno"><b>' + esc(r.never) + "</b><p>" + esc(r.why) + "</p></div>";
       }).join("") + "</div>" +
-      '<div class="gsec"><h3>Type or say</h3><div class="keys">' +
+      '<div class="gsec"><h3>Type</h3><div class="keys">' +
       m.shortcuts.map(function (k) {
         return "<kbd" + (k.needs_ai ? ' class="ai"' : "") + ">" + esc(k.phrase) + "</kbd>" +
                "<span>" + esc(k.does) + "</span>";
@@ -995,14 +1028,19 @@
   /* ------------------------------------------------------------ slow track */
   function askAI() {
     if (!state.selected) return;
+    // Pinned now: see app.js. A late answer for someone the operator has left
+    // is dropped, not drawn under the person they are looking at, and not
+    // flown to either.
+    var id = state.selected;
     var out = el("aiOut"), btn = el("aiBtn");
     out.innerHTML = '<p class="sum">Thinking…</p>';
     btn.disabled = true;
 
-    fetch("/api/assess/" + encodeURIComponent(state.selected), { method: "POST" })
+    fetch("/api/assess/" + encodeURIComponent(id), { method: "POST" })
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
       .then(function (res) {
         btn.disabled = false;
+        if (state.selected !== id) return;
         if (!res.ok) {
           state.held = null;
           out.innerHTML = MedBox.assessment.failure(res.body.note);
@@ -1015,6 +1053,7 @@
       })
       .catch(function () {
         btn.disabled = false;
+        if (state.selected !== id) return;
         state.held = null;
         out.innerHTML = MedBox.assessment.failure("Vitals and triage are unaffected.");
       });

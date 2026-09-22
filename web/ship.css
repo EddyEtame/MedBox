@@ -6,13 +6,21 @@
 :root{
   --bg:#03080b;
   --ink:#e4eff3; --ink2:#9cb3bd; --ink3:#66818d;
-  --line:rgba(120,170,190,.16); --panel:rgba(8,18,24,.78);
+  --line:rgba(120,170,190,.16); --line2:rgba(120,170,190,.30); --panel:rgba(8,18,24,.78);
   --routine:#4a6b78; --low:#7fc6d6; --medium:#f0c459; --high:#ff5c6e;
   --ok:#5ad48e; --accent:#4fd8e2; --crit:#ff5c6e; --warn:#f0c459;
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
 }
 *{box-sizing:border-box}
+/* The hidden attribute only works while no author rule sets display, and most
+   things here do: .chip is display:flex, so #bedChip showed "awaiting a bed" in
+   red all the time, over an empty quarantine. One rule for every element, so
+   the next display:flex cannot quietly do the same. */
+[hidden]{display:none !important}
+/* No completed repaint for two seconds: dim what is now old, keep the red link
+   chip that says so at full strength. See the watchdog in ship.js. */
+.stale-feed .gauges,.stale-feed .panel{opacity:.4;transition:opacity .3s}
 html,body{height:100%;overflow:hidden}
 body{
   margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;
