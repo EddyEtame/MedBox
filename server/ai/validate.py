@@ -112,6 +112,11 @@ SUPPRESSED_DIAGNOSIS = (
     "L’assistant a nommé une maladie ({name}). MedBox n’affiche aucun "
     "diagnostic : le profil est nommé d’après les instruments."
 )
+SUPPRESSED_NORMAL_PATTERN = (
+    "L’assistant a nommé une hypothèse « {name} » d’après {word} alors que cet "
+    "instrument est dans sa plage normale ; elle a été renommée d’après les "
+    "signes qui la soutiennent."
+)
 
 
 # What a hypothesis name is allowed to be made of: the instruments' own
@@ -304,6 +309,18 @@ def enforce(result: dict, urgency: str = "", params: list | None = None) -> dict
         elif not _looks_like_a_pattern(name):
             # Not a diagnosis, not a pattern: a sentence. Renamed quietly from
             # the instruments; nothing clinical was suppressed.
+            name = pattern_name(signs)
+        # Seen live on the demo path: the SpO2 sign was dropped above because
+        # NEWS2 scored it zero, and the hypothesis still read "Fièvre avec
+        # désaturation" over an SpO2 of 98,9 %. The name is the same claim in
+        # bold. It is renamed from the signs that survived, and said.
+        cited_normal = [
+            src for src in normal_sources
+            if src in PATTERN_FR and _plain(PATTERN_FR[src]) in _plain(name)
+        ]
+        if cited_normal:
+            blocked.append(SUPPRESSED_NORMAL_PATTERN.format(
+                name=name[:60], word=PATTERN_FR[sorted(cited_normal)[0]]))
             name = pattern_name(signs)
         if any(existing["name"] == name for existing in hypotheses):
             continue  # the same instruments, named twice, is one hypothesis

@@ -396,5 +396,34 @@ def test_a_reading_news2_scored_zero_is_not_a_sign():
     signs = out["hypotheses"][0]["supporting_signs"]
     assert [s["source"] for s in signs] == ["temperature"]
     assert any("97,4" in b for b in out["blocked"])
+    # The name was the same claim in bold: renamed from what survived, and said.
+    assert out["hypotheses"][0]["name"] == "Fièvre"
+    assert any("renommée" in b for b in out["blocked"])
     # Without a parameter list nothing is filtered: the guard needs the score.
     assert len(enforce(_ok(), "medium")["hypotheses"][0]["supporting_signs"]) == 2
+
+
+def test_a_pattern_word_for_a_normal_instrument_cannot_name_a_hypothesis():
+    """Seen live on 24 Sep: SpO2 98,9 %, sign dropped, hypothesis still named
+    « Fièvre avec désaturation ». A pattern word whose instrument NEWS2 scored
+    zero is renamed from the signs that survived, whatever the model called
+    it, and the panel says so."""
+    params = [{"name": "temperature", "score": 0}, {"name": "spo2", "score": 0},
+              {"name": "pulse", "score": 2}, {"name": "systolic_bp", "score": 0}]
+    out = enforce(_ok(hypotheses=[{
+        "name": "Hypotension avec désaturation",
+        "fit": "several measurements fit",
+        "supporting_signs": [{"source": "pulse", "text": "118 /min"},
+                             {"source": "systolic_bp", "text": "121 mmHg"}],
+    }]), "medium", params)
+    assert out["hypotheses"][0]["name"] == "Tachycardie"
+    assert [s["source"] for s in out["hypotheses"][0]["supporting_signs"]] == ["pulse"]
+    assert sum("renommée" in b for b in out["blocked"]) == 1
+    # A pattern word for an instrument that really scored is left alone.
+    kept = enforce(_ok(hypotheses=[{
+        "name": "Tachycardie",
+        "fit": "several measurements fit",
+        "supporting_signs": [{"source": "pulse", "text": "118 /min"}],
+    }]), "medium", params)
+    assert kept["hypotheses"][0]["name"] == "Tachycardie"
+    assert not any("renommée" in b for b in kept["blocked"])
