@@ -4,8 +4,8 @@ Run this on a developer machine and commit the result. The demo laptop never
 runs it and never installs Piper:
 
     pip install piper-tts
-    python -m piper.download_voices en_US-ljspeech-high --data-dir voices/
-    python tools/render_speech.py --voice voices/en_US-ljspeech-high.onnx
+    python -m piper.download_voices fr_FR-siwis-medium --data-dir voices/
+    python tools/render_speech.py --voice voices/fr_FR-siwis-medium.onnx
     git add web/speech && git commit
 
 Why it works this way, in one line each:
@@ -13,7 +13,7 @@ Why it works this way, in one line each:
 - **Licence.** piper-tts is GPL-3.0-or-later. Importing it at runtime would
   make MedBox GPL-3. Running it offline at build time and shipping the audio
   does not, because nothing links against it and nothing distributes it. The
-  LJ Speech voice is public domain.
+  SIWIS French voice is CC BY 4.0 (credit: SIWIS database, Yamagishi et al.).
 - **Speed.** Nothing is synthesised on stage. Playing a line is a disk read.
 - **Certainty.** `server/speech.every_clip()` computes the complete set, and
   the crew names come from a fixed seed, so the set never changes. `--check`
@@ -73,15 +73,13 @@ def write_placeholder(path: Path, text: str) -> None:
 
 
 # How a line is SAID, where that differs from how it is written. Applied to the
-# synthesis only; the text the station shows and logs does not change. Found by
-# transcribing every rendered clip back with the station's own speech model:
-# "Zone A is now sealed" came back as "Zora is now sealed", because the voice
-# reads a lone A as the article, and "NEWS2 seven or above" came back as "News
-# 27 or above", which on stage is a different and wrong number.
+# synthesis only; the text the station shows and logs does not change. Found
+# by transcribing every rendered clip back with the station's own speech
+# model. With the French voice (fr_FR-siwis-medium, CC BY 4.0) the product
+# name reads best as two words; "Zone A" needs nothing, and every trick tried
+# on it ("Zone Â", "Zone Ah", "Zone Alpha") came back worse.
 SPOKEN = {
-    "Zone A": "Zone eigh",
-    "NEWS2": "News two score",
-    "MedBox": "Medbox",
+    "MedBox": "Med Box",
 }
 
 
@@ -148,7 +146,7 @@ def main() -> int:
         path = Path(args.voice).expanduser()
         if not path.exists():
             print(f"No voice at {path}.", file=sys.stderr)
-            print("  python -m piper.download_voices en_US-ljspeech-high --data-dir voices/",
+            print("  python -m piper.download_voices fr_FR-siwis-medium --data-dir voices/",
                   file=sys.stderr)
             return 1
         n = render_with_piper(path, clips)

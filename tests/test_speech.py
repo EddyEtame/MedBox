@@ -213,4 +213,5 @@ def test_nothing_spoken_names_a_condition_or_a_treatment():
 
 def test_an_utterance_renders_the_full_sentence_for_captions():
     u = Utterance("band_high", "P-01", "Clara Dubois")
-    assert u.to_dict()["text"] == "Clara Dubois. NEWS2 seven or above. Emergency response."
+    assert u.to_dict()["text"] == "Clara Dubois. " + PHRASES["band_high"]
+    assert PHRASES["band_high"].startswith("Score d’alerte"), "the station speaks French"

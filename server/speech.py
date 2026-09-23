@@ -44,37 +44,59 @@ from dataclasses import dataclass
 MAX_WORDS = 12
 
 # The fixed phrases. The key is the filename stem under web/speech/.
+# In French, because the station is presented in French and the screen is
+# French: a voice in another language than the words under it is the first
+# thing a jury hears. "Score d'alerte", never "NEWS2" out loud: the acronym is
+# on screen for whoever wants it, and spoken it is a noise.
 PHRASES: dict[str, str] = {
     # --- urgency, the only clinical thing the station ever says out loud ---
-    "band_high": "NEWS2 seven or above. Emergency response.",
-    "band_medium": "Urgent review. Escalate to the medical officer.",
-    "band_single_param": "One reading alone scored three. Urgent review.",
-    "band_clear": "Back within normal ranges.",
+    # "de sept ou plus": without the "de" the voice ran "sept ou" together and
+    # the station's own speech model heard "c'est tout plus".
+    "band_high": "Score d’alerte de sept ou plus. Réponse d’urgence.",
+    "band_medium": "Revue urgente. Prévenir le responsable médical.",
+    "band_single_param": "Un seul paramètre à trois. Revue urgente.",
+    "band_clear": "Retour dans les valeurs habituelles.",
 
-    # --- isolation ---
-    "quarantine_assigned": "Assigned a quarantine berth.",
+    # --- isolation: proposed by the station, decided by a person ---
+    "isolation_proposed": "Isolement proposé. Confirmation humaine requise.",
+    "quarantine_assigned": "Place d’isolement attribuée.",
+    "quarantine_released": "Isolement levé par l’opérateur.",
     # One per zone. Two zones closing in the same minute sounded like the same
     # announcement twice, which reads as a stuck machine rather than as the
     # outbreak spreading. Naming the zone is also simply more useful.
-    "zone_a_sealed": "Zone A is now sealed.",
-    "zone_b_sealed": "Zone B is now sealed.",
-    "zone_c_sealed": "Zone C is now sealed.",
-    "zone_overflow": "Quarantine is full. Overflow cannot be placed.",
+    "zone_a_sealed": "Zone A scellée.",
+    "zone_b_sealed": "Zone B scellée.",
+    "zone_c_sealed": "Zone C scellée.",
+    "zone_overflow": "Isolement complet. Aucune place disponible.",
 
     # --- the assistant, which is the beat the demo is built around ---
     # The station announcing its own assistant's death, in its own voice, while
     # every number on screen keeps updating, is the clearest possible statement
     # of the architecture. It is also literally true.
-    "ai_down": "The assistant has stopped. Measurement continues.",
-    "ai_back": "The assistant is running again.",
-    "ai_stand_in": "A stand-in is answering. This is not a language model.",
-    "ai_blocked": "The assistant overstepped. The station suppressed it.",
+    "ai_down": "L’assistant s’est arrêté. Les mesures continuent.",
+    "ai_back": "L’assistant est de nouveau actif.",
+    "ai_stand_in": "Un substitut répond. Ce n’est pas un modèle de langage.",
+    "ai_blocked": "L’assistant a dépassé son rôle. La station l’a bloqué.",
 
     # --- the session ---
-    "scenario_started": "Scenario running.",
-    "scenario_stopped": "Scenario stopped. Readings are back to baseline.",
-    "ready": "MedBox ready. Forty souls aboard.",
+    "scenario_started": "Scénario en cours.",
+    "scenario_stopped": "Scénario arrêté. Retour aux valeurs de base.",
+    "ready": "MedBox prêt. Quarante personnes à bord.",
 }
+
+# The consent notice, as it is SAID. The full notice is always on screen in
+# the listening panel (web/mic.js); this is the same commitment in the words
+# one says out loud, short enough to hold a room, and it is the one line here
+# that is allowed past the twelve-word cap because it is a notice, not an
+# alert. web/voice.js plays it as consent_fr.wav before it will hear "oui".
+CONSENT_SPOKEN = (
+    "Je suis MedBox, l’assistant local de surveillance, hors ligne. "
+    "Je ne remplace pas un médecin. Je ne diagnostique pas, je ne prescris rien "
+    "et je n’isole personne : ces décisions restent humaines. "
+    "Avec votre accord, le microphone reste actif pendant cette session, pour "
+    "entendre le mot MedBox. Aucun son n’est conservé. Vous pouvez arrêter "
+    "l’écoute à tout moment. Pour accepter, dites : j’accepte."
+)
 
 
 @dataclass(frozen=True)
@@ -127,13 +149,21 @@ class Announcer:
         # operator learns to ignore the thing that is meant to interrupt them.
         self._worst: dict[str, int] = {}
         self._band: dict[str, str] = {}
+        self._names: dict[str, str] = {}
         self._ai_up: bool | None = None
         self._sealed: set[str] = set()
+        # Isolation states already said, per crew member, so a candidate that
+        # is re-evaluated every tick is proposed out loud once.
+        self._isolation: dict[str, str] = {}
+        # Lines queued by a route (confirm, release) for the next frame to say.
+        self._pending: list[Utterance] = []
 
     def reset(self) -> None:
         self._band.clear()
         self._worst.clear()
         self._sealed.clear()
+        self._isolation.clear()
+        self._pending.clear()
         # Deliberately not clearing _ai_up: the assistant's state is a property
         # of the machine, not of the scenario, and re-announcing it because
         # somebody pressed Reset would be noise.
@@ -144,6 +174,7 @@ class Announcer:
         for row in rows:
             pid = row["patient"]["id"]
             name = row["patient"]["name"]
+            self._names[pid] = name
             triage = row["triage"]
             band = triage["urgency"]
             was = self._band.get(pid)
@@ -176,13 +207,36 @@ class Announcer:
         return out
 
     def on_quarantine(self, change: dict, sealed: list[str]) -> list[Utterance]:
+        """One line per isolation STATE change: proposed, placed, waiting, lifted.
+
+        The change dict is quarantine.Assignment.to_dict(). It used to be read
+        for "assigned" and "overflow" keys it never had, so a berth was never
+        announced and the overflow line was dead; and a candidate, the moment
+        the whole three-state design turns on, said nothing at all.
+        """
         out: list[Utterance] = []
-        if change.get("assigned"):
-            out.append(Utterance(
-                "quarantine_assigned", change.get("patient_id"), change.get("name")
-            ))
-        if change.get("overflow"):
-            out.append(Utterance("zone_overflow"))
+        pid = change.get("patient_id")
+        name = self._names.get(pid) if pid else None
+        reason = str(change.get("reason", "")).lower()
+        if reason == "released" or "lev" in reason:
+            state = "released"
+        elif not change.get("confirmed"):
+            state = "proposed"
+        elif change.get("zone") is None:
+            state = "waiting"
+        else:
+            state = "placed"
+        if pid and self._isolation.get(pid) != state:
+            self._isolation[pid] = state
+            if state == "proposed":
+                out.append(Utterance("isolation_proposed", pid, name))
+            elif state == "placed":
+                out.append(Utterance("quarantine_assigned", pid, name))
+            elif state == "waiting":
+                out.append(Utterance("zone_overflow"))
+            elif state == "released":
+                out.append(Utterance("quarantine_released", pid, name))
+                self._isolation.pop(pid, None)
         now_sealed = set(sealed)
         # One announcement per zone that has newly sealed, not one per frame
         # for as long as it stays sealed.
@@ -191,6 +245,14 @@ class Announcer:
             if key in PHRASES:
                 out.append(Utterance(key))
         self._sealed = now_sealed
+        return out
+
+    def later(self, change: dict, sealed: list[str]) -> None:
+        """A route confirmed or released somebody: say it on the next frame."""
+        self._pending.extend(self.on_quarantine(change, sealed))
+
+    def drain(self) -> list[Utterance]:
+        out, self._pending = self._pending, []
         return out
 
     def on_ai(self, available: bool, stand_in: bool) -> list[Utterance]:
@@ -217,6 +279,7 @@ def every_clip(crew_names: list[str]) -> dict[str, str]:
     on stage.
     """
     clips = dict(PHRASES)
+    clips["consent_fr"] = CONSENT_SPOKEN
     for name in crew_names:
         clips[name_stem(name)] = name
     return clips
