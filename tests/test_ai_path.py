@@ -213,3 +213,24 @@ def test_the_probe_uses_a_declared_fallback_and_nothing_else(monkeypatch):
     assert probe_against(CONFIG.ai.model, fallback) == (True, CONFIG.ai.model)
     ok, _ = probe_against("qwen2.5:3b-instruct")
     assert ok is False, "an undeclared tag of the same family was accepted"
+
+
+def test_a_slow_answer_is_not_a_dead_assistant(monkeypatch):
+    """A timeout used to flip `available`, and the ship then announced
+    « l'assistant s'est arrêté » for a model that was still answering.
+    Heard on the demo laptop: ai_down at 62 s, ai_back at 63 s."""
+    import httpx
+
+    from server.ai import ollama
+
+    def hanging(request):
+        raise httpx.ReadTimeout("slow", request=request)
+
+    real = httpx.AsyncClient
+    monkeypatch.setattr(ollama.httpx, "AsyncClient",
+                        lambda **kw: real(transport=httpx.MockTransport(hanging)))
+    c = OllamaClient()
+    c.available = True
+    assert asyncio.run(c.assess(PATIENT, TRIAGE)) is None
+    assert c.available is True, "a timeout was reported as the assistant dying"
+    assert c.slow is True and "délai" in (c.last_error or "")

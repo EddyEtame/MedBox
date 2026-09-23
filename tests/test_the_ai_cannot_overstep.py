@@ -97,7 +97,9 @@ def test_a_real_observation_survives():
         "Repeat the full set of observations in 15 minutes",
         "Check whether respiratory isolation is already in place",
     ]))
-    assert len(out["information_to_gather"]) == 2
+    # Capped, not blocked: the cap is a latency decision (schemas.py), and
+    # what survives it is the first observation, untouched.
+    assert out["information_to_gather"] == ["Repeat the full set of observations in 15 minutes"][:MAX_TO_GATHER]
     assert out["blocked"] == []
 
 
@@ -351,3 +353,48 @@ def test_a_summary_cut_by_the_grammar_says_it_was_cut():
     out = enforce(_ok(summary="Temperature 39.1 C and SpO2 91.6 % were recorded, with pulse at 117.5 bpm, as"))
     assert out["summary"].endswith("bpm…"), out["summary"]
     assert enforce(_ok())["summary"].endswith("recorded."), "a whole sentence was touched"
+
+
+def test_a_named_disease_becomes_the_pattern_the_instruments_show():
+    """"Heat Stroke", "Severe Anemia", "ARDS": what the real model wrote in
+    bold over four instrument readings, under a prompt that asked for a
+    pattern and never a diagnosis. The name is replaced by what was measured,
+    and the replacement is reported; a finding is not a disease and passes."""
+    from server.ai.validate import SUPPRESSED_DIAGNOSIS, pattern_name
+
+    out = enforce(_ok(hypotheses=[{
+        "name": "Acute respiratory distress syndrome (ARDS)",
+        "fit": "all measured parameters fit",
+        "supporting_signs": [
+            {"source": "temperature", "text": "39,1 °C"},
+            {"source": "spo2", "text": "92 %"},
+        ],
+    }]), "high")
+    assert out["hypotheses"][0]["name"] == "Fièvre avec désaturation"
+    assert any(b.startswith(SUPPRESSED_DIAGNOSIS[:20]) for b in out["blocked"])
+    kept = enforce(_ok(hypotheses=[{
+        "name": "Fièvre avec tachycardie",
+        "fit": "several measurements fit",
+        "supporting_signs": [{"source": "pulse", "text": "118 /min"}],
+    }]), "high")
+    assert kept["hypotheses"][0]["name"] == "Fièvre avec tachycardie" and kept["blocked"] == []
+    assert pattern_name([{"source": "reported_by_crew_member", "text": "mal de tête"}]) == "Profil déclaré, non mesuré"
+
+
+def test_a_reading_news2_scored_zero_is_not_a_sign():
+    """Seen live: "SpO2 97,4 %" cited as a sign of desaturation, by a model
+    copying the shape of its one-shot example. The triage's own parameter
+    list says which instruments scored zero; those cannot be signs."""
+    params = [{"name": "temperature", "score": 1}, {"name": "spo2", "score": 0},
+              {"name": "pulse", "score": 1}, {"name": "respiration", "score": 2}]
+    out = enforce(_ok(hypotheses=[{
+        "name": "Fièvre avec désaturation",
+        "fit": "several measurements fit",
+        "supporting_signs": [{"source": "temperature", "text": "38,3 °C"},
+                             {"source": "spo2", "text": "97,4 %"}],
+    }]), "medium", params)
+    signs = out["hypotheses"][0]["supporting_signs"]
+    assert [s["source"] for s in signs] == ["temperature"]
+    assert any("97,4" in b for b in out["blocked"])
+    # Without a parameter list nothing is filtered: the guard needs the score.
+    assert len(enforce(_ok(), "medium")["hypotheses"][0]["supporting_signs"]) == 2

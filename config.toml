@@ -42,7 +42,12 @@ model = "qwen2.5:1.5b-instruct"
 # in this file is an OSI one.
 fallback_models = ["qwen2.5:0.5b-instruct"]
 # Hard ceiling. The AI is never allowed to hold up a measurement.
-timeout_seconds = 25.0
+# 40, not 25. The station assesses the worst crew members on its own as soon
+# as they leave routine, so a click is normally answered from that cache in a
+# second; this ceiling only meets a click on somebody not yet assessed, and
+# a jury would rather wait thirty seconds than read a 503. Measured French
+# answers on the demo laptop: 18 to 27 s.
+timeout_seconds = 40.0
 # A cold model load is measured separately from a normal assessment. The
 # board is already live while this longer, one-time warmup runs.
 warmup_timeout_seconds = 90.0

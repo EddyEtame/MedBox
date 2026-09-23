@@ -50,6 +50,9 @@ class OllamaClient:
         self.available = False
         self.warming = False
         self.warmed = False
+        # The last answer ran past its ceiling. Shown on the status, never
+        # announced: the model is still there.
+        self.slow = False
         self.last_error: str | None = None
         self.server_version: str | None = None
         self.last_timing: dict[str, float] = {}
@@ -123,14 +126,20 @@ class OllamaClient:
 
         self._last_warmup_attempt = now
         self.warming = True
+        # The REAL system prompt and the REAL schema, on purpose. Ollama keeps
+        # the evaluated prefix of the last request; a warm-up with a different
+        # prompt loads the weights but leaves the assessment prefix cold, and
+        # on the demo laptop that prefix is 493 French tokens at 14.6 s. Warmed
+        # like this, the first assessment pays only for its own user turn.
         body = {
             "model": self.model,
             "stream": False,
+            "format": ASSESSMENT_SCHEMA,
             "keep_alive": CONFIG.ai.keep_alive,
             "options": {**_options(), "num_predict": 1},
             "messages": [
-                {"role": "system", "content": "Reply with one word only."},
-                {"role": "user", "content": "ready"},
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": "Préchauffage. Aucun membre sélectionné."},
             ],
         }
         try:
@@ -157,8 +166,14 @@ class OllamaClient:
         finally:
             self.warming = False
 
-    async def assess(self, patient: dict, triage: dict, history_note: str = "") -> dict | None:
-        """Ask for hypotheses. Returns None on any failure, never raises."""
+    async def assess(
+        self, patient: dict, triage: dict, history_note: str = "", timeout: float | None = None
+    ) -> dict | None:
+        """Ask for hypotheses. Returns None on any failure, never raises.
+
+        `timeout` overrides the configured ceiling: the station's own prefetch
+        can afford to wait, an operator at the console cannot.
+        """
         # Hand over the reason the band is what it is, not just the number.
         # Under NEWS2 a single parameter scoring 3 escalates on its own, so an
         # aggregate of 3 can be MEDIUM. A model given the bare pair sees a small
@@ -166,24 +181,28 @@ class OllamaClient:
         # number, and writes "reassuring" directly under a MEDIUM band.
         why_band = ""
         if triage.get("single_param_3"):
-            param = triage.get("worst_param") or "one parameter"
+            param = triage.get("worst_param") or "un paramètre"
             why_band = (
-                f"This band was set by the NEWS2 single-parameter rule: {param} alone "
-                f"scored 3, which escalates on its own whatever the aggregate is. Do "
-                f"not describe this aggregate as low or reassuring.\n"
+                f"Cette bande vient de la règle NEWS2 du paramètre unique : {param} seul "
+                f"a obtenu 3, ce qui escalade à lui seul quel que soit le total. Ne "
+                f"décrivez pas ce total comme faible ou rassurant.\n"
             )
+        # In French, like the system prompt. With this turn in English the
+        # model answered in English ("Heat Stroke", "Severe Anemia") under a
+        # French system prompt: the last thing it read wins.
         prompt = (
-            f"Crew member {patient.get('name')} ({patient.get('role')}), id {patient.get('id')}.\n\n"
-            f"Current readings:\n"
-            f"  temperature  {patient.get('temperature')} C\n"
+            f"Membre d’équipage {patient.get('name')} ({patient.get('role')}), "
+            f"identifiant {patient.get('id')}.\n\n"
+            f"Mesures actuelles :\n"
+            f"  température  {patient.get('temperature')} °C\n"
             f"  SpO2         {patient.get('spo2')} %\n"
-            f"  pulse        {patient.get('pulse')} /min\n"
+            f"  pouls        {patient.get('pulse')} /min\n"
             f"  respiration  {patient.get('respiration')} /min\n\n"
-            f"NEWS2 aggregate {triage.get('total')} -> urgency '{triage.get('urgency')}'.\n"
+            f"Total NEWS2 {triage.get('total')} -> priorité « {triage.get('urgency')} ».\n"
             f"{why_band}"
-            f"Parameters actually measured: {', '.join(triage.get('measured', []))}.\n"
+            f"Paramètres réellement mesurés : {', '.join(triage.get('measured', []))}.\n"
             f"{history_note}\n\n"
-            "Give your assessment."
+            "Donnez votre évaluation, en français, sous la forme demandée."
         )
         body = {
             "model": self.model,
@@ -200,18 +219,29 @@ class OllamaClient:
             ],
         }
         try:
-            async with httpx.AsyncClient(timeout=self.timeout, verify=_TLS) as client:
+            async with httpx.AsyncClient(timeout=timeout or self.timeout, verify=_TLS) as client:
                 r = await client.post(f"{self.host}/api/chat", json=body)
                 r.raise_for_status()
                 payload = r.json()
                 content = payload.get("message", {}).get("content", "")
             self.warmed = True
+            self.slow = False
             self.last_timing = {
                 key: round(float(payload.get(key, 0)) / 1_000_000_000, 3)
                 for key in ("total_duration", "load_duration", "prompt_eval_duration", "eval_duration")
                 if payload.get(key) is not None
             }
             return json.loads(content)
+        except httpx.TimeoutException:
+            # Slow is not dead. Flipping `available` here made the chip go
+            # dark and the ship announce « l'assistant s'est arrêté » for a
+            # model that was still answering, every time an answer ran long;
+            # heard on the demo laptop as ai_down at 62 s and ai_back at 63 s.
+            # The probe, five seconds later, is what says whether it is alive.
+            log.warning("AI answer exceeded %.0f s; the model is still up", timeout or self.timeout)
+            self.slow = True
+            self.last_error = f"délai dépassé ({timeout or self.timeout:.0f} s)"
+            return None
         except Exception as exc:
             # Expected during the demo when Ollama is killed on purpose.
             log.warning("AI unavailable, continuing without narration: %s", exc)
@@ -254,13 +284,11 @@ class OllamaClient:
             # tokens measured comfortably below the stage timeout on the demo PC.
             "options": {**_options(), "num_predict": 16},
             "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "Vous êtes MedBox. Répondez uniquement en français, en une "
-                        "courte salutation. Aucun conseil médical."
-                    ),
-                },
+                # The same system prompt as an assessment, so the greeting does
+                # not evict the cached prefix the next assessment depends on:
+                # introduce-then-assess is the demo's own order, and with a
+                # different prompt here that order cost 38 s and a timeout.
+                {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
         }

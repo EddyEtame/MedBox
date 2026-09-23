@@ -77,6 +77,76 @@ SUPPRESSED_SUMMARY = (
     "L’assistant a reformulé la priorité. Cette phrase a été supprimée : la "
     "priorité provient de NEWS2, affiché ci-dessus, et le modèle ne la redéfinit pas."
 )
+# Words that make a hypothesis name a diagnosis. The schema asks for "un
+# profil, jamais un diagnostic" and a 1.5B model ignores that under a French
+# system prompt: it wrote "Heat Stroke", "Severe Anemia" and "Acute
+# respiratory distress syndrome (ARDS)" in bold over four instrument readings.
+# Named conditions are replaced by the pattern the instruments actually show,
+# and the replacement is reported. Findings ("désaturation", "hypoxémie",
+# "tachycardie") are not diseases and pass.
+DISEASE_WORDS = {
+    "infection", "pneumonie", "pneumonia", "sepsis", "septique", "septic",
+    "syndrome", "ards", "sdra", "covid", "grippe", "influenza", "anemie",
+    "anemia", "coup de chaleur", "heat stroke", "heatstroke", "avc", "stroke",
+    "infarctus", "infarction", "embolie", "embolism", "meningite", "meningitis",
+    "bronchite", "bronchitis", "asthme", "asthma", "tuberculose", "tuberculosis",
+    "insuffisance", "failure", "intoxication", "poisoning", "empoisonnement",
+    "choc", "shock", "cancer", "tumeur", "tumor", "diabete", "diabetes",
+    "oedeme", "edema", "pneumothorax", "malaria", "paludisme", "typhoide",
+    "hepatite", "hepatitis", "angine", "otite", "sinusite", "gastro",
+    "appendicite", "appendicitis", "arythmie", "arrhythmia", "hypothermie",
+    "hyperthermie", "maladie", "disease", "pathologie", "diagnostic", "diagnosis",
+}
+
+# What the instruments show, named from the instruments. The pattern is
+# built from which measured sources support the hypothesis, in the order a
+# clinician would say them; it never names a cause.
+PATTERN_FR = {
+    "temperature": "fièvre",
+    "spo2": "désaturation",
+    "respiration": "atteinte respiratoire",
+    "pulse": "tachycardie",
+}
+SUPPRESSED_DIAGNOSIS = (
+    "L’assistant a nommé une maladie ({name}). MedBox n’affiche aucun "
+    "diagnostic : le profil est nommé d’après les instruments."
+)
+
+
+# What a hypothesis name is allowed to be made of: the instruments' own
+# vocabulary. A name with none of these words is the model talking ("a besoin
+# d'une pause", "needs rest") rather than naming a pattern, and the station
+# names the pattern instead.
+PATTERN_WORDS = (
+    "fievre", "febrile", "desaturation", "hypoxemie", "tachycardie",
+    "bradycardie", "tachypnee", "bradypnee", "respiratoire", "thermique",
+    "hypothermie", "hyperthermie", "temperature", "spo2", "saturation",
+    "pouls", "respiration", "effort", "deshydratation", "fever", "hypoxia",
+    "tachycardia", "respiratory", "desaturation",
+)
+
+
+def _looks_like_a_pattern(name: str) -> bool:
+    plain = _plain(name)
+    return any(word in plain for word in PATTERN_WORDS)
+
+
+def _names_a_disease(name: str) -> bool:
+    plain = _plain(name)
+    return any(re.search(rf"(?<![a-z]){re.escape(word)}(?![a-z])", plain) for word in DISEASE_WORDS)
+
+
+def pattern_name(signs: list[dict]) -> str:
+    """"Fièvre avec désaturation", from the measured sources, never a cause."""
+    order = ("temperature", "spo2", "respiration", "pulse")
+    present = [src for src in order if any(s.get("source") == src for s in signs)]
+    if not present:
+        return "Profil déclaré, non mesuré"
+    words = [PATTERN_FR[src] for src in present]
+    head = words[0].capitalize()
+    return head if len(words) == 1 else f"{head} avec {' et '.join(words[1:])}"
+
+
 SUPPRESSED_NOTHING = (
     "L’assistant a affirmé qu’aucune hypothèse n’était étayée alors que ces mêmes "
     "mesures ont relevé la bande NEWS2. MedBox n’affiche pas cette contradiction."
@@ -116,7 +186,22 @@ def _contradicts_the_band(summary: str, urgency: str) -> bool:
     return False
 
 
-def enforce(result: dict, urgency: str = "") -> dict:
+NORMAL_READING_CITED = (
+    "L’assistant a cité une mesure dans sa plage normale ({source} {text}) comme "
+    "signe. Un paramètre que NEWS2 note zéro n’est pas un signe ; il a été retiré."
+)
+
+
+def _normal_sources(params) -> set[str]:
+    """The instruments NEWS2 scored zero, from the triage's own parameter list."""
+    normal = set()
+    for item in params if isinstance(params, list) else []:
+        if isinstance(item, dict) and item.get("score", 0) == 0 and item.get("name"):
+            normal.add(str(item["name"]))
+    return normal
+
+
+def enforce(result: dict, urgency: str = "", params: list | None = None) -> dict:
     """Rebuild the assessment from the schema's own keys, dropping the rest.
 
     Takes whatever the model returned and returns something the renderers can
@@ -128,6 +213,7 @@ def enforce(result: dict, urgency: str = "") -> dict:
     interface shows it. That list is the honest version of a green test suite.
     """
     blocked: list[str] = []
+    normal_sources = _normal_sources(params)
     if not isinstance(result, dict):
         return {
             "ok": False,
@@ -193,6 +279,12 @@ def enforce(result: dict, urgency: str = "") -> dict:
             if source not in SIGN_SOURCES:
                 source = "unattributed"
             text = str(s.get("text") or "").strip()
+            if source in normal_sources:
+                # "SpO2 97,4 %" offered as a sign of desaturation, by a model
+                # copying the shape of its example. The score already said
+                # this reading is normal; a jury can read 97 %.
+                blocked.append(NORMAL_READING_CITED.format(source=source, text=text[:40]))
+                continue
             if text:
                 signs.append({"source": source, "text": text})
         if not signs:
@@ -205,6 +297,15 @@ def enforce(result: dict, urgency: str = "") -> dict:
         name = str(h.get("name") or "").strip()
         if not name:
             continue
+        if _names_a_disease(name):
+            blocked.append(SUPPRESSED_DIAGNOSIS.format(name=name[:60]))
+            name = pattern_name(signs)
+        elif not _looks_like_a_pattern(name):
+            # Not a diagnosis, not a pattern: a sentence. Renamed quietly from
+            # the instruments; nothing clinical was suppressed.
+            name = pattern_name(signs)
+        if any(existing["name"] == name for existing in hypotheses):
+            continue  # the same instruments, named twice, is one hypothesis
         # A named condition in bold, over signs that are all things somebody
         # said, is a diagnosis to everyone who reads it — the field names and
         # the fit wording do not save it. But dropping it is the opposite

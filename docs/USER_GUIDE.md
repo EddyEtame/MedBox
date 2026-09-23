@@ -89,7 +89,7 @@ La zone **Protocoles locaux vérifiés** suit une autre voie, entièrement déte
 
 La dernière ouverture exige en plus une validation récente d’un clinicien, liée à la carte exacte, ainsi qu’un lot simulé actif, non périmé et en quantité suffisante. Le résultat indique la référence et son emplacement simulés, sans dose, sans diagnostic et sans administration automatique. Il s’agit d’une démonstration de garde-fous, pas d’une prescription.
 
-Le modèle configuré est `qwen2.5:1.5b-instruct`, exécuté localement par Ollama. Une requête est abandonnée après 25 secondes ; les mesures ne l’attendent jamais.
+Le modèle configuré est `qwen2.5:1.5b-instruct`, exécuté localement par Ollama. Une requête est abandonnée après 40 secondes ; les mesures ne l’attendent jamais.
 
 ## 7. Ajouter un rapport médical
 
