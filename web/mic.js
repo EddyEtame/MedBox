@@ -508,6 +508,13 @@
       if (!result.ok) throw new Error(result.body.detail || result.body.error || "record failed");
       if (generation !== armGeneration) return;
       var reply = result.body.reply || ("Commande entendue : « " + text + " »");
+      // How the words were understood, when it was not the allow-list: the
+      // model within the station's own actions, or a phrase learned before.
+      var how = result.body.resolved_by;
+      if (how === "model" || how === "learned") {
+        reply += " (compris comme : " + (result.body.understood_as || "") +
+          (how === "learned" ? ", formulation déjà apprise" : ", formulation apprise à l’instant") + ")";
+      }
       transition("LISTENING", reply);
       if (onReported) onReported(result.body.reported || []);
       root.dispatchEvent(new CustomEvent("medbox-command", { detail: result.body }));

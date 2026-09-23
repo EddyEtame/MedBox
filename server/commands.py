@@ -16,6 +16,10 @@ from dataclasses import dataclass
 class Command:
     kind: str
     reported_text: str | None = None
+    # False for the catch-all below: words the allow-list did not recognise.
+    # Those are the ones the station is allowed to try to understand
+    # (server/learning.py, server/ai/intent.py) before filing them.
+    explicit: bool = True
 
 
 def normalize(text: str) -> str:
@@ -68,4 +72,4 @@ def classify(text: str) -> Command:
     # Natural statements after the wake word are patient-reported context,
     # never measurements.  The caller requires a selected patient before it
     # stores this fallback.
-    return Command("report", reported_text=raw)
+    return Command("report", reported_text=raw, explicit=False)

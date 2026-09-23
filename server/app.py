@@ -29,7 +29,9 @@ from .ai.ollama import CLIENT
 from .ai.validate import enforce
 from .bus import BUS
 from .config import CONFIG, ROOT
-from .commands import classify as classify_command
+from .commands import Command, classify as classify_command
+from .learning import INTENTS, INTENT_LABELS_FR, Learning
+from .ai.intent import classify as classify_intent
 from .db import Database
 from .quarantine import QuarantineRegistry
 from .protocols import ProtocolDataError, ProtocolEngine
@@ -108,6 +110,9 @@ class MedBox:
         # log is handed the recorder rather than importing the database, so
         # nothing in the measurement path depends on it.
         self.symptoms = SymptomLog(on_record=self.db.record_event)
+        # What the station has learned from every request: a phrase book and
+        # a journal, in the same database, so it survives a restart.
+        self.learning = Learning(self.db.conn)
         # Decides what the station says out loud. Fast track only: every line
         # comes from what triage.py and quarantine.py computed, never from the
         # assistant. See server/speech.py.
@@ -119,6 +124,14 @@ class MedBox:
         self._task: asyncio.Task | None = None
         self._persist_every = CONFIG.server.board_hz * 2  # write to disk ~2s
         self._tick = 0
+        # Assessments the station asked for on its own, keyed by crew member,
+        # so that when the operator clicks, the answer is already there. Filled
+        # by prefetch_ai(); read by the assess route; each entry carries the
+        # NEWS2 total it was written against and the moment it was written.
+        self.assessments: dict[str, dict] = {}
+        self._prefetch_wanted: list[str] = []
+        self._assessing: set[str] = set()
+        self._ai_lock = asyncio.Lock()
 
     # ---- scenario control -------------------------------------------------
     def load_scenario(self, name: str) -> scenarios.Scenario:
@@ -276,10 +289,11 @@ class MedBox:
                     reading.patient_id,
                 )
                 BUS.publish({"type": "quarantine", "change": change.to_dict()})
-                if change.confirmed:
-                    say.extend(self.announcer.on_quarantine(
-                        change.to_dict(), self.quarantine.sealed_zones()
-                    ))
+                # Candidates too: "isolement proposé" is the line the whole
+                # confirm-by-a-person design exists for.
+                say.extend(self.announcer.on_quarantine(
+                    change.to_dict(), self.quarantine.sealed_zones()
+                ))
             if self._tick % self._persist_every == 0:
                 self.db.record_reading(
                     reading.patient_id,
@@ -301,6 +315,8 @@ class MedBox:
             self.db.commit()
 
         rows = self._board()
+        self._note_prefetch_targets(rows)
+        say.extend(self.announcer.drain())
         say.extend(self.announcer.on_board(rows))
         say.extend(self.announcer.on_ai(CLIENT.available, CLIENT.stand_in))
         BUS.publish(
@@ -336,6 +352,88 @@ class MedBox:
             }
         )
 
+    def _note_prefetch_targets(self, rows: list[dict]) -> None:
+        """Who deserves an answer before anybody asks: the board's worst first.
+
+        A crew member at medium or high whose cached assessment is missing or
+        was written against a different NEWS2 total is queued. The queue is
+        rebuilt every frame from the board's own order, so it always reflects
+        the current ranking and never grows.
+        """
+        wanted = []
+        for row in rows:
+            triage = row["triage"]
+            if triage["urgency"] not in ("medium", "high"):
+                continue
+            pid = row["patient"]["id"]
+            held = self.assessments.get(pid)
+            if held is not None and held.get("news2_at_assessment") == triage["total"]:
+                continue
+            if held is not None and time.time() - held.get("at", 0) < 20:
+                continue  # let a fresh answer stand while the score settles
+            wanted.append(pid)
+        self._prefetch_wanted = wanted
+
+    async def assess_now(self, patient_id: str, timeout: float | None = None) -> dict | None:
+        """One assessment, enforced and stamped: the same for a click and a prefetch.
+
+        Serialised: two questions at once make each one twice as slow on a
+        laptop CPU, and the one the operator is waiting for would be the
+        second.
+        """
+        entry = self.latest.get(patient_id)
+        if entry is None:
+            return None
+        triage = entry["triage"]
+        self._assessing.add(patient_id)
+        try:
+            async with self._ai_lock:
+                result = await CLIENT.assess(
+                    entry["patient"], triage, self.symptoms.prompt_note(patient_id),
+                    timeout=timeout,
+                )
+        finally:
+            self._assessing.discard(patient_id)
+        if result is None:
+            return None
+        safe = enforce(result, triage.get("urgency", ""), triage.get("params"))
+        if not safe["ok"]:
+            return {"ok": False, "blocked": safe["blocked"]}
+        stamped = {
+            **safe,
+            "patient_id": patient_id,
+            "news2_at_assessment": triage.get("total"),
+            "urgency_at_assessment": triage.get("urgency"),
+            "at": time.time(),
+            "model": CLIENT.model,
+            "stand_in": CLIENT.stand_in,
+        }
+        self.assessments[patient_id] = stamped
+        return stamped
+
+    async def prefetch_once(self) -> str | None:
+        """Assess the first wanted crew member, if the assistant is free. Returns who."""
+        if not CLIENT.available or CLIENT.warming or self._ai_lock.locked():
+            return None
+        for pid in list(self._prefetch_wanted):
+            if pid in self._assessing:
+                continue
+            # Nobody is waiting on this one, so it may take as long as a cold
+            # load: on the demo laptop a French answer runs 18 to 25 s and the
+            # operator's ceiling is 25.
+            await self.assess_now(pid, timeout=CONFIG.ai.warmup_timeout_seconds)
+            return pid
+        return None
+
+    async def prefetch_ai(self) -> None:
+        """Slow track, on its own initiative. It can die; the board does not care."""
+        while True:
+            try:
+                await self.prefetch_once()
+            except Exception:  # never let a bad answer end the prefetcher
+                log.exception("prefetch failed; carrying on")
+            await asyncio.sleep(1.0)
+
     async def watch_ai(self) -> None:
         """Poll Ollama so the screen shows its true state within a few seconds."""
         while True:
@@ -364,15 +462,16 @@ async def lifespan(app: FastAPI):
     STATION.source.start()
     loop_task = asyncio.create_task(STATION.loop())
     ai_task = asyncio.create_task(STATION.watch_ai())
+    prefetch_task = asyncio.create_task(STATION.prefetch_ai())
     log.info("MedBox %s ready on http://%s:%s", __version__, CONFIG.server.host, CONFIG.server.port)
     try:
         yield
     finally:
-        for t in (loop_task, ai_task):
+        for t in (loop_task, ai_task, prefetch_task):
             t.cancel()
         # Bounded. Stopping the station must not depend on every task agreeing
         # to stop; see watch_ai for the one that once did not.
-        await asyncio.wait((loop_task, ai_task), timeout=3.0)
+        await asyncio.wait((loop_task, ai_task, prefetch_task), timeout=3.0)
         STATION.source.stop()
         STATION.db.close()
 
@@ -401,6 +500,7 @@ async def status() -> dict:
             "timing_seconds": CLIENT.last_timing,
             "error": CLIENT.last_error,
             "stand_in": CLIENT.stand_in,
+            "slow": getattr(CLIENT, "slow", False),
         },
         "ears": {
             "available": TRANSCRIBER.available,
@@ -409,7 +509,9 @@ async def status() -> dict:
         },
         "scenario": STATION.scenario.name if STATION.scenario else None,
         "scenarios": scenarios.available(),
+        "scenario_catalog": scenarios.catalog(),
         "screens_connected": BUS.subscriber_count,
+        "assessments_ready": sorted(STATION.assessments),
         "simulation": {
             "label": simulation["label_fr"],
             "clock": simulation["clock"],
@@ -668,6 +770,7 @@ async def confirm_quarantine(patient_id: str) -> dict:
     detail = assignment.to_dict()
     STATION.db.record_event("quarantine_confirmed", json.dumps(detail), patient_id)
     BUS.publish({"type": "quarantine", "change": detail})
+    STATION.announcer.later(detail, STATION.quarantine.sealed_zones())
     return {"assignment": detail, "quarantine": STATION.quarantine.to_dict()}
 
 
@@ -684,6 +787,7 @@ async def release_quarantine(patient_id: str, body: dict) -> dict:
     detail = released.to_dict()
     STATION.db.record_event("quarantine_released", json.dumps(detail), patient_id)
     BUS.publish({"type": "quarantine", "change": detail})
+    STATION.announcer.later({**detail, "reason": "released"}, STATION.quarantine.sealed_zones())
     return {"released": detail, "quarantine": STATION.quarantine.to_dict()}
 
 
@@ -893,6 +997,43 @@ async def assistant_command(body: dict) -> dict:
             raise HTTPException(400, "La confiance vocale doit être comprise entre 0 et 1")
 
     command = classify_command(text)
+    command, resolved_by, learned_now = await _resolve(command, text, patient_id)
+    result = _execute(command, text, patient_id, confidence)
+    STATION.learning.record(text, command.kind, resolved_by, patient_id)
+    result["resolved_by"] = resolved_by
+    result["learned"] = learned_now
+    result["understood_as"] = INTENT_LABELS_FR.get(command.kind, command.kind)
+    return result
+
+
+async def _resolve(command: Command, text: str, patient_id: str | None) -> tuple[Command, str, bool]:
+    """Words the allow-list did not know: the phrase book first, then the model.
+
+    Both can only name one of the router's own actions. Whatever the model
+    decides once is written to the phrase book, so the same words next time
+    are resolved here with no model at all. An explicit declaration
+    (« déclare : ... ») is never reinterpreted.
+    """
+    if command.explicit:
+        return command, "allowlist", False
+    known = STATION.learning.lookup(text)
+    if known:
+        return _as_command(known, text), "learned", False
+    guess = await classify_intent(text, patient_id is not None)
+    if guess and guess != "report":
+        learned = STATION.learning.learn(text, guess, "model")
+        return _as_command(guess, text), "model", learned
+    return command, "none", False
+
+
+def _as_command(intent: str, text: str) -> Command:
+    if intent == "report":
+        return Command("report", reported_text=text)
+    return Command(intent)
+
+
+def _execute(command: Command, text: str, patient_id: str | None, confidence) -> dict:
+    """The deterministic actions, unchanged. One entry per intent in INTENTS."""
     board = STATION._board()
     ids = [row["patient"]["id"] for row in board]
 
@@ -996,6 +1137,33 @@ async def assistant_command(body: dict) -> dict:
     return {"action": "none", "reply": "Commande non reconnue. Dites « MedBox, aide »."}
 
 
+@app.get("/api/assistant/learned")
+async def assistant_learned() -> dict:
+    """What the station has learned so far: the jury can read it on the Help panel."""
+    return {
+        "phrases": STATION.learning.phrases(),
+        "recent": STATION.learning.recent(20),
+        "stats": STATION.learning.stats(),
+        "intents": {name: INTENT_LABELS_FR[name] for name in INTENTS},
+    }
+
+
+@app.post("/api/assistant/feedback")
+async def assistant_feedback(body: dict) -> dict:
+    """An operator says what a phrase meant. That outranks anything the model learned."""
+    text = str(body.get("text") or "").strip()
+    intent = str(body.get("intent") or "").strip()
+    if not text or len(text) > 500:
+        raise HTTPException(400, "Une phrase courte est requise")
+    if intent == "forget":
+        return {"forgotten": STATION.learning.forget(text)}
+    if intent not in INTENTS:
+        raise HTTPException(400, "Action inconnue de la station")
+    STATION.learning.learn(text, intent, "operator")
+    STATION.db.record_event("phrase_taught", json.dumps({"text": text[:200], "intent": intent}), None)
+    return {"learned": True, "intent": intent, "label_fr": INTENT_LABELS_FR[intent]}
+
+
 @app.post("/api/patient/{patient_id}/protocol")
 async def evaluate_local_protocol(patient_id: str, body: dict) -> JSONResponse:
     """Match a reviewed local card; the language model is never consulted."""
@@ -1050,15 +1218,27 @@ async def evaluate_local_protocol(patient_id: str, body: dict) -> JSONResponse:
 
 
 @app.post("/api/assess/{patient_id}")
-async def ai_assess(patient_id: str) -> JSONResponse:
-    """Slow track. Returns 503 when the AI is down — the board is unaffected."""
+async def ai_assess(patient_id: str, fresh: bool = False) -> JSONResponse:
+    """Slow track. Returns 503 when the AI is down — the board is unaffected.
+
+    The answer is usually already there. The station assesses the worst crew
+    members on its own as soon as they leave routine (prefetch_ai), so a
+    click returns the held answer at once, marked cached with its age, when
+    it was written against the NEWS2 total on screen now. `fresh=1` asks
+    again regardless, which is what the button does the second time.
+    """
     entry = STATION.latest.get(patient_id)
     if entry is None:
         raise HTTPException(404, f"No crew member {patient_id}")
     triage = entry["triage"]
-    result = await CLIENT.assess(
-        entry["patient"], triage, STATION.symptoms.prompt_note(patient_id)
-    )
+    held = STATION.assessments.get(patient_id)
+    if (not fresh and held is not None and held.get("ok")
+            and held.get("news2_at_assessment") == triage.get("total")
+            and time.time() - held.get("at", 0) < 180):
+        return JSONResponse(content={
+            **held, "cached": True, "age_seconds": round(time.time() - held["at"], 1),
+        })
+    result = await STATION.assess_now(patient_id)
     if result is None:
         return JSONResponse(
             status_code=503,
@@ -1072,12 +1252,9 @@ async def ai_assess(patient_id: str) -> JSONResponse:
             },
         )
 
-    # Never splat the model's dict into the response. Anything it invented that
-    # the schema does not name — a `diagnosis` key, an `escalate` verdict —
-    # used to travel straight through to the API surface, hidden only by the
-    # fact that no renderer happened to look for it. enforce() rebuilds the
-    # answer from the schema's own keys and reports what it took out.
-    safe = enforce(result, triage.get("urgency", ""))
+    # assess_now() already ran enforce(): the answer was rebuilt from the
+    # schema's own keys, and anything the model invented was reported.
+    safe = result
     if not safe["ok"]:
         return JSONResponse(
             status_code=503,
@@ -1091,23 +1268,9 @@ async def ai_assess(patient_id: str) -> JSONResponse:
             },
         )
 
-    return JSONResponse(content={
-        **safe,
-        # Stamped by the server, from what the server knows. An assessment that
-        # cannot say which crew member, which score and which moment it was
-        # written against cannot be detected as stale by a panel whose band
-        # updates ten times a second — and the whole demo is vitals
-        # deteriorating while you watch.
-        "patient_id": patient_id,
-        "news2_at_assessment": triage.get("total"),
-        "urgency_at_assessment": triage.get("urgency"),
-        "at": time.time(),
-        "model": CLIENT.model,
-        # From the probe, never from the payload. The flag that tells a jury
-        # "this is not a language model" must not be emitted by the thing it
-        # is labelling.
-        "stand_in": CLIENT.stand_in,
-    })
+    # Stamped by assess_now() from what the server knows: which crew member,
+    # which score and which moment, so the panel can detect a stale answer.
+    return JSONResponse(content={**safe, "cached": False, "age_seconds": 0.0})
 
 
 @app.get("/api/assistant/help")
