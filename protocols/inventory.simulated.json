@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "mode": "SIMULATION_UNIQUEMENT",
+  "simulated": true,
+  "as_of": "2026-09-23T12:45:00Z",
+  "stale_after_seconds": 604800,
+  "valid_until": "2026-09-30T12:45:00Z",
+  "metadata": {
+    "title": "Inventaire exact de démonstration MedBox",
+    "notice_fr": "Stock entièrement simulé. Il ne prouve ni la présence physique, ni l'authenticité, ni l'autorisation d'administrer un produit.",
+    "refresh_rule_fr": "Une copie manquante, future, vieille de plus de sept jours ou au-delà de sa date limite bloque toutes les options."
+  },
+  "items": [
+    {
+      "id": "MED-PARACETAMOL-DEMO-01",
+      "simulated": true,
+      "active": true,
+      "name_fr": "Paracétamol — référence simulée",
+      "sku": "SIM-MED-PARA-001",
+      "lot": "SIM-LOT-260923-A",
+      "quantity": 24,
+      "unit": "unité simulée",
+      "expires_on": "2028-06-30",
+      "location_label": "Infirmerie simulée · armoire M-01"
+    },
+    {
+      "id": "SRO-DEMO-01",
+      "simulated": true,
+      "active": true,
+      "name_fr": "Solution de réhydratation orale — référence simulée",
+      "sku": "SIM-SRO-001",
+      "lot": "SIM-LOT-260923-B",
+      "quantity": 10,
+      "unit": "sachet simulé",
+      "expires_on": "2028-06-30",
+      "location_label": "Infirmerie simulée · armoire H-02"
+    }
+  ]
+}

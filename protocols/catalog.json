@@ -1,0 +1,314 @@
+{
+  "schema_version": 1,
+  "language": "fr",
+  "mode": "SIMULATION_PEDAGOGIQUE_NON_CLINIQUE",
+  "human_validation_max_age_seconds": 300,
+  "metadata": {
+    "title": "Cartes de protocole déterministes MedBox",
+    "notice_fr": "Ces cartes structurent une démonstration. Elles ne posent pas de diagnostic, ne prescrivent pas et n'autorisent aucune administration automatique.",
+    "integrity_notice_fr": "La signature SHA-256 contrôle l'intégrité du fichier; elle ne remplace ni une signature clinique qualifiée ni la gouvernance médicale."
+  },
+  "sources": [
+    {
+      "id": "WHO-AI-PRINCIPLES-2021",
+      "title": "WHO issues first global report on AI in health and six guiding principles for its design and use",
+      "url": "https://www.who.int/news/item/28-06-2021-who-issues-first-global-report-on-ai-in-health-and-six-guiding-principles-for-its-design-and-use"
+    },
+    {
+      "id": "WHO-LMM-GUIDANCE-2024",
+      "title": "Ethics and governance of artificial intelligence for health: guidance on large multi-modal models",
+      "url": "https://www.who.int/publications/i/item/9789240084759/"
+    },
+    {
+      "id": "WHO-AI-REGULATORY-CONSIDERATIONS",
+      "title": "Regulatory considerations on artificial intelligence for health",
+      "url": "https://iris.who.int/server/api/core/bitstreams/ad62580f-540f-4e36-b957-e7f2946ae1fb/content"
+    },
+    {
+      "id": "AMELI-RHUME",
+      "title": "Rhinopharyngite de l'adulte : que faire et quand consulter ?",
+      "url": "https://www.ameli.fr/assure/sante/themes/rhinopharyngite-adulte/que-faire-quand-consulter"
+    },
+    {
+      "id": "ANSM-PSEUDOEPHEDRINE",
+      "title": "En cas de rhume, évitez les médicaments vasoconstricteurs par voie orale",
+      "url": "https://ansm.sante.fr/actualites/en-cas-de-rhume-evitez-les-medicaments-vasoconstricteurs-par-voie-orale"
+    },
+    {
+      "id": "ANSM-PARACETAMOL",
+      "title": "Le paracétamol",
+      "url": "https://ansm.sante.fr/dossiers-thematiques/medicaments-de-la-douleur/le-paracetamol"
+    },
+    {
+      "id": "ANSM-AINS",
+      "title": "Les anti-inflammatoires non stéroïdiens (AINS)",
+      "url": "https://ansm.sante.fr/dossiers-thematiques/les-anti-inflammatoires-non-steroidiens-ains-ibuprofene-ketoprofene-acide-acetylsalicylique"
+    },
+    {
+      "id": "WHO-INFLUENZA-2024",
+      "title": "Clinical practice guidelines for influenza",
+      "url": "https://www.who.int/publications/i/item/9789240097759"
+    },
+    {
+      "id": "AMELI-TOUX",
+      "title": "Toux : diagnostic et traitement",
+      "url": "https://www.ameli.fr/assure/sante/themes/toux/diagnostic-traitement"
+    },
+    {
+      "id": "WHO-MEDICATION-SAFETY-5-MOMENTS",
+      "title": "5 moments for medication safety",
+      "url": "https://www.who.int/publications/i/item/WHO-HIS-SDS-2019.5"
+    }
+  ],
+  "cards": [
+    {
+      "id": "AUDIO-TOUX-01",
+      "title_fr": "Événement audio compatible avec une toux ou un éternuement",
+      "classification_fr": "Signal à confirmer par une personne",
+      "status": "active",
+      "priority": 50,
+      "triggers": {
+        "keywords_any": ["toux", "tousse", "cough", "atchoum", "achoo", "éternuement"],
+        "conditions_any": []
+      },
+      "actions_fr": [
+        "Demander à la personne de confirmer le symptôme entendu.",
+        "Vérifier l'identité puis mesurer les constantes disponibles.",
+        "Transmettre au responsable médical si le signal se répète ou si l'état se dégrade."
+      ],
+      "red_flags_fr": [
+        "Difficulté respiratoire, altération de la conscience ou aggravation rapide.",
+        "Le son seul ne permet pas d'identifier une maladie."
+      ],
+      "escalation": "confirmation_humaine",
+      "medication_candidates": [],
+      "source_ids": ["AMELI-TOUX", "WHO-AI-PRINCIPLES-2021", "WHO-LMM-GUIDANCE-2024"],
+      "signature": {
+        "algorithm": "sha256",
+        "digest": "7560c1666d4477a1e3cac106e8e49ac73a06862d3eca2387bec91657ab42c011",
+        "signed_by": "mainteneur-protocole-medbox",
+        "signed_at": "2026-09-23T12:45:00Z",
+        "scope": "simulation_pedagogique_non_clinique"
+      }
+    },
+    {
+      "id": "RHUME-SIMPLE-01",
+      "title_fr": "Tableau déclaré compatible avec un rhume simple",
+      "classification_fr": "Orientation symptomatique à confirmer",
+      "status": "active",
+      "priority": 40,
+      "triggers": {
+        "keywords_any": ["rhume", "nez bouché", "nez qui coule", "rhinopharyngite", "common cold"],
+        "conditions_any": []
+      },
+      "actions_fr": [
+        "Confirmer les symptômes, leur durée et l'absence de signe d'alerte.",
+        "Mesurer les constantes disponibles et poursuivre la surveillance.",
+        "Appliquer les mesures d'hygiène et la politique locale de prévention des infections."
+      ],
+      "red_flags_fr": [
+        "Difficulté respiratoire, dégradation générale ou symptôme intense ou prolongé.",
+        "Un avis médical humain reste nécessaire en cas de doute."
+      ],
+      "escalation": "evaluation_humaine",
+      "blocked_options_fr": [
+        "Aucun vasoconstricteur oral à base de pseudoéphédrine n'est proposé par MedBox."
+      ],
+      "medication_candidates": [],
+      "source_ids": ["AMELI-RHUME", "ANSM-PSEUDOEPHEDRINE", "WHO-MEDICATION-SAFETY-5-MOMENTS"],
+      "signature": {
+        "algorithm": "sha256",
+        "digest": "873b9481a3abc9d4140f3a84f65f6da26667ad0a8715a2ae72524f6a6bd2ec69",
+        "signed_by": "mainteneur-protocole-medbox",
+        "signed_at": "2026-09-23T12:45:00Z",
+        "scope": "simulation_pedagogique_non_clinique"
+      }
+    },
+    {
+      "id": "PSEUDO-GRIPPE-01",
+      "title_fr": "Signes pseudo-grippaux déclarés",
+      "classification_fr": "Syndrome déclaré à évaluer, sans diagnostic automatisé",
+      "status": "active",
+      "priority": 60,
+      "triggers": {
+        "keywords_any": ["grippe", "pseudo grippal", "courbatures", "frissons", "influenza"],
+        "conditions_any": []
+      },
+      "actions_fr": [
+        "Faire confirmer les symptômes et leur début par la personne.",
+        "Mesurer les constantes et rechercher les signes d'alerte selon le protocole local.",
+        "Soumettre toute option au responsable médical; MedBox n'administre rien."
+      ],
+      "red_flags_fr": [
+        "Difficulté respiratoire, altération de la conscience ou aggravation rapide.",
+        "Toute personne fragile ou situation atypique nécessite une évaluation humaine."
+      ],
+      "escalation": "evaluation_humaine_prioritaire",
+      "blocked_options_fr": [
+        "Aucun vasoconstricteur oral à base de pseudoéphédrine n'est proposé.",
+        "Les AINS ne sont jamais proposés automatiquement."
+      ],
+      "medication_candidates": [
+        {
+          "inventory_item_id": "MED-PARACETAMOL-DEMO-01",
+          "minimum_quantity": 1,
+          "requires_evidence_any": ["grippe", "pseudo grippal", "courbatures", "frissons", "influenza"],
+          "required_screening": [
+            "patient_identity_confirmed",
+            "age_years",
+            "allergies_reviewed",
+            "allergic_item_ids",
+            "current_medications_reviewed",
+            "contraindications_reviewed",
+            "contraindicated_item_ids",
+            "red_flags_reviewed",
+            "red_flags",
+            "pregnancy_status"
+          ]
+        }
+      ],
+      "source_ids": ["WHO-INFLUENZA-2024", "ANSM-PARACETAMOL", "ANSM-AINS", "WHO-MEDICATION-SAFETY-5-MOMENTS"],
+      "signature": {
+        "algorithm": "sha256",
+        "digest": "aee0ecd64cfa8d804640ece86d8ce4490b5f33a284e8b8a9d0f00372c000f53a",
+        "signed_by": "mainteneur-protocole-medbox",
+        "signed_at": "2026-09-23T12:45:00Z",
+        "scope": "simulation_pedagogique_non_clinique"
+      }
+    },
+    {
+      "id": "DESHYDRATATION-01",
+      "title_fr": "Signes déclarés compatibles avec une déshydratation",
+      "classification_fr": "Risque à confirmer par une évaluation humaine",
+      "status": "active",
+      "priority": 70,
+      "triggers": {
+        "keywords_any": ["déshydratation", "déshydraté", "soif intense", "bouche sèche", "dehydration"],
+        "conditions_any": []
+      },
+      "actions_fr": [
+        "Évaluer rapidement l'état général et la capacité à boire.",
+        "Mesurer les constantes disponibles et rechercher une cause ou un signe d'alerte.",
+        "Faire valider humainement toute option issue du stock simulé."
+      ],
+      "red_flags_fr": [
+        "Confusion, malaise, incapacité à boire ou aggravation rapide.",
+        "Une déshydratation suspectée ne doit pas être gérée par l'assistant seul."
+      ],
+      "escalation": "evaluation_humaine_prioritaire",
+      "medication_candidates": [
+        {
+          "inventory_item_id": "SRO-DEMO-01",
+          "minimum_quantity": 1,
+          "requires_evidence_any": ["déshydratation", "déshydraté", "soif intense", "bouche sèche", "dehydration"],
+          "required_screening": [
+            "patient_identity_confirmed",
+            "age_years",
+            "allergies_reviewed",
+            "allergic_item_ids",
+            "current_medications_reviewed",
+            "contraindications_reviewed",
+            "contraindicated_item_ids",
+            "red_flags_reviewed",
+            "red_flags",
+            "pregnancy_status"
+          ]
+        }
+      ],
+      "source_ids": ["WHO-MEDICATION-SAFETY-5-MOMENTS", "WHO-AI-REGULATORY-CONSIDERATIONS"],
+      "signature": {
+        "algorithm": "sha256",
+        "digest": "61037bd43763c8f4aceb82aa2b5875b1834081b518f52d18a727f2632fb7783e",
+        "signed_by": "mainteneur-protocole-medbox",
+        "signed_at": "2026-09-23T12:45:00Z",
+        "scope": "simulation_pedagogique_non_clinique"
+      }
+    },
+    {
+      "id": "ALERTE-RESP-01",
+      "title_fr": "Alerte respiratoire",
+      "classification_fr": "Signal prioritaire nécessitant une réponse humaine immédiate",
+      "status": "active",
+      "priority": 100,
+      "triggers": {
+        "keywords_any": ["je ne peux pas respirer", "difficulté à respirer", "essoufflement sévère", "can't breathe", "cannot breathe"],
+        "conditions_any": [
+          {"field": "vitals.spo2", "operator": "lte", "value": 91, "label_fr": "SpO2 mesurée ≤ 91 %"},
+          {"field": "vitals.respiration", "operator": "gte", "value": 25, "label_fr": "fréquence respiratoire mesurée ≥ 25/min"}
+        ]
+      },
+      "actions_fr": [
+        "Alerter immédiatement le responsable médical et maintenir une surveillance continue.",
+        "Faire confirmer la mesure et appliquer le protocole d'urgence humain local.",
+        "Ne pas attendre une réponse du modèle de langage."
+      ],
+      "red_flags_fr": [
+        "Cette carte constitue elle-même une alerte prioritaire.",
+        "L'assistant ne remplace pas la chaîne d'urgence."
+      ],
+      "escalation": "urgence_humaine_immediate",
+      "medication_candidates": [],
+      "source_ids": ["AMELI-TOUX", "WHO-AI-REGULATORY-CONSIDERATIONS", "WHO-LMM-GUIDANCE-2024"],
+      "signature": {
+        "algorithm": "sha256",
+        "digest": "6bedfd8a02882aba8531f73c067ab8d84388a9abdb869f9271dbd319b797f856",
+        "signed_by": "mainteneur-protocole-medbox",
+        "signed_at": "2026-09-23T12:45:00Z",
+        "scope": "simulation_pedagogique_non_clinique"
+      }
+    },
+    {
+      "id": "FIEVRE-DOULEUR-01",
+      "title_fr": "Fièvre ou douleur déclarée ou mesurée",
+      "classification_fr": "Symptôme à évaluer, sans prescription automatisée",
+      "status": "active",
+      "priority": 55,
+      "triggers": {
+        "keywords_any": ["fièvre", "douleur", "mal de tête", "fever", "i have pain", "in pain"],
+        "conditions_any": [
+          {"field": "vitals.temperature", "operator": "gt", "value": 38.0, "label_fr": "température mesurée > 38 °C"}
+        ]
+      },
+      "actions_fr": [
+        "Confirmer la mesure, le symptôme, son intensité et sa durée.",
+        "Rechercher les signes d'alerte et les contre-indications avec un humain.",
+        "Soumettre toute option au responsable médical; MedBox n'administre rien."
+      ],
+      "red_flags_fr": [
+        "Altération de la conscience, difficulté respiratoire, douleur intense ou aggravation rapide.",
+        "Un symptôme persistant ou atypique nécessite une évaluation médicale humaine."
+      ],
+      "escalation": "evaluation_humaine",
+      "blocked_options_fr": [
+        "Les AINS ne sont jamais proposés automatiquement."
+      ],
+      "medication_candidates": [
+        {
+          "inventory_item_id": "MED-PARACETAMOL-DEMO-01",
+          "minimum_quantity": 1,
+          "requires_evidence_any": [],
+          "required_screening": [
+            "patient_identity_confirmed",
+            "age_years",
+            "allergies_reviewed",
+            "allergic_item_ids",
+            "current_medications_reviewed",
+            "contraindications_reviewed",
+            "contraindicated_item_ids",
+            "red_flags_reviewed",
+            "red_flags",
+            "pregnancy_status"
+          ]
+        }
+      ],
+      "source_ids": ["ANSM-PARACETAMOL", "ANSM-AINS", "WHO-MEDICATION-SAFETY-5-MOMENTS"],
+      "signature": {
+        "algorithm": "sha256",
+        "digest": "57e93fa065a5692a82e06164d7192faf799434d8f61a1b4132a97ab0b4f9b236",
+        "signed_by": "mainteneur-protocole-medbox",
+        "signed_at": "2026-09-23T12:45:00Z",
+        "scope": "simulation_pedagogique_non_clinique"
+      }
+    }
+  ]
+}
