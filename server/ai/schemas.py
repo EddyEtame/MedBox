@@ -40,7 +40,7 @@ worth more than any change of model.
 # them, or admit that no instrument recorded it. This is an enum rather than a
 # sentence in the prompt because a 3B model will follow a grammar it cannot
 # violate long after it has forgotten a rule it was asked to obey.
-SIGN_SOURCES = ["temperature", "spo2", "pulse", "respiration", "reported_by_crew_member"]
+SIGN_SOURCES = ["temperature", "spo2", "pulse", "respiration", "systolic_bp", "reported_by_crew_member"]
 
 # Not a belief scale. "High confidence" beside a bolded condition name is a
 # diagnosis to every human who reads it, whatever the field is called, and a 3B
@@ -86,7 +86,7 @@ ASSESSMENT_SCHEMA = {
         "insufficient_data": {
             "type": "boolean",
             "description": (
-                "Vrai lorsque les quatre paramètres mesurés n’étayent aucune "
+                "Vrai lorsque les paramètres mesurés n’étayent aucune "
                 "hypothèse. Dans ce cas, renvoyez une liste hypotheses vide et "
                 "placez les informations manquantes dans questions_for_patient."
             ),
@@ -162,7 +162,7 @@ ASSESSMENT_SCHEMA = {
             "maxItems": MAX_QUESTIONS,
             "description": (
                 "Questions brèves à poser ensuite, rédigées en français. MedBox "
-                "mesure quatre paramètres ; les réponses restent des déclarations."
+                "mesure cinq paramètres ; les réponses restent des déclarations."
             ),
             "items": {
                 "type": "string",
@@ -238,7 +238,7 @@ pas, ne la reformulez pas et ne qualifiez aucun total de faible ou rassurant.
 - Vous ne nommez jamais un médicament, une dose, une voie d’administration ou un \
 traitement. Si une prise en charge est nécessaire, dites seulement de consulter la \
 fiche de protocole imprimée et validée.
-- Si les quatre paramètres mesurés n’étayent aucune hypothèse, définissez \
+- Si les paramètres mesurés n’étayent aucune hypothèse, définissez \
 insufficient_data à true et renvoyez une liste hypotheses vide. Reconnaître le \
 manque de données vaut mieux qu’inventer un profil.
 - Toute parole rapportée par le membre d’équipage est une déclaration à vérifier, \

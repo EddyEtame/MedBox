@@ -20,12 +20,14 @@ from typing import Mapping
 
 from .base import Reading
 
-VITALS = ("temperature", "spo2", "pulse", "respiration")
+# The fifth instrument is a cuff: systolic pressure in mmHg. It completes the
+# five NEWS2 parameters a device can measure; the other two are observed.
+VITALS = ("temperature", "spo2", "pulse", "respiration", "systolic_bp")
 
 # Kept as a public compatibility constant. New patients receive a stable,
 # patient-specific baseline inside the NEWS2 zero-score bands rather than this
 # single shared midpoint.
-BASELINE = {"temperature": 36.8, "spo2": 98.0, "pulse": 72.0, "respiration": 15.0}
+BASELINE = {"temperature": 36.8, "spo2": 98.0, "pulse": 72.0, "respiration": 15.0, "systolic_bp": 118.0}
 
 # Conservative healthy demo ranges inside the NEWS2 zero-score ranges. These
 # are not universal population reference intervals.
@@ -35,6 +37,10 @@ HEALTHY_BASELINE_RANGES = {
     "spo2": (97.0, 99.0),
     "pulse": (60.0, 78.0),
     "respiration": (12.0, 17.0),
+    # 114 to 132, not 106: NEWS2 scores 101-110 as 1, and a healthy crew
+    # member with a baseline in that band, plus a little sensor noise, was
+    # scored LOW at rest. The zero band starts at 111; this stays inside it.
+    "systolic_bp": (114.0, 132.0),
 }
 
 # Wobble is small enough that a healthy baseline cannot become an alarm merely
@@ -44,6 +50,7 @@ NOISE_SCALE = {
     "spo2": 0.28,
     "pulse": 1.25,
     "respiration": 0.38,
+    "systolic_bp": 1.6,
 }
 
 # Each signal may react on its own schedule. This avoids the visibly artificial
@@ -53,12 +60,14 @@ DEFAULT_DELAYS = {
     "pulse": 2.0,
     "respiration": 3.0,
     "spo2": 8.0,
+    "systolic_bp": 6.0,
 }
 DEFAULT_DURATION_FACTORS = {
     "temperature": 1.00,
     "pulse": 0.72,
     "respiration": 0.78,
     "spo2": 1.00,
+    "systolic_bp": 0.9,
 }
 
 # Population-level associations reported by Jensen et al. in acutely admitted
@@ -155,7 +164,7 @@ def _personal_baseline(patient_id: str, name: str, role: str) -> dict[str, float
 
     identity = f"{BASELINE_PROFILE_VERSION}\0{patient_id}\0{name}\0{role}"
     digest = hashlib.sha256(identity.encode("utf-8")).digest()
-    precisions = {"temperature": 2, "spo2": 1, "pulse": 1, "respiration": 1}
+    precisions = {"temperature": 2, "spo2": 1, "pulse": 1, "respiration": 1, "systolic_bp": 0}
     result: dict[str, float] = {}
     for offset, (vital, (low, high)) in enumerate(HEALTHY_BASELINE_RANGES.items()):
         unit = int.from_bytes(digest[offset * 4 : offset * 4 + 4], "big") / 0xFFFFFFFF
@@ -254,6 +263,7 @@ class SimPatient:
             "spo2": -0.35,
             "pulse": 0.55,
             "respiration": 0.45,
+            "systolic_bp": 0.25,
         }[key]
         shared = _correlated_wave(self.seed, "physiology", now)
         own = _correlated_wave(self.seed, key, now)
@@ -270,6 +280,7 @@ class SimPatient:
         v["spo2"] = min(100.0, max(50.0, v["spo2"]))
         v["pulse"] = min(240.0, max(20.0, v["pulse"]))
         v["respiration"] = min(60.0, max(4.0, v["respiration"]))
+        v["systolic_bp"] = min(240.0, max(50.0, v.get("systolic_bp", 118.0)))
         return Reading(
             patient_id=self.id,
             at=now if at is None else at,
@@ -277,6 +288,7 @@ class SimPatient:
             spo2=round(v["spo2"], 1),
             pulse=round(v["pulse"], 1),
             respiration=round(v["respiration"], 1),
+            systolic_bp=round(v["systolic_bp"]),
             # Keep the public source identifier stable; richer provenance is
             # available from ScenarioSource.metadata().
             source="synthetic",
@@ -364,7 +376,13 @@ class ScenarioSource:
             patient = self.patients.get(patient_id)
             if patient is None:
                 continue
-            baseline = {vital: float(values[vital]) for vital in VITALS}
+            # A profile persisted before the cuff existed has no pressure;
+            # the same deterministic derivation supplies it.
+            fallback = _personal_baseline(patient.id, patient.name, patient.role)
+            baseline = {
+                vital: float(values[vital]) if values.get(vital) is not None else fallback[vital]
+                for vital in VITALS
+            }
             if not all(math.isfinite(value) for value in baseline.values()):
                 raise ValueError(f"non-finite healthy baseline for {patient_id}")
             prepared[patient_id] = baseline

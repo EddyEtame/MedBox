@@ -845,14 +845,18 @@
     var cells = [
       ["Temp", num(p.temperature,1) + " °C", "temperature"],
       ["SpO₂", num(p.spo2,0) + " %", "spo2"],
-      ["Pulse", num(p.pulse,0), "pulse"],
-      ["Resp", num(p.respiration,0), "respiration"]
+      ["Pouls", num(p.pulse,0), "pulse"],
+      ["Resp.", num(p.respiration,0), "respiration"],
+      ["Tension", num(p.systolic_bp,0), "systolic_bp"],
+      ["Conscience", "", "consciousness"],
+      ["Oxygène", "", "oxygen"]
     ];
     el("pVit").innerHTML = cells.map(function (c) {
-      var score = 0, reason = "";
-      t.params.forEach(function (q) { if (q.name === c[2]) { score = q.score; reason = q.reason; } });
-      return '<div class="vc s' + score + '"><span class="k">' + c[0] + '</span>' +
-             '<div class="v">' + c[1] + '</div><div class="r">' + esc(reason) + '</div></div>';
+      var score = 0, reason = "", measured = true;
+      t.params.forEach(function (q) { if (q.name === c[2]) { score = q.score; reason = q.reason; measured = q.measured; } });
+      var shown = c[1] || reason;
+      return '<div class="vc s' + score + (measured ? "" : " assumed") + '"><span class="k">' + c[0] + '</span>' +
+             '<div class="v">' + esc(shown) + '</div><div class="r">' + (c[1] ? esc(reason) : (measured ? "observé" : "supposé")) + '</div></div>';
     }).join("");
   }
 

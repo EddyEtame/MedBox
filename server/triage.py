@@ -106,8 +106,8 @@ class TriageResult:
             "complete_news2": complete,
             "missing_news2": missing,
             "score_label": (
-                "NEWS2 complet" if complete
-                else f"Dépistage partiel dérivé de NEWS2 — {len(measured)} paramètres mesurés"
+                "NEWS2 complet, sept paramètres" if complete
+                else f"Dépistage partiel dérivé de NEWS2 — {len(measured)} paramètres sur sept"
             ),
             # Both of these cross into the AI prompt. The single-parameter rule
             # is the thing people forget, and a small model forgets it too: told
@@ -133,15 +133,15 @@ def score_temperature(celsius: float | None) -> ParamScore:
     if celsius is None:
         return ParamScore("temperature", None, 0, False, "no reading")
     if celsius <= 35.0:
-        s, why = 3, "hypothermic"
+        s, why = 3, "hypothermie"
     elif celsius <= 36.0:
-        s, why = 1, "below normal"
+        s, why = 1, "sous la normale"
     elif celsius <= 38.0:
-        s, why = 0, "normal"
+        s, why = 0, "normale"
     elif celsius <= 39.0:
-        s, why = 1, "febrile"
+        s, why = 1, "fièvre"
     else:
-        s, why = 2, "high fever"
+        s, why = 2, "forte fièvre"
     return ParamScore("temperature", round(celsius, 1), s, True, why)
 
 
@@ -150,13 +150,13 @@ def score_spo2(percent: float | None) -> ParamScore:
     if percent is None:
         return ParamScore("spo2", None, 0, False, "no reading")
     if percent <= 91:
-        s, why = 3, "severe hypoxaemia"
+        s, why = 3, "hypoxémie sévère"
     elif percent <= 93:
-        s, why = 2, "hypoxaemia"
+        s, why = 2, "hypoxémie"
     elif percent <= 95:
-        s, why = 1, "mild desaturation"
+        s, why = 1, "désaturation légère"
     else:
-        s, why = 0, "normal"
+        s, why = 0, "normale"
     return ParamScore("spo2", round(percent, 1), s, True, why)
 
 
@@ -164,17 +164,17 @@ def score_pulse(bpm: float | None) -> ParamScore:
     if bpm is None:
         return ParamScore("pulse", None, 0, False, "no reading")
     if bpm <= 40:
-        s, why = 3, "severe bradycardia"
+        s, why = 3, "bradycardie sévère"
     elif bpm <= 50:
-        s, why = 1, "bradycardia"
+        s, why = 1, "bradycardie"
     elif bpm <= 90:
         s, why = 0, "normal"
     elif bpm <= 110:
-        s, why = 1, "mild tachycardia"
+        s, why = 1, "tachycardie légère"
     elif bpm <= 130:
-        s, why = 2, "tachycardia"
+        s, why = 2, "tachycardie"
     else:
-        s, why = 3, "severe tachycardia"
+        s, why = 3, "tachycardie sévère"
     return ParamScore("pulse", round(bpm), s, True, why)
 
 
@@ -182,32 +182,77 @@ def score_respiration(breaths_per_min: float | None) -> ParamScore:
     if breaths_per_min is None:
         return ParamScore("respiration", None, 0, False, "no reading")
     if breaths_per_min <= 8:
-        s, why = 3, "severe bradypnoea"
+        s, why = 3, "bradypnée sévère"
     elif breaths_per_min <= 11:
-        s, why = 1, "bradypnoea"
+        s, why = 1, "bradypnée"
     elif breaths_per_min <= 20:
-        s, why = 0, "normal"
+        s, why = 0, "normale"
     elif breaths_per_min <= 24:
-        s, why = 2, "tachypnoea"
+        s, why = 2, "tachypnée"
     else:
-        s, why = 3, "severe tachypnoea"
+        s, why = 3, "tachypnée sévère"
     return ParamScore("respiration", round(breaths_per_min), s, True, why)
 
 
-def score_consciousness(alert: bool = True) -> ParamScore:
-    """NEWS2 scores 3 for anything other than Alert on the ACVPU scale."""
+def score_systolic_bp(mmhg: float | None) -> ParamScore:
+    """NEWS2 systolic blood pressure, RCP 2017: 3 at 90 or below, 2 at 91-100,
+    1 at 101-110, 0 at 111-219, 3 at 220 or above."""
+    if mmhg is None:
+        return ParamScore("systolic_bp", None, 0, False, "aucune mesure")
+    if mmhg <= 90:
+        s, why = 3, "hypotension sévère"
+    elif mmhg <= 100:
+        s, why = 2, "hypotension"
+    elif mmhg <= 110:
+        s, why = 1, "tension basse"
+    elif mmhg <= 219:
+        s, why = 0, "normale"
+    else:
+        s, why = 3, "hypertension sévère"
+    return ParamScore("systolic_bp", round(mmhg), s, True, why)
+
+
+# ACVPU, the NEWS2 consciousness scale: Alert scores 0; new Confusion, Voice,
+# Pain and Unresponsive all score 3. Entered by the operator, never measured
+# by an instrument, and said so.
+ACVPU = {
+    "A": "alerte",
+    "C": "confusion nouvelle",
+    "V": "réagit à la voix",
+    "P": "réagit à la douleur",
+    "U": "sans réaction",
+}
+
+
+def score_consciousness(alert: bool = True, level: str | None = None) -> ParamScore:
+    """NEWS2 scores 3 for anything other than Alert on the ACVPU scale.
+
+    With `level` (an ACVPU letter the operator entered) the parameter counts
+    as observed; without it, alertness is assumed and the score is a partial
+    screen, which the result says.
+    """
+    if level is not None:
+        letter = str(level).strip().upper()[:1]
+        if letter not in ACVPU:
+            raise ValueError(f"unknown ACVPU level {level!r}")
+        if letter == "A":
+            return ParamScore("consciousness", 1, 0, True, "alerte (observé)")
+        return ParamScore("consciousness", 0, 3, True, ACVPU[letter] + " (observé)")
     return (
-        ParamScore("consciousness", 1, 0, False, "assumed alert")
+        ParamScore("consciousness", 1, 0, False, "vigilance supposée")
         if alert
-        else ParamScore("consciousness", 0, 3, True, "not alert")
+        else ParamScore("consciousness", 0, 3, True, "non alerte")
     )
 
 
-def score_supplemental_oxygen(on_oxygen: bool = False) -> ParamScore:
+def score_supplemental_oxygen(on_oxygen: bool | None = False) -> ParamScore:
+    """None: not observed, air assumed. False/True: observed by the operator."""
+    if on_oxygen is None:
+        return ParamScore("oxygen", 0, 0, False, "air ambiant supposé")
     return (
-        ParamScore("oxygen", 1, 2, True, "on supplemental oxygen")
+        ParamScore("oxygen", 1, 2, True, "oxygène supplémentaire")
         if on_oxygen
-        else ParamScore("oxygen", 0, 0, False, "assumed breathing air")
+        else ParamScore("oxygen", 0, 0, True, "air ambiant (observé)")
     )
 
 
@@ -234,16 +279,24 @@ def assess(
     spo2: float | None = None,
     pulse: float | None = None,
     respiration: float | None = None,
+    systolic_bp: float | None = None,
     alert: bool = True,
-    on_oxygen: bool = False,
+    consciousness: str | None = None,
+    on_oxygen: bool | None = None,
 ) -> TriageResult:
-    """Score one patient. Pure function: no I/O, no model, no clock."""
+    """Score one patient. Pure function: no I/O, no model, no clock.
+
+    Seven NEWS2 parameters: five from instruments (the cuff gives systolic
+    pressure), two observed by a person (ACVPU, supplemental oxygen). Any that
+    is absent is assumed normal and the result says it is a partial screen.
+    """
     params = (
         score_temperature(temperature),
         score_spo2(spo2),
         score_pulse(pulse),
         score_respiration(respiration),
-        score_consciousness(alert),
+        score_systolic_bp(systolic_bp),
+        score_consciousness(alert, consciousness),
         score_supplemental_oxygen(on_oxygen),
     )
     total = sum(p.score for p in params)

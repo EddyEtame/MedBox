@@ -47,7 +47,7 @@ def test_sensor_baselines_match_the_database_seed_profiles():
         persisted = healthy_baseline(patient.id, patient.name, patient.role)
         assert patient.baseline == {
             vital: persisted[vital]
-            for vital in ("temperature", "spo2", "pulse", "respiration")
+            for vital in ("temperature", "spo2", "pulse", "respiration", "systolic_bp")
         }
 
 
@@ -56,12 +56,17 @@ def test_persisted_baselines_can_be_reloaded_as_source_of_truth():
     source.set_baselines(
         {"P-01": {"temperature": 36.6, "spo2": 97.5, "pulse": 65, "respiration": 14}}
     )
-    assert source.patients["P-01"].baseline == {
+    # A profile persisted before the cuff existed: the four given values are
+    # the source of truth, and the pressure comes from the same deterministic
+    # derivation the database uses, never from the legacy midpoint.
+    patient = source.patients["P-01"]
+    assert {k: patient.baseline[k] for k in ("temperature", "spo2", "pulse", "respiration")} == {
         "temperature": 36.6,
         "spo2": 97.5,
         "pulse": 65.0,
         "respiration": 14.0,
     }
+    assert patient.baseline["systolic_bp"] == healthy_baseline(patient.id, patient.name, patient.role)["systolic_bp"]
 
 
 def test_replay_depends_on_elapsed_simulation_time_not_wall_clock():

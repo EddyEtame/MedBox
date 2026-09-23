@@ -229,15 +229,21 @@
       ["Température", num(p.temperature, 1) + " °C", "temperature"],
       ["SpO₂", num(p.spo2, 0) + " %", "spo2"],
       ["Pouls", num(p.pulse, 0) + " /min", "pulse"],
-      ["Respiration", num(p.respiration, 0) + " /min", "respiration"]
+      ["Respiration", num(p.respiration, 0) + " /min", "respiration"],
+      ["Tension syst.", num(p.systolic_bp, 0) + " mmHg", "systolic_bp"],
+      ["Conscience", "", "consciousness"],
+      ["Oxygène", "", "oxygen"]
     ];
     el("vitals").innerHTML = cells.map(function (c) {
-      var score = 0, reason = "";
+      var score = 0, reason = "", measured = true;
       t.params.forEach(function (q) {
-        if (q.name === c[2]) { score = q.score; reason = q.reason; }
+        if (q.name === c[2]) { score = q.score; reason = q.reason; measured = q.measured; }
       });
-      return '<div class="vcell s' + score + '"><span class="k">' + c[0] + '</span>' +
-        '<div class="v">' + c[1] + '</div><div class="r">' + esc(reason) + '</div></div>';
+      // The two observed parameters show their reason as the value: "alerte
+      // (observé)" or "vigilance supposée" is the whole information.
+      var shown = c[1] || reason;
+      return '<div class="vcell s' + score + (measured ? "" : " assumed") + '"><span class="k">' + c[0] + '</span>' +
+        '<div class="v">' + esc(shown) + '</div><div class="r">' + (c[1] ? esc(reason) : (measured ? "observé" : "supposé")) + '</div></div>';
     }).join("");
 
     el("why").innerHTML =

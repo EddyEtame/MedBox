@@ -77,7 +77,7 @@ Après sélection d’une personne, appuyer sur **Demander à l’assistant**. L
 
 - un résumé bref des mesures ;
 - au maximum deux hypothèses, jamais un diagnostic ;
-- la source de chaque signe : température, SpO₂, pouls, fréquence respiratoire, déclaré par le membre, non mesuré ;
+- la source de chaque signe : température, SpO₂, pouls, fréquence respiratoire, systolic_bp, déclaré par le membre, non mesuré ;
 - le degré de concordance (« une mesure concorde », « plusieurs mesures concordent », « tous les paramètres mesurés concordent »), qui n’est pas une probabilité ;
 - les questions à poser et les observations à recueillir.
 
@@ -123,7 +123,7 @@ Cette liste provient de la même source que le panneau **Aide**.
 
 #### Prioriser tout l’équipage selon les mesures
 
-Chaque membre reçoit un dépistage partiel dérivé de NEWS2, calculé à partir des quatre constantes mesurées par MedBox. Le tableau et le vaisseau sont ordonnés selon ce score déterministe.
+Chaque membre reçoit un dépistage partiel dérivé de NEWS2, calculé à partir des cinq constantes mesurées par MedBox et des deux observations saisies. Le tableau et le vaisseau sont ordonnés selon ce score déterministe.
 
 *Toujours actif : aucune demande à formuler.*
 
@@ -179,7 +179,7 @@ L’assistant lit les mesures et les déclarations de cette personne, puis propo
 
 #### Suggérer les prochaines questions à poser
 
-MedBox ne mesure que quatre paramètres. L’assistant peut donc aider à formuler des questions brèves pour recueillir les informations qui manquent, sans les transformer en mesures.
+MedBox mesure cinq paramètres et en fait observer deux. L’assistant peut donc aider à formuler des questions brèves pour recueillir les informations qui manquent, sans les transformer en mesures.
 
 *Inclus dans chaque évaluation de l’assistant.*
 

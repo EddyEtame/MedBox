@@ -89,6 +89,7 @@
             <label>SpO₂ % <input id="simSpo2" type="number" step="0.5" min="-30" max="3" placeholder="-4"></label>
             <label>Pouls/min <input id="simPulse" type="number" step="1" min="-80" max="150" placeholder="+20"></label>
             <label>Resp./min <input id="simRespiration" type="number" step="1" min="-20" max="40" placeholder="+6"></label>
+            <label>Tension mmHg <input id="simSystolic" type="number" step="1" min="-60" max="40" placeholder="-15"></label>
             <label>Transition (s) <input id="simDuration" type="number" step="1" min="1" max="180" value="25"></label>
             <label class="wide">Motif <input id="simReason" type="text" maxlength="180" value="Exercice manuel de simulation"></label>
             <label class="wide exposure-check"><input id="simExposure" type="checkbox"> Exposition contagieuse confirmée dans cet exercice</label>
@@ -96,6 +97,30 @@
           </form>
         </details>
         <p id="simStatus" class="tool-status" role="status"></p>
+        <details class="manual-deltas">
+          <summary>Observations de l’opérateur (NEWS2 complet)</summary>
+          <form id="obsForm" class="delta-grid">
+            <label class="wide">Conscience (ACVPU)
+              <select id="obsConsciousness">
+                <option value="">non observée (vigilance supposée)</option>
+                <option value="A">A — alerte</option>
+                <option value="C">C — confusion nouvelle</option>
+                <option value="V">V — réagit à la voix</option>
+                <option value="P">P — réagit à la douleur</option>
+                <option value="U">U — sans réaction</option>
+              </select>
+            </label>
+            <label class="wide">Oxygène supplémentaire
+              <select id="obsOxygen">
+                <option value="">non observé (air ambiant supposé)</option>
+                <option value="no">non — air ambiant</option>
+                <option value="yes">oui — sous oxygène</option>
+              </select>
+            </label>
+            <button class="btn" type="submit">Enregistrer</button>
+          </form>
+          <p id="obsStatus" class="tool-status" role="status"></p>
+        </details>
         <div id="isolationActions" class="isolation-actions" hidden></div>
       </section>
 

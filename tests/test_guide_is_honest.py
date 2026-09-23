@@ -108,7 +108,7 @@ def test_the_self_explanation_hands_the_model_the_facts():
 
     intro = deterministic_introduction()
     for phrase in (
-        "quatre constantes", "lignes de base", "vaisseau 3D", "hypothèses",
+        "cinq constantes", "lignes de base", "vaisseau 3D", "hypothèses",
         "jamais diagnostiquer", "prescrire", "décisions restent humaines",
         "microphone", "audio n’est pas conservé", "écoute locale continue",
         "J’accepte", "oui", "I accept", "yes",

@@ -106,6 +106,7 @@ PATTERN_FR = {
     "spo2": "désaturation",
     "respiration": "atteinte respiratoire",
     "pulse": "tachycardie",
+    "systolic_bp": "hypotension",
 }
 SUPPRESSED_DIAGNOSIS = (
     "L’assistant a nommé une maladie ({name}). MedBox n’affiche aucun "
@@ -138,7 +139,7 @@ def _names_a_disease(name: str) -> bool:
 
 def pattern_name(signs: list[dict]) -> str:
     """"Fièvre avec désaturation", from the measured sources, never a cause."""
-    order = ("temperature", "spo2", "respiration", "pulse")
+    order = ("temperature", "spo2", "respiration", "pulse", "systolic_bp")
     present = [src for src in order if any(s.get("source") == src for s in signs)]
     if not present:
         return "Profil déclaré, non mesuré"

@@ -32,6 +32,10 @@ BASELINE_RANGES = {
     "spo2": (97.0, 99.0),
     "pulse": (60.0, 78.0),
     "respiration": (12.0, 17.0),
+    # 114 to 132, not 106: NEWS2 scores 101-110 as 1, and a healthy crew
+    # member with a baseline in that band, plus a little sensor noise, was
+    # scored LOW at rest. The zero band starts at 111; this stays inside it.
+    "systolic_bp": (114.0, 132.0),
 }
 BASELINE_REFERENCES = (
     "https://medlineplus.gov/ency/article/002341.htm",
@@ -42,6 +46,7 @@ VITAL_UNITS = {
     "spo2": "%",
     "pulse": "beats/min",
     "respiration": "breaths/min",
+    "systolic_bp": "mmHg",
 }
 CONSENT_DECISIONS = frozenset({"accepted", "refused", "revoked"})
 CONSENT_METHODS = frozenset({"voice", "button", "keyboard"})
@@ -155,7 +160,22 @@ CREATE TABLE IF NOT EXISTS quarantine (
     since       REAL NOT NULL,
     reason      TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS operator_observations (
+    patient_id    TEXT PRIMARY KEY REFERENCES patients(id),
+    consciousness TEXT CHECK(consciousness IS NULL OR consciousness IN ('A','C','V','P','U')),
+    on_oxygen     INTEGER CHECK(on_oxygen IS NULL OR on_oxygen IN (0, 1)),
+    at            REAL NOT NULL,
+    actor         TEXT NOT NULL
+);
 """
+
+# Columns added after the first databases were created. SQLite cannot add a
+# column inside CREATE TABLE IF NOT EXISTS, so each is added if absent.
+LATER_COLUMNS = (
+    ("readings", "systolic_bp", "REAL"),
+    ("healthy_baselines", "systolic_bp", "REAL"),
+)
 
 
 APPEND_ONLY_GUARDS = """
@@ -225,7 +245,7 @@ def healthy_baseline(patient_id: str, name: str, role: str) -> dict[str, Any]:
     identity = f"{BASELINE_PROFILE_VERSION}\0{patient_id}\0{name}\0{role}"
     digest = hashlib.sha256(identity.encode("utf-8")).digest()
     values: dict[str, Any] = {}
-    precisions = {"temperature": 2, "spo2": 1, "pulse": 1, "respiration": 1}
+    precisions = {"temperature": 2, "spo2": 1, "pulse": 1, "respiration": 1, "systolic_bp": 0}
     for offset, (vital, (low, high)) in enumerate(BASELINE_RANGES.items()):
         value = low + _unit_interval(digest, offset * 4) * (high - low)
         values[vital] = round(value, precisions[vital])
@@ -274,6 +294,12 @@ class Database:
             self.conn.execute(
                 "ALTER TABLE readings ADD COLUMN provenance TEXT NOT NULL DEFAULT '{}'"
             )
+        for table, column, kind in LATER_COLUMNS:
+            present = {
+                row["name"] for row in self.conn.execute(f"PRAGMA table_info({table})").fetchall()
+            }
+            if column not in present:
+                self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
 
     def upsert_patients(self, rows: Iterable[tuple[str, str, str]]) -> None:
         """Provision the roster and one stable healthy profile per person."""
@@ -298,6 +324,7 @@ class Database:
                         profile["spo2"],
                         profile["pulse"],
                         profile["respiration"],
+                        profile["systolic_bp"],
                         profile["profile_version"],
                         now,
                         _canonical_json(profile["provenance"]),
@@ -305,15 +332,22 @@ class Database:
                 )
             self.conn.executemany(
                 "INSERT OR IGNORE INTO healthy_baselines "
-                "(patient_id, temperature, spo2, pulse, respiration, profile_version, "
-                "derived_at, provenance) VALUES (?,?,?,?,?,?,?,?)",
+                "(patient_id, temperature, spo2, pulse, respiration, systolic_bp, "
+                "profile_version, derived_at, provenance) VALUES (?,?,?,?,?,?,?,?,?)",
                 baseline_rows,
+            )
+            # A profile row from before the cuff existed gets its pressure now,
+            # from the same deterministic derivation, so the board and the
+            # database keep agreeing on every baseline.
+            self.conn.executemany(
+                "UPDATE healthy_baselines SET systolic_bp = ? WHERE patient_id = ? AND systolic_bp IS NULL",
+                [(row[5], row[0]) for row in baseline_rows],
             )
 
     def baseline(self, patient_id: str) -> dict[str, Any] | None:
         row = self.conn.execute(
-            "SELECT patient_id, temperature, spo2, pulse, respiration, profile_version, "
-            "derived_at, provenance FROM healthy_baselines WHERE patient_id=?",
+            "SELECT patient_id, temperature, spo2, pulse, respiration, systolic_bp, "
+            "profile_version, derived_at, provenance FROM healthy_baselines WHERE patient_id=?",
             (patient_id,),
         ).fetchone()
         if row is None:
@@ -325,7 +359,7 @@ class Database:
     def baselines(self) -> list[dict[str, Any]]:
         rows = self.conn.execute(
             "SELECT p.id AS patient_id, p.name, p.role, b.temperature, b.spo2, b.pulse, "
-            "b.respiration, b.profile_version, b.derived_at, b.provenance "
+            "b.respiration, b.systolic_bp, b.profile_version, b.derived_at, b.provenance "
             "FROM patients p JOIN healthy_baselines b ON b.patient_id=p.id ORDER BY p.id"
         ).fetchall()
         result = []
@@ -348,7 +382,7 @@ class Database:
         evidence.setdefault("source", source)
         self.conn.execute(
             "INSERT INTO readings (patient_id, at, temperature, spo2, pulse, respiration, "
-            "source, provenance) VALUES (?,?,?,?,?,?,?,?)",
+            "systolic_bp, source, provenance) VALUES (?,?,?,?,?,?,?,?,?)",
             (
                 patient_id,
                 float(at),
@@ -356,10 +390,56 @@ class Database:
                 vitals.get("spo2"),
                 vitals.get("pulse"),
                 vitals.get("respiration"),
+                vitals.get("systolic_bp"),
                 source,
                 _canonical_json(evidence),
             ),
         )
+
+    # ---- what a person observed: ACVPU and oxygen -----------------------
+    def set_observation(
+        self, patient_id: str, consciousness: str | None, on_oxygen: bool | None, actor: str = "operator"
+    ) -> dict[str, Any]:
+        """The two NEWS2 inputs no instrument gives: entered, dated, attributed."""
+        level = None if consciousness in (None, "") else str(consciousness).strip().upper()[:1]
+        if level is not None and level not in ("A", "C", "V", "P", "U"):
+            raise ValueError("consciousness must be one of A, C, V, P, U")
+        oxygen = None if on_oxygen is None else int(bool(on_oxygen))
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO operator_observations (patient_id, consciousness, on_oxygen, at, actor) "
+                "VALUES (?,?,?,?,?) ON CONFLICT(patient_id) DO UPDATE SET consciousness = excluded.consciousness, "
+                "on_oxygen = excluded.on_oxygen, at = excluded.at, actor = excluded.actor",
+                (patient_id, level, oxygen, time.time(), _label(actor, "actor", maximum=64)),
+            )
+        return self.observation(patient_id)
+
+    def observation(self, patient_id: str) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            "SELECT consciousness, on_oxygen, at, actor FROM operator_observations WHERE patient_id=?",
+            (patient_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "consciousness": row["consciousness"],
+            "on_oxygen": None if row["on_oxygen"] is None else bool(row["on_oxygen"]),
+            "at": row["at"],
+            "actor": row["actor"],
+        }
+
+    def observations(self) -> dict[str, dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT patient_id, consciousness, on_oxygen, at, actor FROM operator_observations"
+        ).fetchall()
+        return {
+            r["patient_id"]: {
+                "consciousness": r["consciousness"],
+                "on_oxygen": None if r["on_oxygen"] is None else bool(r["on_oxygen"]),
+                "at": r["at"], "actor": r["actor"],
+            }
+            for r in rows
+        }
 
     def record_event(self, kind: str, detail: str, patient_id: str | None = None) -> None:
         self.conn.execute(
@@ -602,7 +682,7 @@ class Database:
 
     def history(self, patient_id: str, limit: int = 200) -> list[dict[str, Any]]:
         cur = self.conn.execute(
-            "SELECT at, temperature, spo2, pulse, respiration, source, provenance FROM readings"
+            "SELECT at, temperature, spo2, pulse, respiration, systolic_bp, source, provenance FROM readings"
             " WHERE patient_id=? ORDER BY at DESC, id DESC LIMIT ?",
             (patient_id, max(1, min(int(limit), 10_000))),
         )

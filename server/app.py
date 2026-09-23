@@ -61,6 +61,7 @@ MANUAL_DELTA_LIMITS = {
     "spo2": (-30.0, 3.0),
     "pulse": (-80.0, 150.0),
     "respiration": (-20.0, 40.0),
+    "systolic_bp": (-60.0, 40.0),
 }
 LISTENING_POLICY_VERSION = "continuous-local-listening-v1"
 
@@ -129,6 +130,9 @@ class MedBox:
         # by prefetch_ai(); read by the assess route; each entry carries the
         # NEWS2 total it was written against and the moment it was written.
         self.assessments: dict[str, dict] = {}
+        # ACVPU and supplemental oxygen, entered by a person at the console.
+        # They complete NEWS2; no instrument here can give them.
+        self.observations: dict[str, dict] = self.db.observations()
         self._prefetch_wanted: list[str] = []
         self._assessing: set[str] = set()
         self._ai_lock = asyncio.Lock()
@@ -258,7 +262,12 @@ class MedBox:
 
         for reading in self.source.sample(now):
             v = reading.vitals()
-            result = assess(**v)
+            seen = self.observations.get(reading.patient_id) or {}
+            result = assess(
+                **v,
+                consciousness=seen.get("consciousness"),
+                on_oxygen=seen.get("on_oxygen"),
+            )
             patient = self.source.patients[reading.patient_id]
             self.latest[reading.patient_id] = {
                 "patient": {
@@ -543,7 +552,35 @@ async def patient(patient_id: str) -> dict:
         "reported": STATION.symptoms.for_patient(patient_id),
         "documents": STATION.db.medical_documents(patient_id),
         "isolation": isolation.to_dict() if isolation else None,
+        "observations": STATION.observations.get(patient_id),
     }
+
+
+@app.post("/api/patient/{patient_id}/observations")
+async def set_observations(patient_id: str, body: dict) -> dict:
+    """What a person observed: consciousness (ACVPU) and supplemental oxygen.
+
+    These are the two NEWS2 parameters no instrument on this station can
+    measure. Entered here they count as observed and the score becomes a
+    complete NEWS2; absent, they are assumed normal and the score says it is
+    a partial screen. Recorded with who entered them and when. No model.
+    """
+    if patient_id not in STATION.latest:
+        raise HTTPException(404, f"No crew member {patient_id}")
+    consciousness = body.get("consciousness")
+    if consciousness is not None and not isinstance(consciousness, str):
+        raise HTTPException(400, "consciousness must be a letter A, C, V, P or U")
+    on_oxygen = body.get("on_oxygen")
+    if on_oxygen is not None and not isinstance(on_oxygen, bool):
+        raise HTTPException(400, "on_oxygen must be true, false or null")
+    try:
+        record = STATION.db.set_observation(patient_id, consciousness or None, on_oxygen)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    STATION.observations[patient_id] = record
+    STATION.db.record_event("observation", json.dumps(record), patient_id)
+    BUS.publish({"type": "event", "kind": "observation", "patient_id": patient_id, **record})
+    return {"observations": record}
 
 
 @app.post("/api/patient/{patient_id}/simulate")

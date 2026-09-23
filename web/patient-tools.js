@@ -100,7 +100,8 @@
       ["temperature", "simTemperature"],
       ["spo2", "simSpo2"],
       ["pulse", "simPulse"],
-      ["respiration", "simRespiration"]
+      ["respiration", "simRespiration"],
+      ["systolic_bp", "simSystolic"]
     ].forEach(function (entry) {
       var number = value(entry[1]);
       if (number !== null && Number.isFinite(number)) changes[entry[0]] = number;
@@ -115,6 +116,29 @@
       (el("simReason").value || "Exercice manuel de simulation").trim(),
       !!(el("simExposure") && el("simExposure").checked)
     );
+  }
+
+  /* ACVPU and oxygen: the two NEWS2 inputs a person enters. Sent for the
+     selected crew member, recorded with the time, never a measurement. */
+  function submitObservations(event) {
+    event.preventDefault();
+    var pid = getPatient ? getPatient() : null;
+    if (!pid) { status("obsStatus", "Sélectionnez d’abord un membre.", true); return; }
+    var level = el("obsConsciousness") ? el("obsConsciousness").value : "";
+    var oxygenSel = el("obsOxygen") ? el("obsOxygen").value : "";
+    var body = {
+      consciousness: level || null,
+      on_oxygen: oxygenSel === "" ? null : oxygenSel === "yes"
+    };
+    fetch("/api/patient/" + encodeURIComponent(pid) + "/observations", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.j.detail || "refusé");
+        status("obsStatus", "Observation enregistrée. Le score intègre ces deux paramètres.");
+        if (onChanged) onChanged();
+      })
+      .catch(function (err) { status("obsStatus", "Non enregistré : " + err.message, true); });
   }
 
   function bytes(value) {
@@ -455,6 +479,7 @@
     onChanged = typeof changedFn === "function" ? changedFn : onChanged;
     if (el("simPresetForm")) el("simPresetForm").addEventListener("submit", submitPreset);
     if (el("simManualForm")) el("simManualForm").addEventListener("submit", submitManual);
+    if (el("obsForm")) el("obsForm").addEventListener("submit", submitObservations);
     if (el("documentUploadBtn")) el("documentUploadBtn").addEventListener("click", uploadDocument);
     if (el("protocolEvaluateBtn")) el("protocolEvaluateBtn").addEventListener("click", initialProtocolEvaluation);
     if (el("protocolValidationForm")) el("protocolValidationForm").addEventListener("submit", validateProtocol);

@@ -24,7 +24,7 @@ CAPABILITIES = [
         "title": "Prioriser tout l’équipage selon les mesures",
         "does": (
             "Chaque membre reçoit un dépistage partiel dérivé de NEWS2, calculé "
-            "à partir des quatre constantes mesurées par MedBox. Le tableau et "
+            "à partir des cinq constantes mesurées par MedBox et des deux observations saisies. Le tableau et "
             "le vaisseau sont ordonnés selon ce score déterministe."
         ),
         "needs_ai": False,
@@ -141,7 +141,7 @@ CAPABILITIES = [
         "id": "questions",
         "title": "Suggérer les prochaines questions à poser",
         "does": (
-            "MedBox ne mesure que quatre paramètres. L’assistant peut donc aider "
+            "MedBox mesure cinq paramètres et en fait observer deux. L’assistant peut donc aider "
             "à formuler des questions brèves pour recueillir les informations qui "
             "manquent, sans les transformer en mesures."
         ),
@@ -276,7 +276,7 @@ def manifest(ai_available: bool = False, stand_in: bool = False) -> dict:
 
 
 INTRODUCTION_CORE = (
-    "Je surveille les quatre constantes mesurées, les compare aux lignes de base "
+    "Je surveille les cinq constantes mesurées, les compare aux lignes de base "
     "personnelles et signale les écarts dans le tableau, le vaisseau 3D et les "
     "dossiers locaux. Je peux proposer des hypothèses et des questions, mais jamais "
     "diagnostiquer, prescrire, modifier une priorité ou isoler quelqu’un : ces "

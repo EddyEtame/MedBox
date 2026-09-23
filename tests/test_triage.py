@@ -69,3 +69,50 @@ def test_the_clinical_response_is_said_in_french():
     for band in Urgency:
         assert band.response.endswith("."), band.response
         assert not any(word in band.response for word in ("review", "monitoring", "response")), band.response
+
+
+def test_systolic_pressure_scores_as_the_rcp_2017_table():
+    """3 at 90 or below, 2 at 91-100, 1 at 101-110, 0 at 111-219, 3 at 220+."""
+    from server.triage import score_systolic_bp
+
+    assert [score_systolic_bp(v).score for v in (80, 90, 91, 100, 101, 110, 111, 219, 220)] == \
+        [3, 3, 2, 2, 1, 1, 0, 0, 3]
+    assert score_systolic_bp(None).measured is False
+
+
+def test_the_seven_parameters_make_a_complete_news2_only_when_all_are_there():
+    """Five instruments plus two observations. Missing ones are assumed
+    normal and the result says the screen is partial and names them."""
+    from server.triage import assess
+
+    partial = assess(temperature=36.8, spo2=98, pulse=72, respiration=15)
+    assert partial.to_dict()["complete_news2"] is False
+    assert partial.to_dict()["missing_news2"] == ["systolic_bp", "consciousness", "oxygen"]
+    full = assess(temperature=36.8, spo2=98, pulse=72, respiration=15, systolic_bp=118,
+                  consciousness="A", on_oxygen=False)
+    assert full.to_dict()["complete_news2"] is True and full.total == 0
+    assert full.to_dict()["score_label"].startswith("NEWS2 complet")
+
+
+def test_acvpu_and_oxygen_observed_by_a_person_score_and_escalate():
+    from server.triage import Urgency, assess
+
+    confused = assess(temperature=36.8, spo2=98, pulse=72, respiration=15, systolic_bp=118,
+                      consciousness="C", on_oxygen=False)
+    assert confused.total == 3 and confused.urgency is Urgency.MEDIUM, "new confusion is a 3 on its own"
+    on_o2 = assess(temperature=36.8, spo2=98, pulse=72, respiration=15, systolic_bp=118,
+                   consciousness="A", on_oxygen=True)
+    assert on_o2.total == 2 and on_o2.urgency is Urgency.LOW
+    import pytest as _pytest
+    with _pytest.raises(ValueError):
+        assess(consciousness="Z")
+
+
+def test_a_healthy_baseline_never_scores_on_pressure():
+    """The healthy range must sit inside NEWS2's zero band (111-219), noise
+    included: 106-128 put crew members at LOW while resting."""
+    from server.sensors.synthetic import HEALTHY_BASELINE_RANGES
+    from server.triage import score_systolic_bp
+
+    low, high = HEALTHY_BASELINE_RANGES["systolic_bp"]
+    assert score_systolic_bp(low - 3).score == 0 and score_systolic_bp(high + 3).score == 0

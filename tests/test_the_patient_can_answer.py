@@ -84,3 +84,21 @@ def test_both_views_offer_the_answers_and_label_them():
         src = (ROOT / view).read_text(encoding="utf-8")
         assert re.search(r"MedBox\.assessment\.wireAnswers\(el\(\"aiOut\"\)", src), f"{view} never wires the answers"
         assert 'r.source === "answer" ? "réponse"' in src, f"{view} shows an answer as typed"
+
+
+def test_an_operator_observation_completes_the_score_and_is_attributed():
+    """ACVPU and oxygen are entered by a person, recorded with who and when,
+    and the next frame scores with them: a new confusion is MEDIUM on its own."""
+    station.STATION._frame()
+    pid = station.STATION._board()[0]["patient"]["id"]
+    try:
+        out = asyncio.run(station.set_observations(pid, {"consciousness": "C", "on_oxygen": False}))
+        assert out["observations"]["consciousness"] == "C" and out["observations"]["actor"] == "operator"
+        station.STATION._frame()
+        triage = station.STATION.latest[pid]["triage"]
+        assert triage["urgency"] == "medium" and "consciousness" in triage["measured"]
+        with pytest.raises(HTTPException):
+            asyncio.run(station.set_observations(pid, {"consciousness": "Z"}))
+    finally:
+        asyncio.run(station.set_observations(pid, {"consciousness": None, "on_oxygen": None}))
+        station.STATION._frame()

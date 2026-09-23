@@ -140,7 +140,7 @@
       // agrees. The server now refuses the flag under any other band; this is
       // the second lock, for a response from before that rule existed.
       html += '<div class="nothing">' +
-        (b.urgency_at_assessment === "routine" ? "Les quatre paramètres mesurés sont dans leur plage habituelle. " : "") +
+        (b.urgency_at_assessment === "routine" ? "Les paramètres mesurés sont dans leur plage habituelle. " : "") +
         "L’assistant n’a aucune hypothèse étayée à proposer et le dit au lieu d’en inventer une. " +
         "Ce que la personne a déclaré n’est pas mesuré par MedBox.</div>";
     }

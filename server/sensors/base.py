@@ -13,6 +13,8 @@ class Reading:
     spo2: float | None = None
     pulse: float | None = None
     respiration: float | None = None
+    # Systolic blood pressure, mmHg: the fifth instrument, a cuff.
+    systolic_bp: float | None = None
     source: str = "synthetic"
 
     def vitals(self) -> dict:
@@ -21,6 +23,7 @@ class Reading:
             "spo2": self.spo2,
             "pulse": self.pulse,
             "respiration": self.respiration,
+            "systolic_bp": self.systolic_bp,
         }
 
     def to_dict(self) -> dict:
