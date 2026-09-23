@@ -1,0 +1,18 @@
+MedBox portable bundle - third-party component notice
+
+This file is an inventory aid, not a substitute for legal review. The bundle
+builder preserves license files supplied by the Python runtime and Python
+packages, and extracts the configured Ollama model license layer when present.
+
+Expected third-party components:
+
+* CPython 3.11 x64 runtime (Python Software Foundation License)
+* FastAPI, Uvicorn, HTTPX, PyYAML, Pydantic and their pinned dependencies
+* Ollama 0.13.1 when present
+* Qwen2.5 1.5B Instruct model when present
+* faster-whisper, CTranslate2, PyAV and the Faster Whisper base model when present
+* Microsoft .NET 8 Windows x64 runtime embedded in MedBox.exe
+
+The exact payload and SHA-256 of every distributed file are recorded under
+manifests/. Review the license files carried by the concrete wheel, runtime,
+and model artifacts before redistribution.

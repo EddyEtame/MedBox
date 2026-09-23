@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "python": {
+    "version": "3.11.9",
+    "platform": "windows-x64-embeddable",
+    "url": "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embeddable-amd64.zip",
+    "sha256": "33b448f95fecb7c6f802157dbd5e6b40a2ad9bfc8b95ca634a06ba4073ad1ac0"
+  },
+  "ollama": {
+    "version": "0.13.1",
+    "model": "qwen2.5:1.5b-instruct",
+    "copyPolicy": "cpu-runtime-and-configured-model-closure-only"
+  },
+  "speech": {
+    "modelDirectory": "faster-whisper-base",
+    "requiredFiles": [
+      "config.json",
+      "model.bin",
+      "tokenizer.json"
+    ]
+  }
+}

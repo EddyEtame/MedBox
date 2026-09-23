@@ -46,3 +46,7 @@ OllamaSetup.exe
 .DS_Store
 Thumbs.db
 *.swp
+
+# --- .NET launcher build output (70 MB of runtime DLLs); the source is what is versioned ---
+launcher/**/bin/
+launcher/**/obj/

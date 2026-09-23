@@ -1,0 +1,25 @@
+MEDBOX - STATION LOCALE HORS LIGNE
+
+1. Copiez tout ce dossier sur le PC de presentation ou sur une cle USB NTFS.
+2. Ouvrez le dossier puis double-cliquez sur MedBox.exe.
+3. Gardez la fenetre noire ouverte pendant toute la demonstration.
+4. Le navigateur s'ouvre sur l'adresse locale de MedBox.
+5. Au premier usage du microphone, le navigateur demande une autorisation.
+   Aucun son n'est conserve par MedBox.
+
+Verification avant la soutenance :
+
+  powershell -NoProfile -ExecutionPolicy Bypass -File tools\build-portable.ps1
+
+Le script de construction n'est pas necessaire pour lancer le dossier livre.
+Pour verifier une copie, utilisez le script depuis le depot source avec :
+
+  -Mode Smoke -Destination X:\chemin\vers\MedBox
+
+LIMITES IMPORTANTES
+
+MedBox est un prototype de recherche et d'enseignement. Ce n'est pas un
+dispositif medical et il ne pose pas de diagnostic. Le manifeste sous
+manifests\bundle-manifest.json indique si Ollama, le modele de langage et le
+modele vocal sont reellement inclus. Les fichiers de data\ et logs\ restent
+exclusivement sur la machine locale.
