@@ -20,6 +20,13 @@ from __future__ import annotations
 # --------------------------------------------------------------- what it does
 CAPABILITIES = [
     {
+        "id": "patient_record",
+        "title": "Keep patient answers and show measurement history",
+        "does": "Both views record answers, show four measurement charts and urgency changes, and list scenario events. Answers survive restart and reach the next assessment as untrusted reported text. Quarantine contacts are recorded locally.",
+        "needs_ai": False,
+        "how": "Select a patient. Answer an assistant question with Yes, No, Unsure or free text, then ask again. The record is below the assessment.",
+    },
+    {
         "id": "triage",
         "title": "Rank the whole crew by how ill they are",
         "does": (
@@ -49,7 +56,9 @@ CAPABILITIES = [
             "assigned a quarantine berth. A zone counts as sealed from the "
             "moment one person is inside it, stops taking new arrivals once it "
             "is at capacity, and anyone left over is reported as awaiting a bed "
-            "rather than quietly dropped."
+            "rather than quietly dropped. Release uses a demonstration-only minimum of 120 seconds "
+            "and two clear complete readings at least two seconds apart; missing readings never release anyone. "
+            "This is not a validated clinical isolation protocol."
         ),
         "needs_ai": False,
         "how": "Automatic. Watch the bulkheads close on the ship view.",

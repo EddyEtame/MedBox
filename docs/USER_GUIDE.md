@@ -118,6 +118,10 @@ This is the same list the Help button shows, from the same source.
 
 ### Works with the assistant dead
 
+**Keep patient answers and show measurement history**  
+Both views record answers, show four measurement charts and urgency changes, and list scenario events. Answers survive restart and reach the next assessment as untrusted reported text. Quarantine contacts are recorded locally.  
+*Select a patient. Answer an assistant question with Yes, No, Unsure or free text, then ask again. The record is below the assessment.*
+
 **Rank the whole crew by how ill they are**  
 Every crew member is scored with NEWS2, the Royal College of Physicians early warning score, from the four vitals the hardware measures. The board and the ship are both ordered by it.  
 *It is always running. Nothing to ask.*
@@ -127,7 +131,7 @@ Select a crew member and each vital carries the reason it earned its points, plu
 *Click a crew member, on either view.*
 
 **Assign isolation and seal the zone behind them**  
-A febrile crew member with falling oxygen or rising respiration is assigned a quarantine berth. A zone counts as sealed from the moment one person is inside it, stops taking new arrivals once it is at capacity, and anyone left over is reported as awaiting a bed rather than quietly dropped.  
+A febrile crew member with falling oxygen or rising respiration is assigned a quarantine berth. A zone counts as sealed from the moment one person is inside it, stops taking new arrivals once it is at capacity, and anyone left over is reported as awaiting a bed rather than quietly dropped. Release uses a demonstration-only minimum of 120 seconds and two clear complete readings at least two seconds apart; missing readings never release anyone. This is not a validated clinical isolation protocol.  
 *Automatic. Watch the bulkheads close on the ship view.*
 
 **Record what a crew member tells you**  
@@ -144,7 +148,7 @@ The assistant reads that person's measurements and anything they reported, and o
 Because the box measures four things and a person can tell you a hundred, the most useful thing a model can do here is tell you what to ask.  
 *Included in every assessment.*
 
-4 of the 6 things this box does need no model at all. That ratio is the honest shape of the product: the AI is a narrator over a system that works without it.
+5 of the 7 things this box does need no model at all. That ratio is the honest shape of the product: the AI is a narrator over a system that works without it.
 
 ## 10. Everything it will never do
 
@@ -186,8 +190,14 @@ A scenario is a rehearsed timeline applied to the synthetic crew. Pick one at th
 **Contamination outbreak** (`contamination`)  
 Six of forty crew develop a respiratory infection over ninety seconds. The board re-orders itself by NEWS2 urgency, quarantine zones fill, and partway through the AI is killed to show the station keeps working without it.
 
+**False alarm** (`false-alarm`)  
+Simulated post-exercise temperature rise without respiratory signs; no isolation expected.
+
 **Single patient consultation** (`single-patient`)  
 One crew member develops a fever while being monitored.
+
+**Slow burn** (`slow-burn`)  
+One simulated patient deteriorates gradually over ten minutes.
 
 **Demo from a scenario, never from live sensors.** A rehearsed replay cannot embarrass you in front of a jury. Live hardware can.
 

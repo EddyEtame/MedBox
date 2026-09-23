@@ -120,7 +120,16 @@
 
     if (b.questions_for_patient && b.questions_for_patient.length) {
       html += "<h3>Ask the patient</h3><ul>" +
-        b.questions_for_patient.map(function (q) { return "<li>" + esc(q) + "</li>"; }).join("") +
+        b.questions_for_patient.map(function (q) {
+          return '<li><form class="patient-answer" data-patient="' + esc(b.patient_id) + '">' +
+            '<p class="answer-question">' + esc(q) + '</p>' +
+            '<button type="submit" name="choice" value="Yes">Oui</button> ' +
+            '<button type="submit" name="choice" value="No">Non</button> ' +
+            '<button type="submit" name="choice" value="Unsure">Incertain</button>' +
+            '<label>Autre réponse <input name="answer" maxlength="180" autocomplete="off"></label>' +
+            '<button type="submit" name="choice" value="text">Enregistrer</button>' +
+            '<p class="answer-status" role="status"></p></form></li>';
+        }).join("") +
         "</ul>";
     }
 
