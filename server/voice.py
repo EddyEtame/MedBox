@@ -128,17 +128,26 @@ class Transcriber:
             log.warning("speech model would not load: %s", exc)
         return self._model
 
-    def _transcribe(self, path: Path) -> tuple[str, float] | None:
+    def _transcribe(self, path: Path) -> tuple[str, float, str | None] | None:
         model = self._load()
         if model is None:
             return None
         try:
-            segments, _info = model.transcribe(
+            # Do not pin this to English. The station is presented in French,
+            # but a crew member may answer in either French or English. A
+            # missing ``language`` argument makes Whisper detect it locally
+            # for each utterance. The short prompt only helps it keep the
+            # product name and the four explicit consent phrases intact; it
+            # is not retained and it is never sent anywhere.
+            segments, info = model.transcribe(
                 str(path),
-                language="en",
                 beam_size=1,          # one beam: this is a short phrase, not prose
                 vad_filter=True,      # drop the silence either side of the press
                 condition_on_previous_text=False,
+                initial_prompt=(
+                    "MedBox. Français et English. J'accepte. Je n'accepte pas. "
+                    "Oui. Non. I accept. I do not accept. Yes. No."
+                ),
             )
             parts, logprobs = [], []
             for seg in segments:
@@ -158,9 +167,12 @@ class Transcriber:
         # into a 0-1 number is a presentation choice, not a measurement, and it
         # is labelled on screen as "sure" rather than as anything clinical.
         mean = sum(logprobs) / len(logprobs) if logprobs else -1.0
-        return said, max(0.0, min(1.0, math.exp(mean)))
+        language = getattr(info, "language", None)
+        if language is not None:
+            language = str(language).lower()
+        return said, max(0.0, min(1.0, math.exp(mean))), language
 
-    async def listen(self, path: Path) -> tuple[str, float] | None:
+    async def listen(self, path: Path) -> tuple[str, float, str | None] | None:
         """Transcribe a recording. Returns None on any failure, never raises.
 
         The same contract as the Ollama client, for the same reason: everything

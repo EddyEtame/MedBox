@@ -21,120 +21,185 @@ from __future__ import annotations
 CAPABILITIES = [
     {
         "id": "triage",
-        "title": "Rank the whole crew by how ill they are",
+        "title": "Prioriser tout l’équipage selon les mesures",
         "does": (
-            "Every crew member is scored with NEWS2, the Royal College of "
-            "Physicians early warning score, from the four vitals the hardware "
-            "measures. The board and the ship are both ordered by it."
+            "Chaque membre reçoit un dépistage partiel dérivé de NEWS2, calculé "
+            "à partir des quatre constantes mesurées par MedBox. Le tableau et "
+            "le vaisseau sont ordonnés selon ce score déterministe."
         ),
         "needs_ai": False,
-        "how": "It is always running. Nothing to ask.",
+        "how": "Toujours actif : aucune demande à formuler.",
     },
     {
         "id": "explain_score",
-        "title": "Show you why someone scored what they scored",
+        "title": "Expliquer le calcul du score d’une personne",
         "does": (
-            "Select a crew member and each vital carries the reason it earned "
-            "its points, plus the list of which parameters were actually "
-            "measured rather than assumed."
+            "Après sélection d’un membre, chaque constante indique pourquoi elle "
+            "a reçu ses points. MedBox distingue aussi les paramètres réellement "
+            "mesurés de ceux qui sont absents ou supposés."
         ),
         "needs_ai": False,
-        "how": "Click a crew member, on either view.",
+        "how": "Cliquer sur un membre dans l’une ou l’autre vue.",
     },
     {
         "id": "quarantine",
-        "title": "Assign isolation and seal the zone behind them",
+        "title": "Proposer une quarantaine à confirmer humainement",
         "does": (
-            "A febrile crew member with falling oxygen or rising respiration is "
-            "assigned a quarantine berth. A zone counts as sealed from the "
-            "moment one person is inside it, stops taking new arrivals once it "
-            "is at capacity, and anyone left over is reported as awaiting a bed "
-            "rather than quietly dropped."
+            "Une exposition déclarée par le scénario, associée à une fièvre et à "
+            "une désaturation ou une respiration élevée, crée un candidat. Un "
+            "humain doit confirmer l’affectation : rien n’est isolé automatiquement. "
+            "Après confirmation, la zone est scellée dès son premier occupant et "
+            "cesse d’accepter des arrivées quand sa capacité est atteinte. Toute "
+            "personne sans place reste affichée en attente d’un lit. La levée est "
+            "elle aussi manuelle."
         ),
         "needs_ai": False,
-        "how": "Automatic. Watch the bulkheads close on the ship view.",
+        "how": (
+            "Ouvrir le dossier du candidat, vérifier le contexte, puis confirmer "
+            "ou refuser. La libération exige une action humaine explicite."
+        ),
     },
     {
         "id": "report",
-        "title": "Record what a crew member tells you",
+        "title": "Enregistrer ce qu’un membre déclare",
         "does": (
-            "Type it, or say it into the microphone. It is stored as their own "
-            "words and passed to the assistant as something to check. It never "
-            "changes the NEWS2 score, because nothing measured it."
+            "Le texte saisi ou prononcé est conservé comme une déclaration à "
+            "vérifier. Il peut être transmis à l’assistant, mais ne modifie jamais "
+            "le score NEWS2 puisqu’aucun capteur ne l’a mesuré."
         ),
         "needs_ai": False,
-        "how": "Select a crew member, then the box under 'in their own words'.",
+        "how": "Sélectionner un membre, puis utiliser la zone « Déclarations ».",
+    },
+    {
+        "id": "baselines",
+        "title": "Comparer chaque personne à sa ligne de base saine",
+        "does": (
+            "Les constantes de référence sont personnelles, déjà enregistrées "
+            "dans la base locale et accompagnées de leur provenance. Une "
+            "simulation manuelle applique des écarts visibles à cette base ; "
+            "elle ne demande jamais au modèle d’inventer une mesure."
+        ),
+        "needs_ai": False,
+        "how": "Sélectionner un membre, puis choisir un scénario ou saisir un écart manuel.",
+    },
+    {
+        "id": "documents",
+        "title": "Joindre un compte rendu médical au dossier local",
+        "does": (
+            "MedBox accepte uniquement les formats autorisés, limite la taille, "
+            "calcule une empreinte et conserve le fichier localement. Le document "
+            "n’est jamais envoyé au modèle et son contenu n’est pas interprété."
+        ),
+        "needs_ai": False,
+        "how": "Sélectionner un membre, puis utiliser la zone « Documents médicaux ».",
+    },
+    {
+        "id": "protocols",
+        "title": "Consulter une carte de protocole locale validée",
+        "does": (
+            "Un moteur déterministe séparé du LLM recherche une carte signée et "
+            "affiche ses sources officielles. Toute option issue de l’inventaire "
+            "simulé reste masquée tant que l’identité, l’âge, la grossesse, les "
+            "allergies, les traitements actuels, les contre-indications et les "
+            "signes d’alerte ne sont pas vérifiés, puis validés récemment par un "
+            "clinicien pour cette carte précise. Aucune dose ni administration "
+            "automatique n’est fournie."
+        ),
+        "needs_ai": False,
+        "how": (
+            "Sélectionner un membre, choisir « Chercher une carte », puis suivre "
+            "chaque contrôle humain affiché."
+        ),
+    },
+    {
+        "id": "voice",
+        "title": "Rester à l’écoute après un consentement explicite",
+        "does": (
+            "Après l’autorisation du navigateur et une réponse vocale explicite, "
+            "MedBox écoute localement tant que la session reste ouverte. Seule la "
+            "phrase d’appel « MedBox » ouvre une demande ; la parole ambiante est "
+            "écartée et aucun fichier audio n’est conservé. L’écoute peut être mise "
+            "en pause ou révoquée à tout moment."
+        ),
+        "needs_ai": False,
+        "how": "Appuyer une fois sur « Activer MedBox », écouter l’avis, puis dire « J’accepte ».",
     },
     {
         "id": "hypotheses",
-        "title": "Offer ranked hypotheses for one crew member",
+        "title": "Proposer des hypothèses classées pour une personne",
         "does": (
-            "The assistant reads that person's measurements and anything they "
-            "reported, and offers possible explanations, each sign labelled with "
-            "the instrument that recorded it, or marked as something the crew "
-            "member said and nothing measured. It does not diagnose, it cannot "
-            "change the urgency, and when the four parameters support nothing it "
-            "is allowed to say so rather than invent a pattern."
+            "L’assistant lit les mesures et les déclarations de cette personne, "
+            "puis propose des explications possibles. Chaque signe nomme son "
+            "capteur ou reste clairement marqué comme déclaré et non mesuré. Il "
+            "ne diagnostique pas, ne change jamais la priorité et doit reconnaître "
+            "l’insuffisance des données au lieu d’inventer un profil."
         ),
         "needs_ai": True,
-        "how": "Select a crew member and press 'ask the assistant'.",
+        "how": "Sélectionner un membre, puis appuyer sur « Demander à l’assistant ».",
     },
     {
         "id": "questions",
-        "title": "Suggest what to ask the patient next",
+        "title": "Suggérer les prochaines questions à poser",
         "does": (
-            "Because the box measures four things and a person can tell you a "
-            "hundred, the most useful thing a model can do here is tell you "
-            "what to ask."
+            "MedBox ne mesure que quatre paramètres. L’assistant peut donc aider "
+            "à formuler des questions brèves pour recueillir les informations qui "
+            "manquent, sans les transformer en mesures."
         ),
         "needs_ai": True,
-        "how": "Included in every assessment.",
+        "how": "Inclus dans chaque évaluation de l’assistant.",
     },
 ]
 
 # ------------------------------------------------------ what it will not do
 REFUSALS = [
     {
-        "never": "Diagnose",
+        "id": "diagnosis",
+        "never": "Poser un diagnostic",
         "why": (
-            "It offers hypotheses with the signs behind them. There is no "
-            "diagnosis field anywhere in the schema it is allowed to answer in, "
-            "so it cannot emit one even if asked."
+            "L’assistant propose seulement des hypothèses accompagnées de leurs "
+            "signes. Le schéma de réponse ne contient aucun champ de diagnostic : "
+            "il ne peut donc pas en produire, même si on le lui demande."
         ),
     },
     {
-        "never": "Prescribe anything",
+        "id": "prescription",
+        "never": "Prescrire un médicament ou un traitement",
         "why": (
-            "It has no field to put a treatment in. The one array it can fill "
-            "is for observations and measurements to take, and the station "
-            "drops the whole array and says so if a drug, a dose or a route "
-            "appears in it. There is no doctor aboard and this box is not one."
+            "Aucun champ ne permet d’émettre un traitement. La seule liste qu’il "
+            "peut remplir concerne les observations et mesures à recueillir. Si "
+            "un médicament, une dose ou une voie d’administration y apparaît, "
+            "MedBox supprime toute la liste et le signale. MedBox n’est pas médecin."
         ),
     },
     {
-        "never": "Change how urgent someone is",
+        "id": "urgency",
+        "never": "Modifier la priorité d’une personne",
         "why": (
-            "Urgency is NEWS2, computed in Python from measurements. The model "
-            "is not in that path and never reads it back."
+            "La priorité provient de NEWS2, calculé en Python à partir des mesures. "
+            "Le modèle n’appartient pas à ce circuit et ne peut pas réécrire le score."
         ),
     },
     {
-        "never": "Act on something nobody measured",
+        "id": "unmeasured",
+        "never": "Traiter une déclaration comme une mesure",
         "why": (
-            "Reported symptoms reach it marked as unverified claims. It is "
-            "required to name the measurement behind every claim it makes."
+            "Les symptômes déclarés lui parviennent comme des informations non "
+            "vérifiées. Chaque signe avancé doit nommer sa source."
         ),
     },
     {
-        "never": "Block a reading",
+        "id": "availability",
+        "never": "Bloquer les mesures",
         "why": (
-            "It runs on a slow track. If it hangs or dies, vitals, triage, "
-            "quarantine and recording carry on untouched. Kill it and watch."
+            "L’assistant fonctionne sur une voie lente séparée. S’il se bloque ou "
+            "s’arrête, les constantes, la priorisation, les propositions de "
+            "quarantaine et l’enregistrement continuent."
         ),
     },
     {
-        "never": "Reach the network",
-        "why": "The model runs locally. The vessel has no contact with Earth.",
+        "id": "network",
+        "never": "Accéder au réseau",
+        "why": "Le modèle fonctionne localement ; le vaisseau n’a aucun contact avec la Terre.",
     },
 ]
 
@@ -144,43 +209,54 @@ REFUSALS = [
 # working when the assistant does.
 SHORTCUTS = [
     {
-        "phrase": "worst",
-        "does": "Select the crew member with the highest NEWS2 score.",
+        "phrase": "prioritaire",
+        "aliases": ["pire", "worst"],
+        "does": "Sélectionner le membre ayant le score NEWS2 le plus élevé.",
         "needs_ai": False,
     },
     {
-        "phrase": "next",
-        "does": "Move to the next crew member down the triage order.",
+        "phrase": "suivant",
+        "aliases": ["next"],
+        "does": "Passer au membre suivant dans l’ordre de priorité.",
         "needs_ai": False,
     },
     {
-        "phrase": "why",
-        "does": "Show how the selected score was built, parameter by parameter.",
+        "phrase": "pourquoi",
+        "aliases": ["why"],
+        "does": "Afficher le calcul du score sélectionné, paramètre par paramètre.",
         "needs_ai": False,
     },
     {
-        "phrase": "isolated",
-        "does": "Show who is in quarantine and which zones are sealed.",
+        "phrase": "isolés",
+        "aliases": ["isolated"],
+        "does": (
+            "Afficher les candidats en attente de confirmation, les personnes "
+            "confirmées en quarantaine et les zones scellées."
+        ),
         "needs_ai": False,
     },
     {
-        "phrase": "said <words>",
-        "does": "Record what this crew member just told you, in their words.",
+        "phrase": "déclaré <mots>",
+        "aliases": ["said <words>"],
+        "does": "Enregistrer les mots que ce membre vient de prononcer.",
         "needs_ai": False,
     },
     {
-        "phrase": "assess",
-        "does": "Ask the assistant for hypotheses on the selected crew member.",
+        "phrase": "évaluer",
+        "aliases": ["assess"],
+        "does": "Demander des hypothèses à l’assistant pour le membre sélectionné.",
         "needs_ai": True,
     },
     {
-        "phrase": "ask",
-        "does": "List what to ask this patient next.",
+        "phrase": "demander",
+        "aliases": ["ask"],
+        "does": "Lister les questions à poser ensuite à cette personne.",
         "needs_ai": True,
     },
     {
-        "phrase": "help",
-        "does": "Explain what this box can and cannot do. Works with the AI dead.",
+        "phrase": "aide",
+        "aliases": ["help"],
+        "does": "Expliquer ce que MedBox peut et ne peut pas faire, même sans IA.",
         "needs_ai": False,
     },
 ]
@@ -199,30 +275,43 @@ def manifest(ai_available: bool = False, stand_in: bool = False) -> dict:
     }
 
 
-def self_explanation_prompt() -> str:
-    """Ask the model to introduce the station in its own words.
+INTRODUCTION_CORE = (
+    "Je surveille les quatre constantes mesurées, les compare aux lignes de base "
+    "personnelles et signale les écarts dans le tableau, le vaisseau 3D et les "
+    "dossiers locaux. Je peux proposer des hypothèses et des questions, mais jamais "
+    "diagnostiquer, prescrire, modifier une priorité ou isoler quelqu’un : ces "
+    "décisions restent humaines. Les comptes rendus et les cartes de protocole "
+    "restent locaux et ne sont pas interprétés par le modèle."
+)
 
-    It is handed the facts rather than asked to recall them, because a 3B
-    model asked "what can you do?" will cheerfully invent capabilities, and an
-    invented capability in a medical interface is the worst possible failure
-    of this whole feature.
+INTRODUCTION_CONSENT = (
+    "Après l’autorisation du navigateur, le microphone peut rester actif localement "
+    "pendant cette session pour détecter « MedBox » ; l’audio n’est pas conservé et "
+    "vous pouvez suspendre l’écoute ou retirer votre accord à tout moment. "
+    "Acceptez-vous cette écoute locale continue ? Dites clairement « J’accepte », "
+    "« oui », « I accept » ou « yes »."
+)
+
+
+def deterministic_introduction(greeting: str = "Bonjour, je suis MedBox.") -> str:
+    """Return the complete, reviewable startup orientation.
+
+    Ollama is allowed to provide only ``greeting``. The operational claims, medical
+    limits and consent question are station-owned text, so a slow or unavailable
+    model cannot omit or improvise them.
     """
-    can = "\n".join(
-        f"- {c['title']}: {c['does']} "
-        f"({'needs you' if c['needs_ai'] else 'works without you'})"
-        for c in CAPABILITIES
-    )
-    wont = "\n".join(f"- Never {r['never'].lower()}: {r['why']}" for r in REFUSALS)
-    keys = ", ".join(s["phrase"] for s in SHORTCUTS)
+    return f"{greeting.strip()} {INTRODUCTION_CORE} {INTRODUCTION_CONSENT}"
+
+
+def self_explanation_prompt() -> str:
+    """Ask only for a short French greeting, never for medical content.
+
+    The complete introduction is composed by :func:`deterministic_introduction`.
+    Keeping the model's job this small is both a latency boundary and a safety
+    boundary: it cannot invent capabilities or weaken the consent notice.
+    """
     return (
-        "A crew member has just asked what this box can do for them.\n\n"
-        "These are the facts. Do not add to them, and do not claim any ability "
-        "that is not listed here:\n\n"
-        f"WHAT IT DOES:\n{can}\n\n"
-        f"WHAT IT WILL NOT DO:\n{wont}\n\n"
-        f"SHORTCUTS THEY CAN TYPE: {keys}\n\n"
-        "Introduce yourself and the station in four sentences at most. Be plain "
-        "and calm. Say early that most of this works whether or not you are "
-        "running, and that the urgency ranking is never yours. Do not use bullet "
-        "points. Do not invent a capability."
+        "Écrivez une seule salutation calme en français, de 4 à 10 mots. "
+        "Elle doit contenir le nom « MedBox ». Aucun conseil médical, aucune "
+        "capacité, aucune liste et aucune question."
     )

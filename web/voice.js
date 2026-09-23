@@ -5,9 +5,13 @@
  * rule "the station speaks from measurements, never for the model" is true of
  * the code and not just of the intention.
  *
- * Every clip is a file that already exists under /static/speech/, rendered
- * once at build time. So there is no engine here, no synthesis, no network and
- * nothing to wait for — playing a line is a disk read.
+ * Operational alerts are files that already exist under /static/speech/,
+ * rendered once at build time. So there is no model response to synthesise,
+ * no network and nothing to wait for — playing an alert is a disk read. The
+ * one longer exception is the fixed French consent notice: it prefers a
+ * bundled consent_fr.wav and may fall back to an installed, explicitly local
+ * French browser voice. Its text is deterministic and remains visible when no
+ * such voice exists.
  *
  * Three things this has to get right, none of them obvious:
  *
@@ -41,6 +45,9 @@
   var playing = false;
   var cache = {};
   var missing = {};
+  var consentPlaying = false;
+  var consentAudio = null;
+  var consentSerial = 0;
 
   function clip(stem) {
     if (!cache[stem]) {
@@ -72,7 +79,7 @@
   }
 
   function pump() {
-    if (playing || !queue.length || !on) return;
+    if (playing || consentPlaying || !queue.length || !on) return;
     playing = true;
     var item = queue.shift();
     var stems = [];
@@ -118,12 +125,161 @@
     try { return localStorage.getItem("medbox.voice") === "1"; } catch (e) { return false; }
   }
 
+  /* Consent is a fixed safety notice, never text produced by the LLM. Prefer
+     a pre-rendered French clip when one is bundled. If it is absent, use only
+     a French voice explicitly reported by the browser as local; a cloud voice
+     would break the offline promise. The full notice is always visible in the
+     microphone panel, so missing text-to-speech never blocks consent. */
+  function localFrenchSpeech(text, serial) {
+    return new Promise(function (resolve) {
+      if (!root.speechSynthesis || !root.SpeechSynthesisUtterance) {
+        resolve(false);
+        return;
+      }
+      var finished = false;
+      function done(value) {
+        if (finished) return;
+        finished = true;
+        resolve(value);
+      }
+      function choose() {
+        var voices = root.speechSynthesis.getVoices ? root.speechSynthesis.getVoices() : [];
+        if (!voices.length) return null;
+        for (var i = 0; i < voices.length; i++) {
+          if (/^fr([-_]|$)/i.test(voices[i].lang || "") && voices[i].localService !== false) {
+            return voices[i];
+          }
+        }
+        return false;
+      }
+      function speak(voice) {
+        if (serial !== consentSerial || !voice) { done(false); return; }
+        var utterance = new root.SpeechSynthesisUtterance(text);
+        utterance.lang = voice.lang || "fr-FR";
+        utterance.voice = voice;
+        utterance.rate = 0.96;
+        utterance.onend = function () { done(true); };
+        utterance.onerror = function () { done(false); };
+        root.speechSynthesis.speak(utterance);
+        setTimeout(function () { done(false); }, 45000);
+      }
+
+      var selected = choose();
+      if (selected !== null) { speak(selected); return; }
+      // Chromium sometimes fills the voice list asynchronously.
+      function ready() {
+        clearTimeout(wait);
+        root.speechSynthesis.removeEventListener("voiceschanged", ready);
+        speak(choose());
+      }
+      var wait = setTimeout(function () {
+        root.speechSynthesis.removeEventListener("voiceschanged", ready);
+        speak(choose());
+      }, 800);
+      root.speechSynthesis.addEventListener("voiceschanged", ready);
+    });
+  }
+
+  function playConsentAsset(text, serial) {
+    var url = BASE + "consent_fr.wav";
+    return fetch(url, { method: "HEAD", cache: "no-store" }).then(function (response) {
+      if (serial !== consentSerial) return false;
+      if (!response.ok) throw new Error("missing consent clip");
+      return new Promise(function (resolve) {
+        var audio = new Audio(url);
+        var finished = false;
+        consentAudio = audio;
+        function done(ok) {
+          if (finished) return;
+          finished = true;
+          consentAudio = null;
+          resolve(ok);
+        }
+        audio.addEventListener("ended", function () { done(true); }, { once: true });
+        audio.addEventListener("error", function () { done(false); }, { once: true });
+        var promise = audio.play();
+        if (promise && promise.catch) promise.catch(function () { done(false); });
+        setTimeout(function () { done(false); }, 45000);
+      });
+    }).then(function (played) {
+      return played ? true : localFrenchSpeech(text, serial);
+    }).catch(function () {
+      missing.consent_fr = true;
+      return localFrenchSpeech(text, serial);
+    });
+  }
+
+  function waitForOperationalLine(serial) {
+    return new Promise(function (resolve) {
+      function check() {
+        if (serial !== consentSerial || !playing) { resolve(); return; }
+        setTimeout(check, 80);
+      }
+      check();
+    });
+  }
+
+  function speakConsentNotice(text) {
+    var serial = ++consentSerial;
+    consentPlaying = true;
+    return waitForOperationalLine(serial).then(function () {
+      return playConsentAsset(text, serial);
+    }).then(function (spoken) {
+      if (serial !== consentSerial) return false;
+      consentPlaying = false;
+      pump();
+      return spoken;
+    }, function () {
+      if (serial !== consentSerial) return false;
+      consentPlaying = false;
+      pump();
+      return false;
+    });
+  }
+
+  /* Speak a short deterministic/local response after a wake-word command.
+     It uses only a voice the browser reports as local and is optional: the
+     same sentence is always visible in the listening panel. */
+  function speakText(text) {
+    if (!on || !String(text || "").trim()) return Promise.resolve(false);
+    var serial = ++consentSerial;
+    consentPlaying = true;
+    return waitForOperationalLine(serial).then(function () {
+      return localFrenchSpeech(String(text), serial);
+    }).then(function (spoken) {
+      if (serial !== consentSerial) return false;
+      consentPlaying = false;
+      pump();
+      return spoken;
+    }, function () {
+      if (serial !== consentSerial) return false;
+      consentPlaying = false;
+      pump();
+      return false;
+    });
+  }
+
+  function cancelConsentSpeech() {
+    consentSerial += 1;
+    consentPlaying = false;
+    if (consentAudio) {
+      try { consentAudio.pause(); } catch (e) {}
+      consentAudio = null;
+    }
+    if (root.speechSynthesis) root.speechSynthesis.cancel();
+    pump();
+  }
+
   root.MedBox = root.MedBox || {};
   root.MedBox.voice = {
     say: say,
     setOn: setOn,
     isOn: function () { return on; },
+    isSpeaking: function () { return playing || consentPlaying; },
     restore: restore,
+    speakConsentNotice: speakConsentNotice,
+    speakText: speakText,
+    cancelConsentSpeech: cancelConsentSpeech,
     nameStem: nameStem,
     missing: function () { return Object.keys(missing); }
   };

@@ -20,6 +20,7 @@ is not.
 from __future__ import annotations
 
 import re
+import unicodedata
 
 from .schemas import (
     ASSESSMENT_SCHEMA,
@@ -43,11 +44,17 @@ DRUG_WORDS = {
     "epinephrine", "morphine", "amoxicillin", "antibiotic", "antibiotics",
     "antipyretic", "analgesic", "dexamethasone", "salbutamol", "albuterol",
     "oseltamivir", "ondansetron", "naloxone", "saline", "bolus",
+    "medicament", "medicaments", "antibiotique", "antibiotiques",
+    "antipyretique", "antalgique", "analgesique", "traitement", "traitements",
 }
 ROUTE_WORDS = {
     "orally", "oral", "intravenous", "intravenously", "iv", "im",
     "intramuscular", "subcutaneous", "nasal cannula", "per os", "administer",
     "prescribe", "prescribed", "dose", "dosage",
+    "oralement", "voie orale", "par voie orale", "intraveineux",
+    "intraveineuse", "intraveineusement", "intramusculaire", "sous cutanee",
+    "canule nasale", "administrer", "administrez", "prescrire", "prescrivez",
+    "comprime", "gelule", "injection", "injecter", "perfusion",
 }
 
 # The model is told the band. It is not allowed to restate it, because a 3B
@@ -57,29 +64,42 @@ ROUTE_WORDS = {
 BAND_WORDS = {
     "routine", "low", "medium", "high", "mild", "reassuring", "stable",
     "critical", "severe", "normal risk", "low risk", "high risk",
+    "nominal", "faible", "moyen", "moyenne", "eleve", "elevee", "modere",
+    "moderee", "rassurant", "rassurante", "critique", "severe",
+    "risque faible", "risque eleve",
 }
 
 SUPPRESSED_PROTOCOL = (
-    "The assistant proposed a treatment. It was blocked: this station does not "
-    "prescribe, and nothing here is a substitute for the printed protocol card."
+    "L’assistant a proposé un traitement. MedBox l’a bloqué : cette station ne "
+    "prescrit rien et ne remplace pas une fiche de protocole imprimée et validée."
 )
 SUPPRESSED_SUMMARY = (
-    "The assistant restated the urgency in its own words. It was suppressed: "
-    "urgency is NEWS2, shown above, and the assistant does not get a second vote."
+    "L’assistant a reformulé la priorité. Cette phrase a été supprimée : la "
+    "priorité provient de NEWS2, affiché ci-dessus, et le modèle ne la redéfinit pas."
 )
 SUPPRESSED_NOTHING = (
-    "The assistant said the readings support no hypothesis, under a band NEWS2 "
-    "raised from those same readings. The station does not repeat that."
+    "L’assistant a affirmé qu’aucune hypothèse n’était étayée alors que ces mêmes "
+    "mesures ont relevé la bande NEWS2. MedBox n’affiche pas cette contradiction."
 )
+
+
+def _plain(text: str) -> str:
+    """Lower-case, accent-free text for bilingual safety matching."""
+    return "".join(
+        character
+        for character in unicodedata.normalize("NFD", text.lower())
+        if unicodedata.category(character) != "Mn"
+    )
 
 
 def _looks_like_a_prescription(text: str) -> bool:
     if DOSE.search(text):
         return True
-    words = set(re.findall(r"[a-z]+", text.lower()))
-    if words & DRUG_WORDS:
-        return True
-    return bool(words & ROUTE_WORDS)
+    plain = _plain(text)
+    for term in DRUG_WORDS | ROUTE_WORDS:
+        if re.search(rf"\b{re.escape(term)}\b", plain):
+            return True
+    return False
 
 
 def _contradicts_the_band(summary: str, urgency: str) -> bool:
@@ -89,9 +109,9 @@ def _contradicts_the_band(summary: str, urgency: str) -> bool:
     the operator is told about; a false negative costs a written contradiction
     of the triage score sitting four centimetres beneath it.
     """
-    low = summary.lower()
+    low = _plain(summary)
     for word in BAND_WORDS:
-        if re.search(rf"\b{re.escape(word)}\b", low) and word != (urgency or "").lower():
+        if re.search(rf"\b{re.escape(word)}\b", low) and word != _plain(urgency or ""):
             return True
     return False
 
@@ -109,7 +129,10 @@ def enforce(result: dict, urgency: str = "") -> dict:
     """
     blocked: list[str] = []
     if not isinstance(result, dict):
-        return {"ok": False, "blocked": ["The assistant returned something that was not an assessment."]}
+        return {
+            "ok": False,
+            "blocked": ["La réponse de l’assistant ne respectait pas le format d’évaluation."],
+        }
 
     allowed = set(ASSESSMENT_SCHEMA["properties"])
     extra = sorted(set(result) - allowed - {"stand_in"})
@@ -118,7 +141,9 @@ def enforce(result: dict, urgency: str = "") -> dict:
         # through json.loads into the response body, hidden only by the fact
         # that no renderer looked for it.
         blocked.append(
-            "The assistant returned fields it is not allowed to: " + ", ".join(extra) + "."
+            "L’assistant a renvoyé des champs interdits par le contrat : "
+            + ", ".join(extra)
+            + "."
         )
 
     out: dict = {}
@@ -172,7 +197,8 @@ def enforce(result: dict, urgency: str = "") -> dict:
                 signs.append({"source": source, "text": text})
         if not signs:
             blocked.append(
-                f"A hypothesis ({h.get('name') or 'unnamed'}) cited no sign at all and was dropped."
+                f"Une hypothèse ({h.get('name') or 'sans nom'}) ne citait aucun "
+                "signe et a été supprimée."
             )
             continue
         fit = h.get("fit") if h.get("fit") in FIT_LEVELS else FIT_LEVELS[0]
