@@ -952,12 +952,22 @@
         html += '<p class="guide-lead">Dites « MedBox » puis une demande dans vos mots : ' +
           "si elle correspond à une action de la station, elle sera apprise ici.</p>";
       }
+      var HOW = { operator: "appris d’un opérateur", lexicon: "reconnu par le vocabulaire de la station",
+                  model: "arbitré par le modèle entre lectures plausibles, puis retenu" };
       html += phrases.slice(0, 12).map(function (p) {
         return '<div class="gitem"><b>« ' + esc(p.example) + " »</b><p>compris comme : " + esc(p.label_fr) +
-          '</p><span class="how">' + (p.source === "operator" ? "appris d’un opérateur" : "compris par le modèle, puis retenu") +
-          " · utilisé " + esc(String(p.uses)) + " fois</span></div>";
+          '</p><span class="how">' + esc(HOW[p.source] || p.source) + " · utilisé " + esc(String(p.uses)) +
+          ' fois · <a href="#" class="forget" data-text="' + esc(p.example) + '">oublier</a></span></div>';
       }).join("");
       box.innerHTML = '<h3>Ce que MedBox a appris</h3>' + html;
+      box.querySelectorAll(".forget").forEach(function (a) {
+        a.addEventListener("click", function (e) {
+          e.preventDefault();
+          fetch("/api/assistant/feedback", { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: a.getAttribute("data-text"), intent: "forget" }) })
+            .then(renderLearned).catch(function () {});
+        });
+      });
     }).catch(function () {
       box.innerHTML = '<h3>Ce que MedBox a appris</h3><p class="guide-lead">Indisponible.</p>';
     });

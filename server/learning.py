@@ -48,11 +48,46 @@ INTENT_LABELS_FR: dict[str, str] = {
     "report": "enregistrer une déclaration du membre",
 }
 
+# Words that make an intent PLAUSIBLE for a phrase, French and English,
+# accent-free. This is the gate in front of the model: an intent whose words
+# are absent cannot be chosen at all. Measured without it, a 1.5B model under
+# a forced enum could not abstain, and « ouvre le sas et éteins le réacteur »
+# became a medical call, learned for good. With one plausible intent the
+# phrase resolves here, instantly, with no model; with several, the model
+# arbitrates among those only.
+LEXICON: dict[str, frozenset[str]] = {
+    "help": frozenset({"aide", "aider", "help", "fonctions", "capable", "sais faire", "que peux"}),
+    "worst": frozenset({"pire", "malade", "urgent", "urgente", "prioritaire", "priorite", "grave",
+                        "mal en point", "critique", "worst", "sickest", "priority", "plus atteint"}),
+    "next": frozenset({"suivant", "suivante", "prochain", "prochaine", "apres", "next", "passe au"}),
+    "why": frozenset({"pourquoi", "explique", "expliquer", "score", "raison", "why", "explain"}),
+    "isolated": frozenset({"isole", "isoles", "isolement", "quarantaine", "zone", "zones", "isolated",
+                           "quarantine", "confine"}),
+    "assess": frozenset({"evalue", "evaluer", "evaluation", "hypothese", "hypotheses", "analyse",
+                         "avis", "assess", "assessment", "analyze", "opinion"}),
+    "ask": frozenset({"question", "questions", "demander", "quoi demander", "poser", "ask"}),
+    "pause": frozenset({"pause", "silence", "arrete d ecouter", "stop", "tais toi", "suspends"}),
+    "doctor_call": frozenset({"medecin", "docteur", "medical", "appelle", "appeler", "alerte",
+                              "alerter", "doctor", "call", "alert"}),
+    "report": frozenset({"declare", "declaration", "dit", "signale", "ressens", "ressent", "j ai",
+                         "il a", "elle a", "said", "reported", "feels"}),
+}
+
+
+def candidates(text: str) -> list[str]:
+    """The intents whose words appear in the phrase, in INTENTS order."""
+    plain = " " + normalize(text) + " "
+    return [
+        intent for intent in INTENTS
+        if any(f" {word} " in plain for word in LEXICON[intent])
+    ]
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS learned_phrases (
     phrase      TEXT PRIMARY KEY,
     intent      TEXT NOT NULL,
-    source      TEXT NOT NULL CHECK(source IN ('model', 'operator')),
+    source      TEXT NOT NULL CHECK(source IN ('lexicon', 'model', 'operator')),
     example     TEXT NOT NULL,
     learned_at  REAL NOT NULL,
     uses        INTEGER NOT NULL DEFAULT 0
@@ -62,7 +97,7 @@ CREATE TABLE IF NOT EXISTS request_journal (
     at          REAL NOT NULL,
     text        TEXT NOT NULL,
     intent      TEXT NOT NULL,
-    resolved_by TEXT NOT NULL CHECK(resolved_by IN ('allowlist', 'learned', 'model', 'none')),
+    resolved_by TEXT NOT NULL CHECK(resolved_by IN ('allowlist', 'learned', 'lexicon', 'model', 'none')),
     patient_id  TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_journal_at ON request_journal(at);
@@ -88,6 +123,14 @@ class Learning:
 
     def __init__(self, conn: sqlite3.Connection) -> None:
         self.conn = conn
+        # A table from before the lexicon existed has a narrower CHECK; the
+        # phrase book is hours old and holds guesses, so it is rebuilt.
+        for table in ("learned_phrases", "request_journal"):
+            row = self.conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)
+            ).fetchone()
+            if row is not None and "'lexicon'" not in str(row[0]):
+                self.conn.execute(f"DROP TABLE {table}")
         self.conn.executescript(SCHEMA)
         self.conn.commit()
 
@@ -109,7 +152,7 @@ class Learning:
 
     def learn(self, text: str, intent: str, source: str) -> bool:
         """Remember that these words mean this intent. Operators outrank the model."""
-        if intent not in INTENTS or source not in ("model", "operator"):
+        if intent not in INTENTS or source not in ("lexicon", "model", "operator"):
             raise ValueError(f"cannot learn {intent!r} from {source!r}")
         key = normalize(text)
         if not key or len(key) > 200:
@@ -117,7 +160,7 @@ class Learning:
         existing = self.conn.execute(
             "SELECT source FROM learned_phrases WHERE phrase = ?", (key,)
         ).fetchone()
-        if existing is not None and existing[0] == "operator" and source == "model":
+        if existing is not None and existing[0] == "operator" and source != "operator":
             return False  # a correction by a person is never overwritten by a guess
         self.conn.execute(
             "INSERT INTO learned_phrases (phrase, intent, source, example, learned_at, uses) "

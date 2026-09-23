@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT))
 from server import app as station  # noqa: E402
 from server.ai import intent as intent_module  # noqa: E402
 from server.commands import classify  # noqa: E402
-from server.learning import INTENTS, Learning, normalize  # noqa: E402
+from server.learning import INTENTS, Learning, candidates, normalize  # noqa: E402
 
 
 @pytest.fixture
@@ -51,6 +51,7 @@ def test_an_operator_outranks_the_model_and_the_book_cannot_invent_actions(book)
     book.learn("passe au suivant s'il te plaît", "next", "operator")
     assert book.lookup("passe au suivant s il te plait") == "next"
     assert book.learn("passe au suivant s'il te plaît", "worst", "model") is False
+    assert book.learn("passe au suivant s'il te plaît", "worst", "lexicon") is False
     with pytest.raises(ValueError):
         book.learn("éteins le réacteur", "shutdown_reactor", "operator")
 
@@ -103,24 +104,57 @@ def test_a_dead_model_files_the_words_as_before(monkeypatch):
     assert asyncio.run(intent_module.classify("montre-moi le plus malade", False)) is None
 
 
-def test_the_route_learns_then_stops_asking_the_model(model, monkeypatch):
-    station.STATION._frame()
-    station.STATION.learning = Learning(sqlite3.connect(":memory:"))
-    model('{"intent": "worst"}')
+def _counting(monkeypatch):
     calls = []
     real_classify = intent_module.classify
 
-    async def counting(text, has_selection):
-        calls.append(text)
-        return await real_classify(text, has_selection)
+    async def counting(text, has_selection, allowed=None):
+        calls.append((text, list(allowed or [])))
+        return await real_classify(text, has_selection, allowed)
 
     monkeypatch.setattr(station, "classify_intent", counting)
+    return calls
+
+
+def test_one_plausible_reading_needs_no_model_and_is_learned(model, monkeypatch):
+    """« montre-moi le plus malade » has one plausible intent (malade -> worst):
+    resolved by the lexicon, instantly, and written to the book."""
+    station.STATION._frame()
+    station.STATION.learning = Learning(sqlite3.connect(":memory:"))
+    model('{"intent": "next"}')  # the model would have said next; it is not asked
+    calls = _counting(monkeypatch)
     first = asyncio.run(station.assistant_command({"text": "MedBox, montre-moi le plus malade"}))
-    assert first["action"] == "select" and first["resolved_by"] == "model" and first["learned"] is True
+    assert first["action"] == "select" and first["resolved_by"] == "lexicon" and first["learned"] is True
     second = asyncio.run(station.assistant_command({"text": "montre moi le plus malade"}))
-    assert second["action"] == "select" and second["resolved_by"] == "learned"
-    assert calls == ["MedBox, montre-moi le plus malade"], "the model was asked twice for the same words"
+    assert second["resolved_by"] == "learned"
+    assert calls == [], "the model was consulted for a phrase with one plausible reading"
     assert station.STATION.learning.stats()["requests"] == 2
+
+
+def test_nothing_the_station_does_is_none_without_asking_the_model(model, monkeypatch):
+    """« ouvre le sas et éteins le réacteur » became a medical call, learned
+    for good, when the model saw the whole menu. No lexicon word: no model."""
+    station.STATION._frame()
+    station.STATION.learning = Learning(sqlite3.connect(":memory:"))
+    model('{"intent": "doctor_call"}')
+    calls = _counting(monkeypatch)
+    out = asyncio.run(station.assistant_command({"text": "MedBox, ouvre le sas et éteins le réacteur"}))
+    assert out["resolved_by"] == "none" and out["action"] == "none"
+    assert calls == [] and station.STATION.learning.stats()["learned_phrases"] == 0
+
+
+def test_the_model_arbitrates_only_between_plausible_readings(model, monkeypatch):
+    """« passe au suivant, le plus malade » is plausibly next or worst; the
+    model chooses between those two and nothing else."""
+    station.STATION._frame()
+    station.STATION.learning = Learning(sqlite3.connect(":memory:"))
+    model('{"intent": "worst"}')
+    calls = _counting(monkeypatch)
+    out = asyncio.run(station.assistant_command({"text": "passe au suivant, le plus malade"}))
+    assert out["resolved_by"] == "model" and out["action"] == "select"
+    assert calls == [("passe au suivant, le plus malade", ["worst", "next"])]
+    model('{"intent": "doctor_call"}')  # outside the shortlist: refused even if answered
+    assert asyncio.run(intent_module.classify("x", False, ["worst", "next"])) is None
 
 
 def test_an_explicit_declaration_is_never_reinterpreted(model):
@@ -142,3 +176,11 @@ def test_the_operator_can_teach_and_the_lesson_is_readable():
     assert set(learned["intents"]) == set(INTENTS)
     with pytest.raises(station.HTTPException):
         asyncio.run(station.assistant_feedback({"text": "x", "intent": "self_destruct"}))
+
+
+def test_the_lexicon_shortlists_in_both_languages():
+    assert candidates("MedBox, qui est le plus mal en point ?") == ["worst"]
+    assert candidates("who is the sickest") == ["worst"]
+    assert candidates("passe au suivant, le plus malade") == ["worst", "next"]
+    assert candidates("ouvre le sas et éteins le réacteur") == []
+    assert candidates("pourquoi ce score") == ["why"]

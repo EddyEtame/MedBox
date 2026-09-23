@@ -30,7 +30,7 @@ from .ai.validate import enforce
 from .bus import BUS
 from .config import CONFIG, ROOT
 from .commands import Command, classify as classify_command
-from .learning import INTENTS, INTENT_LABELS_FR, Learning
+from .learning import INTENTS, INTENT_LABELS_FR, Learning, candidates as intent_candidates
 from .ai.intent import classify as classify_intent
 from .db import Database
 from .quarantine import QuarantineRegistry
@@ -1019,7 +1019,14 @@ async def _resolve(command: Command, text: str, patient_id: str | None) -> tuple
     known = STATION.learning.lookup(text)
     if known:
         return _as_command(known, text), "learned", False
-    guess = await classify_intent(text, patient_id is not None)
+    plausible = [i for i in intent_candidates(text) if i != "report"]
+    if not plausible:
+        return command, "none", False          # nothing the station does; no model
+    if len(plausible) == 1:
+        intent = plausible[0]                  # one plausible reading: no model either
+        learned = STATION.learning.learn(text, intent, "lexicon")
+        return _as_command(intent, text), "lexicon", learned
+    guess = await classify_intent(text, patient_id is not None, plausible)
     if guess and guess != "report":
         learned = STATION.learning.learn(text, guess, "model")
         return _as_command(guess, text), "model", learned
