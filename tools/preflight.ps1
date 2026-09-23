@@ -27,6 +27,12 @@ function Warn([string]$t) { Write-Host ("  ATTENTION " + $t) -ForegroundColor Ye
 function Fail([string]$t) { Write-Host ("  ECHEC     " + $t) -ForegroundColor Red; $script:fails++ }
 function Section([string]$t) { Write-Host ""; Write-Host $t; Write-Host ("-" * $t.Length) }
 
+# A raw connect, one second, no proxy detection (see tools\assistant.ps1).
+function Test-Port([int]$Port) {
+    $client = New-Object System.Net.Sockets.TcpClient
+    try { return $client.ConnectAsync("127.0.0.1", $Port).Wait(1000) } catch { return $false } finally { $client.Close() }
+}
+
 function Config([string]$section, [string]$name) {
     $current = ""
     foreach ($line in Get-Content -LiteralPath (Join-Path $root "config.toml")) {
@@ -81,6 +87,13 @@ $model = Config "ai" "model"
 $ollama = Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama.exe"
 if (-not (Test-Path -LiteralPath $ollama)) { $cmd = Get-Command ollama -ErrorAction SilentlyContinue; if ($cmd) { $ollama = $cmd.Source } }
 if (-not (Test-Path -LiteralPath $ollama)) { Fail "ollama.exe introuvable" }
+elseif (-not (Test-Port 11434)) {
+    # Never call the CLI while the server is down: on Windows it launches the
+    # tray app, which inherits this script's output pipe, and Out-String then
+    # waits for an end of stream that never comes. Seen: a preflight with no
+    # output for three minutes, killed by hand.
+    Fail "Ollama ne repond pas sur le port 11434 : lancer tools\assistant.ps1 start, puis relancer ce script."
+}
 else {
     $ver = (& $ollama --version 2>&1 | Out-String)
     if ($ver -match '(\d+\.\d+\.\d+)') { $v = $Matches[1]; if ($v -eq $pin) { Ok "Ollama $v = version epinglee" } else { Fail "Ollama $v, config.toml epingle $pin" } }
@@ -120,9 +133,12 @@ if ($Bundle) {
     if (Test-Path -LiteralPath $exe) { Ok "MedBox.exe present dans $Bundle" } else { Fail "MedBox.exe absent de $Bundle" }
     if (Test-Path -LiteralPath $manifest) {
         $m = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
-        $parts = @()
-        foreach ($k in @("ollama", "model", "speech")) { if ($m.PSObject.Properties.Name -contains $k) { $parts += "$k=$($m.$k)" } }
-        Ok ("Manifeste : " + ($parts -join " "))
+        $c = $m.components
+        $commit = ""
+        if ($m.source -and $m.source.commit) { $commit = $m.source.commit.Substring(0, 7); if ($m.source.dirty) { $commit += " (arbre modifie, non commite)" } }
+        $summary = "commit $commit ; Ollama " + $(if ($c.ollama.present) { "inclus" } else { "ABSENT" }) + " ; modele " + $(if ($c.model.present) { $c.model.name } else { "ABSENT" }) + " ; voix " + $(if ($c.speechModel.present) { "incluse" } else { "ABSENTE" })
+        if ($m.readiness.completeForVoiceDemo) { Ok ("Manifeste : " + $summary) } else { Fail ("Manifeste incomplet pour la demo vocale : " + $summary) }
+        if ($m.source -and $m.source.dirty) { Warn "Le dossier a ete construit depuis un arbre non commite : le manifeste ne prouve pas quel code il contient." }
     } else { Warn "Pas de manifeste : le contenu du dossier n'est pas verifiable" }
 } else { Warn "Aucun dossier portable indique (-Bundle D:\MedBox-Portable) : la demo tournera depuis ce depot" }
 

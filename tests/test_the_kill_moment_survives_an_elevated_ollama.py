@@ -45,6 +45,17 @@ def test_start_can_relaunch_the_bundled_assistant():
     assert "OLLAMA_MODELS" in src and "OLLAMA_HOST" in src
 
 
+def test_preflight_never_calls_the_cli_while_the_server_is_down():
+    """On Windows the Ollama CLI starts the tray app when no server answers,
+    the app inherits the script's stdout, and `| Out-String` waits forever.
+    The port is probed first, and the CLI is only reached when it answers."""
+    src = PREFLIGHT.read_text(encoding="ascii")
+    probe = src.index("Test-Port 11434")
+    cli = src.index("& $ollama --version")
+    assert probe < cli, "probe the port before the first CLI call"
+    assert "function Test-Port" in src
+
+
 def test_preflight_blocks_on_an_elevated_ollama():
     src = PREFLIGHT.read_text(encoding="ascii")
     assert "droits eleves" in src
