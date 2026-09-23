@@ -1,0 +1,33 @@
+name: Exposition environnementale groupée
+description: >
+  Trois membres suivis montrent des écarts concordants après une exposition
+  confirmée par le scénario. MedBox affiche ce regroupement connu
+  et propose un isolement opérationnel avec validation humaine.
+crew: 40
+
+simulation:
+  data: synthetic
+  clock: accelerated
+  represented_duration: 5h
+  demo_duration: 75s
+  adjustment_mode: delta-from-personal-healthy-baseline
+  diagnostic_claim: none
+  parameter_source: operator-authored-demo-choreography
+
+timeline:
+  - at: 0s
+    do: note
+    text: "Incident environnemental consigné dans le journal de bord."
+  - at: 10s
+    do: afflict
+    mode: delta
+    provenance: operator-authored-demo-choreography
+    patients: 3
+    temperature: 1.6
+    spo2: -3.8
+    pulse: 20
+    respiration: 8
+    over: 35
+  - at: 48s
+    do: note
+    text: "Trois profils concordants : isolement opérationnel proposé, confirmation humaine requise."

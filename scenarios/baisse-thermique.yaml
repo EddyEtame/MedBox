@@ -1,0 +1,32 @@
+name: Baisse thermique après incident
+description: >
+  Un membre revient d'une zone froide avec une baisse progressive de
+  température. Le système détecte l'écart à sa ligne personnelle et demande
+  une vérification clinique sans nommer de pathologie.
+crew: 40
+
+simulation:
+  data: synthetic
+  clock: accelerated
+  represented_duration: 3h
+  demo_duration: 60s
+  adjustment_mode: delta-from-personal-healthy-baseline
+  diagnostic_claim: none
+  parameter_source: operator-authored-demo-choreography
+
+timeline:
+  - at: 0s
+    do: note
+    text: "Retour d'une zone froide; surveillance thermique activée."
+  - at: 8s
+    do: afflict
+    mode: delta
+    provenance: operator-authored-demo-choreography
+    patients: 1
+    temperature: -1.8
+    pulse: -10
+    respiration: -2
+    over: 30
+  - at: 42s
+    do: note
+    text: "Baisse persistante : évaluation humaine prioritaire."

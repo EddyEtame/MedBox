@@ -1,16 +1,28 @@
-# A single consultation, for testing the AI path and the patient detail view.
-name: Single patient consultation
-description: One crew member develops a fever while being monitored.
+# Consultation individuelle. La température est un delta par rapport à la
+# ligne de base personnelle. Le moteur applique uniquement les associations
+# populationnelles documentées pour le pouls et la respiration; il ne déduit
+# jamais la SpO2 et ne pose pas de diagnostic.
+name: Écart thermique individuel
+description: >
+  Un membre signale un mal de tête puis sa température s'écarte progressivement
+  de sa ligne habituelle. Le système surveille et priorise sans diagnostiquer.
 crew: 40
+
+simulation:
+  data: synthetic
+  clock: accelerated
+  adjustment_mode: delta-from-personal-healthy-baseline
+  diagnostic_claim: none
+  parameter_source: published-temperature-association
 
 timeline:
   - at: 0s
     do: note
-    text: "Routine check, crew member reports a headache."
+    text: "Contrôle de routine : un membre signale un mal de tête."
   - at: 12s
     do: afflict
+    mode: delta
+    provenance: temperature-operator-delta-with-jensen-associated-pulse-respiration
     patients: 1
-    temperature: 38.7
-    pulse: 96
-    respiration: 21
+    temperature: 1.8
     over: 40

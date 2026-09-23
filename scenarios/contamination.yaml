@@ -1,45 +1,66 @@
-# The crisis the brief specifies: 15% of the crew contaminated.
-# This is the scenario to demo on Friday. Run it, do not improvise.
-name: Contamination outbreak
+# Scénario principal : 15 % de l'équipage sous surveillance renforcée.
+# Toutes les valeurs ci-dessous sont des DELTAS par rapport a la ligne de base
+# saine et personnelle de chaque membre, jamais des mesures absolues inventées.
+name: Alerte respiratoire à bord
 description: >
-  Six of forty crew develop a respiratory infection over ninety seconds.
-  The board re-orders itself by NEWS2 urgency, quarantine zones fill, and
-  partway through the AI is killed to show the station keeps working without it.
+  Six membres sur quarante présentent une détérioration compatible avec une
+  exposition respiratoire confirmée par le scénario. Le système détecte les
+  écarts, priorise la surveillance et propose l'affectation en zone d'isolement
+  sans poser de diagnostic.
 crew: 40
+
+simulation:
+  data: synthetic
+  clock: accelerated
+  represented_duration: 6h
+  demo_duration: 90s
+  adjustment_mode: delta-from-personal-healthy-baseline
+  diagnostic_claim: none
+  parameter_source: operator-authored-demo-choreography
+  provenance:
+    - Royal College of Physicians NEWS2
+    - PhysioNet Challenge 2019 (validation reference; these deltas are not fitted coefficients)
+    - Jensen et al. 2015 temperature-pulse-respiration association
 
 timeline:
   - at: 0s
     do: note
-    text: "Nominal. All forty crew within normal ranges."
+    text: "Situation nominale : quarante membres dans leur plage habituelle."
 
-  # First two cases: fever and a cough, oxygen still fine.
+  # Premier signal faible. La SpO2 reste a sa ligne de base.
   - at: 10s
     do: afflict
+    exposure_confirmed: true
+    mode: delta
+    provenance: operator-authored-demo-choreography
     patients: 2
-    temperature: 38.4
-    pulse: 98
-    respiration: 22
+    temperature: 1.5
+    pulse: 30
+    respiration: 7
     over: 25
 
   - at: 20s
     do: note
-    text: "Two crew febrile. Hydroponics deck."
+    text: "Deux écarts thermiques et respiratoires détectés à bord."
 
-  # Four more, and these are worse: oxygen starts dropping.
+  # Quatre autres profils, avec un delta SpO2 explicitement fourni par le
+  # scenario : la temperature seule n'est jamais utilisee pour l'inventer.
   - at: 28s
     do: afflict
+    exposure_confirmed: true
+    mode: delta
+    provenance: operator-authored-demo-choreography
     patients: 4
-    temperature: 39.1
-    spo2: 92
-    pulse: 118
-    respiration: 25
+    temperature: 2.2
+    spo2: -5.5
+    pulse: 48
+    respiration: 11
     over: 30
 
   - at: 45s
     do: note
-    text: "Six of forty. 15% of the crew. Quarantine protocol active."
+    text: "Six sur quarante : seuil opérationnel de 15 %. Isolement proposé, validation humaine requise."
 
-  # From here the operator kills Ollama by hand, live.
   - at: 60s
     do: note
-    text: "AI narration offline. Vitals, triage and quarantine unaffected."
+    text: "Mode IA indisponible : mesures, priorisation et isolement restent actifs."

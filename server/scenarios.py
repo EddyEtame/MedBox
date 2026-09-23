@@ -6,7 +6,7 @@ what lets Friday's demo be the same one rehearsed on Wednesday.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -30,9 +30,13 @@ class Scenario:
     description: str
     crew: int
     steps: list[Step]
+    simulation: dict[str, Any] = field(default_factory=dict)
 
     @property
     def duration(self) -> float:
+        declared = self.simulation.get("demo_duration")
+        if declared is not None:
+            return max(_parse_time(declared), max((s.at for s in self.steps), default=0.0))
         return max((s.at for s in self.steps), default=0.0) + 10.0
 
 
@@ -78,6 +82,7 @@ def load(name: str) -> Scenario:
         description=raw.get("description", ""),
         crew=int(raw.get("crew", 40)),
         steps=steps,
+        simulation=dict(raw.get("simulation", {})),
     )
 
 

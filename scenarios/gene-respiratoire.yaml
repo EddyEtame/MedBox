@@ -1,0 +1,33 @@
+name: Gêne respiratoire progressive
+description: >
+  Un membre sous surveillance présente une augmentation de sa fréquence
+  respiratoire puis une baisse de SpO2 explicitement simulée. Le scénario
+  teste l'alerte rapide sans attribuer de maladie.
+crew: 40
+
+simulation:
+  data: synthetic
+  clock: accelerated
+  represented_duration: 3h
+  demo_duration: 60s
+  adjustment_mode: delta-from-personal-healthy-baseline
+  diagnostic_claim: none
+  parameter_source: operator-authored-demo-choreography
+
+timeline:
+  - at: 0s
+    do: note
+    text: "Gêne respiratoire déclarée; surveillance rapprochée activée."
+  - at: 6s
+    do: afflict
+    mode: delta
+    provenance: operator-authored-demo-choreography
+    patients: 1
+    temperature: 0.8
+    spo2: -4.5
+    pulse: 22
+    respiration: 9
+    over: 30
+  - at: 40s
+    do: note
+    text: "La baisse de SpO2 vient du scénario, pas d'une inférence depuis la température."

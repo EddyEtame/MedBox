@@ -1,0 +1,32 @@
+name: Récupération après effort prolongé
+description: >
+  Un membre revient d'une intervention physique avec pouls et respiration
+  élevés. Le profil teste la surveillance d'un écart potentiellement transitoire
+  et rappelle qu'une alerte n'est pas un diagnostic.
+crew: 40
+
+simulation:
+  data: synthetic
+  clock: accelerated
+  represented_duration: 2h
+  demo_duration: 55s
+  adjustment_mode: delta-from-personal-healthy-baseline
+  diagnostic_claim: none
+  parameter_source: operator-authored-demo-choreography
+
+timeline:
+  - at: 0s
+    do: note
+    text: "Retour d'intervention physique; contrôle automatique démarré."
+  - at: 5s
+    do: afflict
+    mode: delta
+    provenance: operator-authored-demo-choreography
+    patients: 1
+    temperature: 0.4
+    pulse: 34
+    respiration: 8
+    over: 22
+  - at: 32s
+    do: note
+    text: "Écart détecté : vérifier le contexte et réévaluer avant toute conclusion."

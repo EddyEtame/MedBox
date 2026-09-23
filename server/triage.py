@@ -29,6 +29,15 @@ from enum import Enum
 
 # NEWS2 defines a maximum of 3 points per parameter.
 MAX_PARAM_SCORE = 3
+FULL_NEWS2_PARAMETERS = (
+    "temperature",
+    "spo2",
+    "pulse",
+    "respiration",
+    "systolic_bp",
+    "consciousness",
+    "oxygen",
+)
 
 
 class Urgency(str, Enum):
@@ -86,11 +95,20 @@ class TriageResult:
 
     def to_dict(self) -> dict:
         worst = self.worst_param
+        measured = set(self.measured_params)
+        missing = [name for name in FULL_NEWS2_PARAMETERS if name not in measured]
+        complete = not missing
         return {
             "total": self.total,
             "urgency": self.urgency.value,
             "response": self.urgency.response,
             "measured": list(self.measured_params),
+            "complete_news2": complete,
+            "missing_news2": missing,
+            "score_label": (
+                "NEWS2 complet" if complete
+                else f"Dépistage partiel dérivé de NEWS2 — {len(measured)} paramètres mesurés"
+            ),
             # Both of these cross into the AI prompt. The single-parameter rule
             # is the thing people forget, and a small model forgets it too: told
             # only "aggregate 3 -> medium" it writes "a low aggregate of 3,

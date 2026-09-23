@@ -1,0 +1,33 @@
+# Profil de démonstration et non diagnostic de grippe.
+name: Profil pseudo-grippal simulé
+description: >
+  Un membre présente des écarts thermiques et respiratoires compatibles avec
+  plusieurs causes possibles. La plainte peut être dictée séparément pendant
+  la démonstration; MedBox recommande une évaluation sans conclure à une grippe.
+crew: 40
+
+simulation:
+  data: synthetic
+  clock: accelerated
+  represented_duration: 4h
+  demo_duration: 65s
+  adjustment_mode: delta-from-personal-healthy-baseline
+  diagnostic_claim: none
+  parameter_source: operator-authored-demo-choreography
+
+timeline:
+  - at: 0s
+    do: note
+    text: "Le membre signale frissons, fatigue et toux. Déclaration séparée des mesures."
+  - at: 8s
+    do: afflict
+    mode: delta
+    provenance: operator-authored-demo-choreography
+    patients: 1
+    temperature: 1.8
+    pulse: 30
+    respiration: 8
+    over: 32
+  - at: 42s
+    do: note
+    text: "Écart persistant : évaluation par le personnel médical recommandée, sans diagnostic automatique."

@@ -1,6 +1,7 @@
 """Loads config.toml once, at import, and exposes it as plain objects."""
 from __future__ import annotations
 
+import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -55,6 +56,10 @@ class AIConfig:
     model: str = "qwen2.5:1.5b-instruct"
     fallback_models: tuple[str, ...] = ()
     timeout_seconds: float = 20.0
+    # Loading the model from disk is a different operation from answering a
+    # warm request.  Keep its longer ceiling separate so a cold start cannot
+    # weaken the normal slow-track timeout.
+    warmup_timeout_seconds: float = 90.0
     # Zero: the schema already guarantees valid JSON, so randomness buys
     # variance and nothing else, and a demo you can rehearse is worth more.
     temperature: float = 0.0
@@ -96,15 +101,28 @@ def load(path: Path | None = None) -> Config:
     if not path.exists():
         return Config()
     raw = tomllib.loads(path.read_text(encoding="utf-8"))
+
+    # The portable launcher chooses ports and writable storage at runtime.
+    # Environment overrides let it do that without rewriting the signed or
+    # hashed configuration inside the bundle.
+    server_raw = dict(raw.get("server", {}))
+    ai_raw = dict(raw.get("ai", {}))
+    database_raw = dict(raw.get("database", {}))
+    if os.environ.get("MEDBOX_PORT"):
+        server_raw["port"] = int(os.environ["MEDBOX_PORT"])
+    if os.environ.get("MEDBOX_OLLAMA_HOST"):
+        ai_raw["host"] = os.environ["MEDBOX_OLLAMA_HOST"]
+    if os.environ.get("MEDBOX_DATABASE"):
+        database_raw["path"] = os.environ["MEDBOX_DATABASE"]
     return Config(
-        server=ServerConfig(**raw.get("server", {})),
+        server=ServerConfig(**server_raw),
         ai=AIConfig(
             **{
-                **raw.get("ai", {}),
-                "fallback_models": tuple(raw.get("ai", {}).get("fallback_models", [])),
+                **ai_raw,
+                "fallback_models": tuple(ai_raw.get("fallback_models", [])),
             }
         ),
-        database=DatabaseConfig(**raw.get("database", {})),
+        database=DatabaseConfig(**database_raw),
         ship=ShipConfig(
             **{
                 **raw.get("ship", {}),
