@@ -60,3 +60,12 @@ def test_worst_parameter_is_reported_for_the_screen():
     r = assess(temperature=36.9, spo2=90, pulse=75, respiration=14)
     assert r.worst_param.name == "spo2"
     assert "hypox" in r.worst_param.reason
+
+
+def test_the_clinical_response_is_said_in_french():
+    """The panel shows this sentence under the band, to a French jury."""
+    from server.triage import Urgency
+
+    for band in Urgency:
+        assert band.response.endswith("."), band.response
+        assert not any(word in band.response for word in ("review", "monitoring", "response")), band.response

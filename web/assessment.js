@@ -116,7 +116,12 @@
     } else {
       html += '<div class="ai-provenance"><b>Généré par ' + esc(b.model || "l’assistant") +
         ".</b> Ni mesuré, ni calculé, ni diagnostique. La priorité affichée ci-dessus " +
-        "provient de NEWS2 et rien ici ne peut la modifier.</div>";
+        "provient de NEWS2 et rien ici ne peut la modifier." +
+        (b.held_reason === "assistant_down"
+          ? " <b>Réponse conservée :</b> écrite il y a " + esc(String(Math.round(b.age_seconds || 0))) +
+            " s. L’assistant est arrêté ; les mesures et la priorité continuent sans lui."
+          : (b.cached ? " Préparée il y a " + esc(String(Math.round(b.age_seconds || 0))) + " s, avant la demande." : "")) +
+        "</div>";
     }
 
     // What the guard took out. An operator who never sees the assistant

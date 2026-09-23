@@ -405,6 +405,13 @@
     fetch("/api/scenario/stop", { method: "POST" });
     el("aiOut").innerHTML = "";
   });
+  el("replayBtn").addEventListener("click", function () {
+    var n = el("scenarioPick").value;
+    el("aiOut").innerHTML = "";
+    fetch("/api/scenario/stop", { method: "POST" }).then(function () {
+      if (n) return fetch("/api/scenario/" + encodeURIComponent(n), { method: "POST" });
+    });
+  });
 
   fetch("/api/status").then(function (r) { return r.json(); }).then(function (s) {
     // French names from the catalogue, the demo first and selected. The file

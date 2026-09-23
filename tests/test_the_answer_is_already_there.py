@@ -89,3 +89,18 @@ def test_a_dead_assistant_prefetches_nothing(monkeypatch):
     monkeypatch.setattr(station.CLIENT, "available", False)
     assert asyncio.run(station.STATION.prefetch_once()) is None
     assert calls == []
+
+
+def test_the_kill_moment_serves_what_the_assistant_wrote_before_it_died(monkeypatch):
+    """Kill Ollama on stage, click again: the held answer, dated and labelled,
+    not a 503. The measurements and the priority go on without it."""
+    calls = []
+    pid = _armed(monkeypatch, calls)
+    asyncio.run(station.STATION.prefetch_once())
+    station.STATION.latest[pid]["triage"]["total"] = 9   # the score moved on
+    monkeypatch.setattr(station.CLIENT, "available", False)
+    response = asyncio.run(station.ai_assess(pid))
+    assert response.status_code == 200
+    body = response.body
+    assert b'"held_reason":"assistant_down"' in body or b'"held_reason": "assistant_down"' in body
+    assert calls == [pid], "a dead assistant was asked again"

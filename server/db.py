@@ -284,7 +284,8 @@ class Database:
         now = time.time()
         with self.conn:
             self.conn.executemany(
-                "INSERT OR IGNORE INTO patients (id, name, role, created_at) VALUES (?,?,?,?)",
+                "INSERT INTO patients (id, name, role, created_at) VALUES (?,?,?,?) "
+                "ON CONFLICT(id) DO UPDATE SET name = excluded.name, role = excluded.role",
                 [(pid, name, role, now) for pid, name, role in roster],
             )
             baseline_rows = []

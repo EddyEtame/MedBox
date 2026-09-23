@@ -1245,6 +1245,14 @@ async def ai_assess(patient_id: str, fresh: bool = False) -> JSONResponse:
         return JSONResponse(content={
             **held, "cached": True, "age_seconds": round(time.time() - held["at"], 1),
         })
+    if held is not None and held.get("ok") and not CLIENT.available:
+        # The demo's own beat: the assistant is killed on stage. What it
+        # wrote before it died is still what it wrote, dated and labelled;
+        # the panel says the assistant is down and the measurements go on.
+        return JSONResponse(content={
+            **held, "cached": True, "age_seconds": round(time.time() - held["at"], 1),
+            "held_reason": "assistant_down",
+        })
     result = await STATION.assess_now(patient_id)
     if result is None:
         return JSONResponse(

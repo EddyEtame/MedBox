@@ -133,8 +133,8 @@ SURNAMES = [
     "Vasquez", "Bauer", "Dubois", "Nakamura", "Kaur", "Andersen", "Petrov",
 ]
 ROLES = [
-    "Flight engineer", "Botanist", "Medical officer", "Systems", "Navigation",
-    "Reactor tech", "Hydroponics", "Comms", "Geologist", "Pilot",
+    "Ingénieur de vol", "Botaniste", "Secouriste", "Systèmes", "Navigation",
+    "Technicien réacteur", "Hydroponie", "Communications", "Géologue", "Pilote",
 ]
 
 

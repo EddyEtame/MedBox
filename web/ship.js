@@ -1245,6 +1245,15 @@
     fetch("/api/scenario/stop", { method: "POST" });
     el("aiOut").innerHTML = "";
   });
+  // Rehearsal equals the live run: the replay is a function of elapsed
+  // simulation time, so stopping and starting again gives the same curves.
+  el("replayBtn").addEventListener("click", function () {
+    var n = el("scenarioPick").value;
+    el("aiOut").innerHTML = "";
+    fetch("/api/scenario/stop", { method: "POST" }).then(function () {
+      if (n) return fetch("/api/scenario/" + encodeURIComponent(n), { method: "POST" });
+    });
+  });
   window.addEventListener("keydown", function (e) {
     var typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target.tagName || ""));
     if (e.key === "/" && !typing) { e.preventDefault(); el("cmdInput").focus(); return; }

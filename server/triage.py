@@ -55,10 +55,10 @@ class Urgency(str, Enum):
     @property
     def response(self) -> str:
         return {
-            "routine": "Routine monitoring, 12-hourly.",
-            "low": "Ward-based review by a competent clinician.",
-            "medium": "Urgent review. Escalate to the medical officer.",
-            "high": "Emergency response. Continuous monitoring.",
+            "routine": "Surveillance de routine, toutes les 12 heures.",
+            "low": "Revue par une personne formée, sans urgence.",
+            "medium": "Revue urgente. Prévenir le responsable médical.",
+            "high": "Réponse d’urgence. Surveillance continue.",
         }[self.value]
 
 
