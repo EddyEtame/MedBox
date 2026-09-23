@@ -720,6 +720,7 @@
 
   function selectCrew(id) {
     state.selected = id;
+    if (MedBox.patientRecord) MedBox.patientRecord.select(id);
     state.held = null;
     el("aiOut").innerHTML = "";
     el("aiStale").hidden = true;
@@ -734,6 +735,7 @@
 
   function closePanel() {
     state.selected = null;
+    if (MedBox.patientRecord) MedBox.patientRecord.select(null);
     el("panel").hidden = true;
     document.body.classList.remove("has-panel");
     resetCam();
@@ -995,6 +997,7 @@
   /* ------------------------------------------------------------ slow track */
   function askAI() {
     if (!state.selected) return;
+    var requestedPatient = state.selected;
     var out = el("aiOut"), btn = el("aiBtn");
     out.innerHTML = '<p class="sum">Thinking…</p>';
     btn.disabled = true;
@@ -1002,6 +1005,7 @@
     fetch("/api/assess/" + encodeURIComponent(state.selected), { method: "POST" })
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
       .then(function (res) {
+        if (state.selected !== requestedPatient) return;
         btn.disabled = false;
         if (!res.ok) {
           state.held = null;
@@ -1014,6 +1018,7 @@
         out.innerHTML = MedBox.assessment.render(res.body, { flyable: true });
       })
       .catch(function () {
+        if (state.selected !== requestedPatient) return;
         btn.disabled = false;
         state.held = null;
         out.innerHTML = MedBox.assessment.failure("Vitals and triage are unaffected.");

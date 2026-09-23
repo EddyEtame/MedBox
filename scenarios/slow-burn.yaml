@@ -1,0 +1,15 @@
+name: Slow burn
+description: One simulated patient deteriorates gradually over ten minutes.
+crew: 40
+timeline:
+  - at: 0s
+    do: afflict
+    patients: 1
+    temperature: 39.3
+    spo2: 90
+    pulse: 120
+    respiration: 26
+    over: 600
+  - at: 600s
+    do: note
+    text: "Ten-minute deterioration complete. Inspect the measurement history."

@@ -1,0 +1,15 @@
+name: False alarm
+description: Simulated post-exercise temperature rise without respiratory signs; no isolation expected.
+crew: 40
+timeline:
+  - at: 0s
+    do: afflict
+    patients: 1
+    temperature: 38.4
+    spo2: 98
+    pulse: 95
+    respiration: 16
+    over: 30
+  - at: 40s
+    do: note
+    text: "Temperature alone does not trigger quarantine in this demonstration."

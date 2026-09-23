@@ -247,7 +247,7 @@ def test_a_half_copied_model_is_not_offered_as_a_working_microphone(tmp_path):
     t = Transcriber(half)
     assert t.available is False
     assert "incomplete" in (t.last_error or "")
-    assert "tools/assets.py" in (t.last_error or ""), "the message names no way out"
+    assert "tools/assets.py" in (t.last_error or "").replace("\\", "/"), "the message names no way out"
 
 
 # ------------------------------------- the commands we tell people to type

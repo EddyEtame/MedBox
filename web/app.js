@@ -21,6 +21,7 @@
     ws.onopen = function () {
       retry = 0;
       setChip("linkChip", true, "Screen link");
+      loadScenarios();
     };
     ws.onclose = function () {
       setChip("linkChip", false, "Screen link lost");
@@ -190,6 +191,7 @@
   /* ---------- the slow track, on demand only ---------- */
   function askAI() {
     if (!state.selected) return;
+    var requestedPatient = state.selected;
     var out = el("aiOut");
     out.innerHTML = '<p class="sum">Thinking…</p>';
     el("aiBtn").disabled = true;
@@ -197,6 +199,7 @@
     fetch("/api/assess/" + encodeURIComponent(state.selected), { method: "POST" })
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
       .then(function (res) {
+        if (state.selected !== requestedPatient) return;
         el("aiBtn").disabled = false;
         if (!res.ok) {
           state.held = null;
@@ -207,6 +210,7 @@
         out.innerHTML = MedBox.assessment.render(res.body);
       })
       .catch(function () {
+        if (state.selected !== requestedPatient) return;
         el("aiBtn").disabled = false;
         state.held = null;
         out.innerHTML = MedBox.assessment.failure("Vitals and triage are unaffected.");
@@ -236,6 +240,7 @@
   /* ---------- wiring ---------- */
   function select(id) {
     state.selected = id;
+    if (MedBox.patientRecord) MedBox.patientRecord.select(id);
     state.held = null;
     el("aiOut").innerHTML = "";
     el("aiStale").hidden = true;
@@ -312,11 +317,23 @@
     el("aiOut").innerHTML = "";
   });
 
-  fetch("/api/status").then(function (r) { return r.json(); }).then(function (s) {
-    el("scenarioPick").innerHTML = (s.scenarios || []).map(function (n) {
-      return '<option value="' + esc(n) + '">' + esc(n) + "</option>";
-    }).join("");
-  }).catch(function () {});
+  function loadScenarios() {
+    fetch("/api/status", { cache: "no-store" }).then(function (r) {
+      if (!r.ok) throw new Error("Scenario list unavailable");
+      return r.json();
+    }).then(function (s) {
+      var pick = el("scenarioPick");
+      var selected = pick.value;
+      pick.replaceChildren.apply(pick, (s.scenarios || []).map(function (n) {
+        return new Option(n, n);
+      }));
+      if (selected) pick.value = selected;
+    }).catch(function () {
+      // A server restart may interrupt this request; the next WebSocket
+      // connection will fetch the list again.
+    });
+  }
 
+  loadScenarios();
   connect();
 })();

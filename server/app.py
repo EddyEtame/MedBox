@@ -18,6 +18,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field, field_validator
 
 from . import __version__, scenarios
 from .ai.capabilities import manifest
@@ -81,10 +82,13 @@ class MedBox:
     # ---- scenario control -------------------------------------------------
     def load_scenario(self, name: str) -> scenarios.Scenario:
         sc = scenarios.load(name)
+        if self.scenario is not None:
+            self.db.record_event("scenario_stop", self.scenario.name)
         self.source.reset()
         self.symptoms.clear()
         self.announcer.reset()
-        self.quarantine.assignments.clear()
+        self.quarantine.reset()
+        self.db.save_contacts(self.quarantine.contacts)
         self.scenario = sc
         self.scenario_t0 = time.monotonic()
         self._fired.clear()
@@ -92,13 +96,16 @@ class MedBox:
         return sc
 
     def stop_scenario(self) -> None:
+        if self.scenario is not None:
+            self.db.record_event("scenario_stop", self.scenario.name)
         self.scenario = None
         self.scenario_t0 = None
         self._fired.clear()
         self.source.reset()
         self.symptoms.clear()
         self.announcer.reset()
-        self.quarantine.assignments.clear()
+        self.quarantine.reset()
+        self.db.save_contacts(self.quarantine.contacts)
 
     def _advance_scenario(self, now: float) -> None:
         if self.scenario is None or self.scenario_t0 is None:
@@ -146,6 +153,7 @@ class MedBox:
             for reading in self.source.sample(now):
                 v = reading.vitals()
                 result = assess(**v)
+                self.db.record_triage(reading.patient_id, now, result.to_dict())
                 patient = self.source.patients[reading.patient_id]
                 self.latest[reading.patient_id] = {
                     "patient": {
@@ -158,6 +166,7 @@ class MedBox:
                 }
                 change = self.quarantine.evaluate(reading.patient_id, v, result)
                 if change is not None:
+                    self.db.save_contacts(self.quarantine.contacts)
                     self.db.record_event(
                         "quarantine", json.dumps(change.to_dict()), reading.patient_id
                     )
@@ -223,6 +232,8 @@ async def lifespan(app: FastAPI):
             with contextlib.suppress(asyncio.CancelledError):
                 await t
         STATION.source.stop()
+        STATION.quarantine.reset()
+        STATION.db.save_contacts(STATION.quarantine.contacts)
         STATION.db.close()
 
 
@@ -264,9 +275,39 @@ async def patient(patient_id: str) -> dict:
         raise HTTPException(404, f"No crew member {patient_id}")
     return {
         **entry,
-        "history": STATION.db.history(patient_id, limit=120),
+        "history": STATION.db.history(patient_id, limit=300, since=time.time() - 600),
+        "triage_history": STATION.db.triage_history(patient_id),
+        "answers": STATION.db.answers(patient_id),
+        "contacts": STATION.db.contacts(patient_id),
         "reported": STATION.symptoms.for_patient(patient_id),
     }
+
+
+class PatientAnswer(BaseModel):
+    question: str = Field(min_length=1, max_length=200)
+    answer: str = Field(min_length=1, max_length=180)
+
+    @field_validator("question", "answer")
+    @classmethod
+    def nonblank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("This field cannot be blank")
+        return value
+
+
+@app.post("/api/patient/{patient_id}/answer")
+async def record_answer(patient_id: str, body: PatientAnswer) -> dict:
+    if patient_id not in STATION.latest:
+        raise HTTPException(404, f"No crew member {patient_id}")
+    entry = STATION.db.record_answer(patient_id, body.question, body.answer)
+    BUS.publish({"type": "answer", "patient_id": patient_id})
+    return entry
+
+
+@app.get("/api/sessions")
+async def sessions() -> dict:
+    return {"sessions": STATION.db.sessions()}
 
 
 @app.post("/api/patient/{patient_id}/symptom")
@@ -380,9 +421,14 @@ async def ai_assess(patient_id: str) -> JSONResponse:
     if entry is None:
         raise HTTPException(404, f"No crew member {patient_id}")
     triage = entry["triage"]
-    result = await CLIENT.assess(
-        entry["patient"], triage, STATION.symptoms.prompt_note(patient_id)
-    )
+    # Rebuild bounded context from persisted answers. Human text stays inside
+    # the existing untrusted span, including after a server restart.
+    context = SymptomLog()
+    for report in reversed(STATION.symptoms.for_patient(patient_id)):
+        context.add(patient_id, report["text"], at=report["at"])
+    for answer in reversed(STATION.db.answers(patient_id, limit=3)):
+        context.add(patient_id, f'Question: {answer["question"]} Answer: {answer["answer"]}', at=answer["at"])
+    result = await CLIENT.assess(entry["patient"], triage, context.prompt_note(patient_id))
     if result is None:
         return JSONResponse(
             status_code=503,
