@@ -98,9 +98,13 @@ zero is not a sign**, whatever the model says about it.
 
 ## What is built (as of Wednesday evening)
 
-- **NEWS2 triage** (`server/triage.py`): RCP 2017, four of seven parameters,
-  single-parameter-3 rule, labelled a partial screen with the missing
-  parameters named. Deterministic. Works with the AI off.
+- **NEWS2 triage** (`server/triage.py`): RCP 2017, all seven parameters:
+  five from instruments (temperature, SpO₂, pulse, respiration, systolic
+  pressure from a simulated cuff) and two a person enters from the panel
+  (ACVPU consciousness, supplemental oxygen, `/api/patient/{id}/observations`).
+  Absent ones are assumed normal and the score says it is a partial screen;
+  entered, the label reads « NEWS2 complet, sept paramètres ». Single-
+  parameter-3 rule. French reasons. Deterministic. Works with the AI off.
 - **Personal healthy baselines** (`server/db.py`, `server/sensors/synthetic.py`):
   forty crew members, each with a baseline inside the NEWS2 zero bands,
   persisted with provenance. Scenarios and the console apply changes to that
@@ -151,7 +155,12 @@ zero is not a sign**, whatever the model says about it.
   `packaging/`): a .NET 8 launcher that picks free ports and starts the
   bundled Ollama and the station as children it owns. **Never yet built or
   launched cold**: that is Thursday's first job.
-- **327 tests**: `.\.venv\Scripts\python -m pytest tests\ -q`.
+- **The kill moment keeps its answer**: with the assistant dead, a click
+  returns what it wrote before, dated and labelled « Réponse conservée ».
+  « Rejouer » resets and restarts the scenario identically.
+- **`tools\preflight.ps1`**: the Friday-morning check, one screen, changes
+  nothing. **`LICENSE`**: Apache-2.0.
+- **337 tests**: `.\.venv\Scripts\python -m pytest tests\ -q`.
 
 ---
 
@@ -187,10 +196,9 @@ prefix and the next assessment costs 38 s. Every call in `server/ai/` uses
    round requires. `docs/pitch.md` is the five minutes.
 4. **Push `wednesday-session`** and merge it: the branch has never been on
    GitHub (see above).
-5. Ollama's tray app has downloaded update 0.34.2 into
-   `%LOCALAPPDATA%\Ollama\updates_v2` (2.5 GB) and offers it hourly. One
-   click replaces the pinned 0.13.1. Move that folder away.
-6. C: has under 3 GB free. Build on D:.
+5. Ollama's downloaded update 0.34.2 was moved to
+   `D:\MedBoxBuild\ollama-updates-parked`; `tools\preflight.ps1` fails if
+   it comes back. C: had 10 GB free afterwards; build on D: regardless.
 
 ---
 

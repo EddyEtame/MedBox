@@ -122,9 +122,12 @@ need to, the design has drifted — stop and fix it instead.
 of Physicians, 2017), the score used across the NHS to decide how urgently a
 deteriorating patient must be seen.
 
-We measure four of its seven parameters — temperature, SpO₂, pulse and
-respiration — and every result carries the list of parameters actually measured,
-so the screen never implies more confidence than the hardware earned.
+Five of its seven parameters are measured — temperature, SpO₂, pulse,
+respiration and systolic blood pressure — and the two that no instrument gives,
+consciousness (ACVPU) and supplemental oxygen, are entered by a person at the
+console. Every result carries the list of parameters actually measured or
+observed; the rest are assumed normal and the score is labelled a partial
+screen, so the screen never implies more confidence than the hardware earned.
 
 Using a real clinical standard means the urgency level is deterministic,
 explainable, defensible, and works with the AI switched off.

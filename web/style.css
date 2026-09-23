@@ -228,3 +228,8 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .ai .ask.sending{opacity:.55}
 .ai .ask .done{font-size:12px;color:var(--ink2);font-style:italic}
 .ai .ask .err{font-size:12px;color:var(--crit)}
+
+/* The listening dock (web/mic.js injects its own styles, bottom-right). On
+   this view the crew panel is the right-hand column, so bottom-right covers
+   the one thing the operator is reading. Bottom-left is empty. */
+.medbox-listener{right:auto !important;left:18px !important}
