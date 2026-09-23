@@ -191,11 +191,14 @@ prefix and the next assessment costs 38 s. Every call in `server/ai/` uses
    a space, `PATH` reduced to `C:\Windows`, no host Python or Ollama used.
    Own Ollama on 11555, own Python with `-s`, no connection leaves the
    loopback, kill moment and relaunch proven from the bundle, Ctrl+C takes
-   the children down. `packaging/README.md` says what was learned. What is
-   left: copy it to the stick (`robocopy /E /R:1 /W:1`), run `-Mode Check`
-   on the copy, and **reboot the laptop before Friday**: the `ollama.exe`
-   the installer left running is elevated and nothing but a reboot or an
-   administrator window ends it (preflight now fails on it).
+   the children down. `packaging/README.md` says what was learned. The
+   final bundle (manifest at the tagged commit, `dirty: false`) is at
+   `C:\Users\Mommy Jayce\MedBox-Portable` and copied to `D:\MedBox-Portable`
+   with `robocopy /E /R:1 /W:1 /XD data logs`; verify any copy with
+   `-Mode Check`. Demo from the SSD copy, keep the stick as transport.
+   `tools\preflight.ps1 -Bundle <folder>` must say « Pret » first: on
+   Wednesday night it did, with four things for Eddy (Performances power
+   plan, airplane mode, Do Not Disturb, the idle PEM service).
 2. **Real microphone, real voice, in French**: the consent flow and the
    wake word have only been exercised with synthesised audio. Do it on
    the demo laptop with the headset, then without.
@@ -205,7 +208,9 @@ prefix and the next assessment costs 38 s. Every call in `server/ai/` uses
    GitHub (see above).
 5. Ollama's downloaded update 0.34.2 was moved to
    `D:\MedBoxBuild\ollama-updates-parked`; `tools\preflight.ps1` fails if
-   it comes back. Build on the SSD (five minutes) and copy to the stick;
+   it comes back — and it **does** come back: the tray app re-downloaded
+   it (1.5 GB into `updates_v2`) within four hours while the laptop was
+   online. Delete the folder again on Friday morning, then airplane mode. Build on the SSD (five minutes) and copy to the stick;
    D: is a USB stick and hashing 1.5 GB on it takes seven minutes a pass.
    The stale first build `D:\MedBox-Portable` (19:00 tree) is to be replaced
    by the SSD one.
