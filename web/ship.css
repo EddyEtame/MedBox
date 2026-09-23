@@ -89,6 +89,37 @@ select:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-
 .chip.standin{color:var(--warn);border-color:rgba(240,196,89,.45)}
 .chip.standin .led{background:var(--warn)}
 .chip.overflow{color:var(--crit);border-color:rgba(255,92,110,.45)}
+.chip.note{color:var(--accent);border-color:rgba(79,216,226,.30)}
+
+/* Operational overlays: the 3D view now carries the two facts that used to
+   require opening a side panel — isolation capacity and scenario time.  They
+   are deliberately small and translucent so the ship remains the primary
+   instrument, while every state still has a textual (not colour-only) label. */
+.zone-rail{
+  top:142px;left:18px;width:238px;padding:12px;border:1px solid var(--line);
+  border-radius:11px;background:rgba(8,18,24,.72);backdrop-filter:blur(14px);
+}
+.rail-title{display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin-bottom:9px}
+.rail-title span{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)}
+.rail-title b{font-family:var(--mono);font-size:9.5px;color:var(--warn);font-weight:600}
+.zone-row{display:grid;grid-template-columns:24px 1fr auto;gap:8px;align-items:center;margin-top:7px}
+.zone-name{font-family:var(--mono);font-size:11px;color:var(--ink2)}
+.zone-cap{height:5px;border-radius:99px;background:rgba(120,170,190,.14);overflow:hidden}
+.zone-cap i{display:block;height:100%;width:0;background:var(--accent);transition:width .35s ease,background .35s ease}
+.zone-row.sealed .zone-cap i{background:var(--warn)}
+.zone-state{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+.zone-row.sealed .zone-state{color:var(--warn)}
+
+.scenario-timeline{
+  left:50%;bottom:112px;transform:translateX(-50%);width:min(520px,calc(100vw - 36px));
+  padding:9px 12px;border:1px solid var(--line);border-radius:10px;
+  background:rgba(8,18,24,.72);backdrop-filter:blur(14px);pointer-events:none;
+}
+.timeline-copy{display:flex;justify-content:space-between;gap:12px;margin-bottom:7px;
+  font-family:var(--mono);font-size:10px;color:var(--ink2)}
+.timeline-copy b{font-weight:500;color:var(--accent);font-variant-numeric:tabular-nums}
+.timeline-track{display:block;height:3px;border-radius:99px;background:rgba(120,170,190,.16);overflow:hidden}
+.timeline-track span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--warn));transition:width .2s linear}
 
 .panel{
   top:0;right:0;bottom:0;width:330px;max-width:88vw;overflow-y:auto;
@@ -219,7 +250,9 @@ select:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-
    on the right. */
 body.has-guide .top{padding-left:402px}
 body.has-guide .legend{left:402px}
+body.has-guide .zone-rail{left:402px}
 body.has-panel .cmd{left:calc(50% - 165px)}
+body.has-panel .scenario-timeline{left:calc(50% - 165px)}
 body.has-panel .legend{right:330px}
 body.has-panel .top{padding-right:342px}
 @media (max-width:620px){
@@ -233,9 +266,22 @@ body.has-panel .top{padding-right:342px}
   body.has-guide .legend{display:none}
   body.has-guide .top{padding-left:14px}
   body.has-panel .top{padding-right:14px}
+  body.has-panel .scenario-timeline,
+  body.has-guide .scenario-timeline,
+  body.has-panel .zone-rail,
+  body.has-guide .zone-rail{display:none}
 }
 @media (max-width:760px){.legend .hint{display:none}
 .legend{gap:11px;font-size:9.5px}}
+@media (max-width:820px){
+  .zone-rail{top:174px;left:14px;width:210px}
+  .scenario-timeline{bottom:118px}
+}
+@media (max-width:620px){
+  .zone-rail{top:178px;left:10px;width:188px;padding:9px}
+  .scenario-timeline{bottom:108px;width:calc(100vw - 20px)}
+  .timeline-copy{font-size:9px}
+}
 
 #fallback{position:fixed;inset:0;z-index:9;display:grid;place-items:center;background:var(--bg);padding:24px}
 #fallback[hidden]{display:none}

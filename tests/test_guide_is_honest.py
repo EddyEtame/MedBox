@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -21,28 +22,50 @@ from server.ai.capabilities import (  # noqa: E402
     manifest,
     self_explanation_prompt,
 )
-from server.quarantine import Assignment, QuarantineRegistry  # noqa: E402
+from server.quarantine import QuarantineRegistry  # noqa: E402
 from server.triage import assess  # noqa: E402
 
 SHIP_JS = (ROOT / "web" / "ship.js").read_text(encoding="utf-8")
 
 
+def advertised_verbs() -> set[str]:
+    """French commands and their backward-compatible English aliases."""
+    phrases = []
+    for shortcut in SHORTCUTS:
+        phrases.append(shortcut["phrase"])
+        phrases.extend(shortcut.get("aliases", []))
+    return {
+        "".join(
+            character
+            for character in unicodedata.normalize("NFD", phrase.split()[0].lower())
+            if unicodedata.category(character) != "Mn" and character.isalpha()
+        )
+        for phrase in phrases
+    }
+
+
+def implemented_verbs() -> set[str]:
+    """Recognise both equality chains and ``[...].includes(word)`` dispatch."""
+    handled = set(re.findall(r'word\s*===\s*"([^"]+)"', SHIP_JS))
+    for group in re.findall(r'\[([^\]]+)\]\.includes\(word\)', SHIP_JS):
+        handled.update(re.findall(r'"([^"]+)"', group))
+    return handled
+
+
 def test_every_advertised_shortcut_is_implemented():
     """The console must handle every phrase the guide lists."""
-    handled = set(re.findall(r'word === "([a-z]+)"', SHIP_JS))
-    for shortcut in SHORTCUTS:
-        # "said <words>" is advertised with its argument; the verb is "said".
-        verb = shortcut["phrase"].split()[0]
+    handled = implemented_verbs()
+    for verb in advertised_verbs():
         assert verb in handled, (
-            f"the guide advertises {shortcut['phrase']!r} but web/ship.js "
+            f"the guide advertises command {verb!r} but web/ship.js "
             f"handles only {sorted(handled)}"
         )
 
 
 def test_no_command_is_implemented_without_being_documented():
     """The reverse: a hidden command is a command nobody will ever find."""
-    handled = set(re.findall(r'word === "([a-z]+)"', SHIP_JS))
-    advertised = {s["phrase"].split()[0] for s in SHORTCUTS}
+    handled = implemented_verbs()
+    advertised = advertised_verbs()
     assert handled <= advertised, (
         f"web/ship.js handles {sorted(handled - advertised)}, which the guide "
         "never mentions"
@@ -69,50 +92,60 @@ def test_shortcuts_that_need_the_assistant_are_flagged_as_such():
 
 
 def test_the_refusals_cover_the_claims_the_project_makes():
-    text = " ".join(r["never"].lower() + " " + r["why"].lower() for r in REFUSALS)
-    for promise in ("diagnos", "urgen", "news2", "network", "measured"):
-        assert promise in text, f"the guide never addresses {promise!r}"
+    refusal_ids = {refusal["id"] for refusal in REFUSALS}
+    required = {"diagnosis", "prescription", "urgency", "unmeasured", "network"}
+    assert required <= refusal_ids, f"the guide never addresses {required - refusal_ids}"
 
 
 def test_the_self_explanation_hands_the_model_the_facts():
-    """A 3B model asked "what can you do?" will invent capabilities, and an
-    invented capability in a medical interface is the worst failure this
-    feature has available to it."""
+    """The model may greet; station-owned text must carry every safety claim."""
+    from server.ai.capabilities import deterministic_introduction
+
     prompt = self_explanation_prompt()
-    assert "Do not invent a capability" in prompt
-    for c in CAPABILITIES:
-        assert c["title"] in prompt, f"{c['title']!r} was not given to the model"
-    for s in SHORTCUTS:
-        assert s["phrase"] in prompt
+    assert "une seule salutation" in prompt
+    assert "Aucun conseil médical" in prompt
+    assert len(prompt) < 250
+
+    intro = deterministic_introduction()
+    for phrase in (
+        "quatre constantes", "lignes de base", "vaisseau 3D", "hypothèses",
+        "jamais diagnostiquer", "prescrire", "décisions restent humaines",
+        "microphone", "audio n’est pas conservé", "écoute locale continue",
+        "J’accepte", "oui", "I accept", "yes",
+    ):
+        assert phrase in intro
 
 
-def test_the_guide_describes_sealing_the_way_the_bulkheads_do_it():
-    """Two-way pin on one sentence.
-
-    The guide used to say zones "seal when full". The registry seals a zone
-    from the moment one person is inside it, which is both the safer design
-    and the one the ship view draws. So the sentence was wrong, not the code.
-    Both halves are asserted here: change the rule without the wording, or the
-    wording without the rule, and this fails.
-    """
-    registry = QuarantineRegistry(("A",), capacity=4)
-    registry.assignments["c1"] = Assignment("c1", "A", 0.0, "fever with desaturation")
-
-    zone = registry.to_dict()["zones"]["A"]
-    assert zone["occupied"] < registry.capacity
-    assert zone["sealed"] is True, (
-        "the registry no longer seals on the first occupant, so the wording in "
-        "server/ai/capabilities.py has to follow it"
+def test_the_guide_describes_human_confirmation_and_manual_release():
+    """A candidate must not consume a berth or seal a zone before confirmation."""
+    registry = QuarantineRegistry(
+        ("A",), capacity=4, require_confirmation=True, allow_automatic_release=False
     )
+    febrile = dict(temperature=39.2, spo2=91.0, pulse=104.0, respiration=24.0)
+    candidate = registry.evaluate("c1", febrile, assess(**febrile))
+    assert candidate is not None and candidate.confirmed is False
+    assert registry.to_dict()["zones"]["A"] == {
+        "occupied": 0,
+        "capacity": 4,
+        "sealed": False,
+    }
+
+    registry.confirm("c1")
+    zone = registry.to_dict()["zones"]["A"]
+    assert zone["occupied"] == 1
+    assert zone["sealed"] is True
+
+    # Clearing readings cannot silently release a confirmed person.
+    nominal = dict(temperature=36.8, spo2=98.0, pulse=70.0, respiration=15.0)
+    assert registry.evaluate("c1", nominal, assess(**nominal)) is None
+    assert "c1" in registry.assignments
 
     entry = next(c for c in CAPABILITIES if c["id"] == "quarantine")
     text = (entry["title"] + " " + entry["does"]).lower()
-    for claim in ("seal when full", "seal a zone when it fills", "sealed when full"):
-        assert claim not in text, f"the guide promises {claim!r}; the code does not"
-    assert "at capacity" in text, (
-        "the guide has to say what capacity does govern, or a reader assumes "
-        "it governs sealing"
-    )
+    for required in ("confirmer", "capacité", "levée", "manuelle"):
+        assert required in text, f"le guide de quarantaine omet {required!r}"
+    assert "automatiquement" in text  # present only in the explicit negation
+    assert "rien n’est isolé automatiquement" in text
 
 
 def test_overflow_is_reported_rather_than_quietly_dropped():
@@ -120,12 +153,16 @@ def test_overflow_is_reported_rather_than_quietly_dropped():
     case and the one the contamination scenario reaches, so the number of
     people with nowhere to go has to be visible rather than inferred from a
     roster that is shorter than it should be."""
-    registry = QuarantineRegistry(("A",), capacity=1)
+    registry = QuarantineRegistry(
+        ("A",), capacity=1, require_confirmation=True, allow_automatic_release=False
+    )
     febrile = dict(temperature=39.2, spo2=91.0, pulse=104.0, respiration=24.0)
     triage = assess(**febrile)
 
-    first = registry.evaluate("c1", febrile, triage)
-    second = registry.evaluate("c2", febrile, triage)
+    registry.evaluate("c1", febrile, triage)
+    first = registry.confirm("c1")
+    registry.evaluate("c2", febrile, triage)
+    second = registry.confirm("c2")
 
     assert first is not None and first.zone == "A"
     assert second is not None and second.zone is None

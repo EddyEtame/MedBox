@@ -20,10 +20,10 @@
 
     ws.onopen = function () {
       retry = 0;
-      setChip("linkChip", true, "Screen link");
+      setChip("linkChip", true, "Liaison écran");
     };
     ws.onclose = function () {
-      setChip("linkChip", false, "Screen link lost");
+      setChip("linkChip", false, "Liaison écran perdue");
       // Back off, but never give up: the server may just be restarting.
       retry = Math.min(retry + 1, 6);
       setTimeout(connect, 400 * retry);
@@ -36,6 +36,8 @@
       // A symptom reported from the other view, or another screen entirely.
       else if (msg.type === "symptom" && msg.reported &&
                msg.reported.patient_id === state.selected) loadReported();
+      else if (msg.type === "quarantine" && state.selected && MedBox.patientTools)
+        MedBox.patientTools.refresh(state.selected);
       // Something the station could not do, e.g. a scenario step it skipped.
       // Held for fifteen seconds, because the chip it lands in is rewritten
       // on every frame and would otherwise show it for a tenth of a second.
@@ -64,8 +66,8 @@
     var gap = Date.now() - lastPainted;
     var stale = gap > 2000;
     document.body.classList.toggle("stale-feed", stale);
-    if (stale) setChip("linkChip", false, "No update for " + Math.round(gap / 1000) + " s");
-    else if (el("linkChip").className !== "chip up") setChip("linkChip", true, "Screen link");
+    if (stale) setChip("linkChip", false, "Aucune mise à jour depuis " + Math.round(gap / 1000) + " s");
+    else if (el("linkChip").className !== "chip up") setChip("linkChip", true, "Liaison écran");
   }, 500);
 
   /* ---------- board ---------- */
@@ -82,23 +84,32 @@
     // The board and the 3D console must never disagree about what is
     // answering. Both say "stand-in" the moment it is one.
     var aiChip = el("aiChip");
-    if (state.aiUp && state.standIn) {
+    if (msg.ai && msg.ai.warming) {
+      aiChip.className = "chip";
+      aiChip.innerHTML = '<i class="led"></i>Assistant en préchauffage';
+    } else if (state.aiUp && state.standIn) {
       aiChip.className = "chip standin";
-      aiChip.innerHTML = '<i class="led"></i>Stand-in, not a model';
+      aiChip.innerHTML = '<i class="led"></i>Simulation de secours, pas un modèle';
     } else {
-      setChip("aiChip", state.aiUp, state.aiUp ? "AI narration" : "AI offline — triage unaffected");
+      setChip("aiChip", state.aiUp,
+        state.aiUp ? "Assistant local prêt" : "Assistant indisponible — surveillance active");
     }
     var warning = state.warning && Date.now() < state.warning.until ? state.warning.text : "";
     var scChip = el("scenarioChip");
     scChip.textContent = warning ||
-      (msg.scenario ? ("Running: " + msg.scenario) : "No scenario running");
+      (msg.scenario ? ("SIMULÉ · " + msg.scenario +
+        (msg.scenario_meta && msg.scenario_meta.simulation
+          ? " · " + (msg.scenario_meta.simulation.represented_duration || "temps accéléré")
+          : "")) : "Aucun scénario");
     scChip.classList.toggle("down", !!warning);
 
     var impaired = 0;
     state.board.forEach(function (r) {
       if (r.triage.urgency !== "routine") impaired++;
     });
-    var isolated = state.quarantine ? state.quarantine.assignments.length : 0;
+    var isolated = state.quarantine ? state.quarantine.assignments.filter(function (a) {
+      return a.confirmed;
+    }).length : 0;
     el("crewTotal").textContent = state.board.length;
     el("crewImpaired").textContent = impaired;
     el("crewIsolated").textContent = isolated;
@@ -112,7 +123,9 @@
   var isolatedSet = function () {
     var s = {};
     if (state.quarantine) {
-      state.quarantine.assignments.forEach(function (a) { s[a.patient_id] = a.zone; });
+      state.quarantine.assignments.forEach(function (a) {
+        if (a.confirmed && a.zone) s[a.patient_id] = a.zone;
+      });
     }
     return s;
   };
@@ -183,8 +196,15 @@
     if (waiting) {
       html += '<div class="zone overflow"><span class="zn">!</span>' +
         '<span class="zover">' + waiting +
-        (waiting === 1 ? " crew member awaiting a bed" : " crew awaiting a bed") +
-        '</span><span class="zc">every zone full</span></div>';
+        (waiting === 1 ? " membre en attente d’une place" : " membres en attente d’une place") +
+        '</span><span class="zc">zones complètes</span></div>';
+    }
+    var candidates = state.quarantine.candidates || 0;
+    if (candidates) {
+      html += '<div class="zone candidate"><span class="zn">?</span>' +
+        '<span class="zover">' + candidates +
+        (candidates === 1 ? " recommandation à confirmer" : " recommandations à confirmer") +
+        '</span><span class="zc">décision humaine</span></div>';
     }
     el("zones").innerHTML = html;
   }
@@ -206,9 +226,9 @@
     el("aiBtn").disabled = state.asking;
 
     var cells = [
-      ["Temperature", num(p.temperature, 1) + " °C", "temperature"],
+      ["Température", num(p.temperature, 1) + " °C", "temperature"],
       ["SpO₂", num(p.spo2, 0) + " %", "spo2"],
-      ["Pulse", num(p.pulse, 0) + " /min", "pulse"],
+      ["Pouls", num(p.pulse, 0) + " /min", "pulse"],
       ["Respiration", num(p.respiration, 0) + " /min", "respiration"]
     ];
     el("vitals").innerHTML = cells.map(function (c) {
@@ -221,8 +241,11 @@
     }).join("");
 
     el("why").innerHTML =
-      "NEWS2 aggregate " + t.total + " → " + t.urgency.toUpperCase() + "<br>" +
-      esc(t.response) + "<br>measured: " + t.measured.join(", ");
+      esc(t.score_label || "Dépistage partiel dérivé de NEWS2") + " : " + t.total +
+      " → " + t.urgency.toUpperCase() + "<br>" + esc(t.response) +
+      "<br>Mesuré : " + t.measured.join(", ") +
+      (t.missing_news2 && t.missing_news2.length
+        ? "<br>Non disponible : " + t.missing_news2.join(", ") : "");
   }
 
   /* ---------- the slow track, on demand only ---------- */
@@ -234,7 +257,7 @@
     // name, band and vitals, with no stale warning.
     var id = state.selected;
     var out = el("aiOut");
-    out.innerHTML = '<p class="sum">Thinking…</p>';
+    out.innerHTML = '<p class="sum">Analyse locale en cours…</p>';
     state.asking = true;
     el("aiBtn").disabled = true;
 
@@ -257,7 +280,7 @@
         el("aiBtn").disabled = false;
         if (state.selected !== id) return;
         state.held = null;
-        out.innerHTML = MedBox.assessment.failure("Vitals and triage are unaffected.");
+        out.innerHTML = MedBox.assessment.failure("Les mesures et la priorité restent actives.");
       });
   }
 
@@ -294,20 +317,21 @@
     loadReported();
     renderRows();
     renderDetail();
+    if (MedBox.patientTools) MedBox.patientTools.select(id);
   }
 
   /* --------------------------------------------- what the crew member said */
   function renderReported(list) {
     var box = el("pSaid");
     if (!list || !list.length) {
-      box.innerHTML = '<p class="none">Nothing reported yet.</p>';
+      box.innerHTML = '<p class="none">Aucune déclaration enregistrée.</p>';
       return;
     }
     box.innerHTML = list.map(function (r) {
-      var who = r.source === "voice" ? "heard" :
-                r.source === "answer" ? "answered" : "typed";
+      var who = r.source === "voice" ? "entendu" :
+                r.source === "answer" ? "réponse" : "saisi";
       if (r.source === "voice" && r.confidence != null) {
-        who = 'heard · <span class="heard">' + Math.round(r.confidence * 100) + '% sure</span>';
+        who = 'entendu · <span class="heard">confiance ' + Math.round(r.confidence * 100) + '%</span>';
       }
       return '<div class="quote ' + (r.source === "voice" ? "voice" : "") + '">' +
              "<p>&ldquo;" + esc(r.text) + "&rdquo;</p>" +
@@ -354,6 +378,17 @@
     if (row) { e.preventDefault(); select(row.dataset.id); }
   });
   if (MedBox.mic) MedBox.mic.attach(function () { return state.selected; }, renderReported);
+  window.addEventListener("medbox-command", function (event) {
+    var detail = event.detail || {};
+    if (detail.patient_id && (detail.action === "select" || detail.action === "show_why" ||
+        detail.action === "assess")) {
+      select(detail.patient_id);
+    }
+    if (detail.action === "assess" && detail.patient_id) askAI();
+  });
+  if (MedBox.patientTools) {
+    MedBox.patientTools.attach(function () { return state.selected; }, renderDetail);
+  }
   el("aiBtn").addEventListener("click", askAI);
   // Replies to the assistant's questions. Not guarded: the assessment
   // panel cannot exist without assessment.js, see CLAUDE.md.

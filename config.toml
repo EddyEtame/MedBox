@@ -3,7 +3,7 @@
 
 [server]
 host = "127.0.0.1"
-port = 8080
+port = 8765
 # The board snapshot rate pushed to every connected screen.
 board_hz = 10
 # The internal sensor sampling rate.
@@ -42,7 +42,10 @@ model = "qwen2.5:1.5b-instruct"
 # in this file is an OSI one.
 fallback_models = ["qwen2.5:0.5b-instruct"]
 # Hard ceiling. The AI is never allowed to hold up a measurement.
-timeout_seconds = 20.0
+timeout_seconds = 25.0
+# A cold model load is measured separately from a normal assessment. The
+# board is already live while this longer, one-time warmup runs.
+warmup_timeout_seconds = 90.0
 # Zero, not 0.2. Under a schema the grammar already guarantees valid JSON, so
 # sampling randomness buys nothing but variance — and a demo you can rehearse
 # is worth more than a demo that surprises you. The same crew member gives the

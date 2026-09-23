@@ -38,9 +38,9 @@
   canvas.addEventListener("webglcontextlost", function (e) {
     e.preventDefault();
     var fb = document.getElementById("fallback");
-    fb.querySelector("h2").textContent = "The 3D view lost its graphics context";
-    fb.querySelector("p").textContent = "The graphics driver reset. Nothing else " +
-      "did: every reading is live on the flat board. Reload to try the 3D view again.";
+    fb.querySelector("h2").textContent = "La vue 3D a perdu son contexte graphique";
+    fb.querySelector("p").textContent = "Le pilote graphique a redémarré. Les mesures " +
+      "restent actives sur le tableau. Rechargez la page pour relancer la vue 3D.";
     fb.hidden = false;
   });
 
@@ -371,16 +371,16 @@
     var gap = Date.now() - lastPainted;
     var stale = gap > 2000;
     document.body.classList.toggle("stale-feed", stale);
-    if (stale) setChip("linkChip", false, "no update for " + Math.round(gap / 1000) + " s");
-    else if (el("linkChip").className !== "chip up") setChip("linkChip", true, "link");
+    if (stale) setChip("linkChip", false, "aucune mise à jour depuis " + Math.round(gap / 1000) + " s");
+    else if (el("linkChip").className !== "chip up") setChip("linkChip", true, "liaison");
   }, 500);
 
   function connect() {
     var proto = location.protocol === "https:" ? "wss:" : "ws:";
     ws = new WebSocket(proto + "//" + location.host + "/ws");
-    ws.onopen = function () { retry = 0; setChip("linkChip", true, "link"); };
+    ws.onopen = function () { retry = 0; setChip("linkChip", true, "liaison"); };
     ws.onclose = function () {
-      setChip("linkChip", false, "link lost");
+      setChip("linkChip", false, "liaison perdue");
       retry = Math.min(retry + 1, 6);
       setTimeout(connect, 400 * retry);
     };
@@ -392,6 +392,8 @@
       // the crew member on show, their words appear without a refresh.
       else if (m.type === "symptom" && m.reported &&
                m.reported.patient_id === state.selected) loadReported();
+      else if (m.type === "quarantine" && state.selected && MedBox.patientTools)
+        MedBox.patientTools.refresh(state.selected);
       // Something the station could not do, e.g. a scenario step it skipped.
       // The command line's output stays until the next command, which is
       // long enough to be read.
@@ -453,10 +455,12 @@
 
     el("gFit").textContent = fit;
     el("gImp").textContent = imp;
-    el("gIso").textContent = state.quarantine ? state.quarantine.assignments.length : 0;
+    el("gIso").textContent = state.quarantine ? state.quarantine.assignments.filter(function (a) {
+      return a.confirmed;
+    }).length : 0;
     el("gResp").textContent = meanResp.toFixed(0) + " /min";
-    el("gRespHz").textContent = "· ship pulse";
-    el("shipSub").textContent = "habitation ring · " + state.board.length + " souls";
+    el("gRespHz").textContent = "· rythme du bord";
+    el("shipSub").textContent = "anneau d’habitation · " + state.board.length + " membres";
     state.standIn = !!(m.ai && m.ai.stand_in);
     // The frame carries what to say, decided server-side from measurements.
     // Usually an empty list.
@@ -469,13 +473,24 @@
     // Never let a stand-in read as the assistant. The chip says which it is
     // before a single assessment has been shown.
     var aiChip = el("aiChip");
-    if (state.aiUp && state.standIn) {
+    if (m.ai && m.ai.warming) {
+      aiChip.className = "chip";
+      aiChip.innerHTML = '<i class="led"></i>préchauffage';
+    } else if (state.aiUp && state.standIn) {
       aiChip.className = "chip standin";
-      aiChip.innerHTML = '<i class="led"></i>stand-in, not a model';
+      aiChip.innerHTML = '<i class="led"></i>secours, pas un modèle';
     } else {
-      setChip("aiChip", state.aiUp, state.aiUp ? "assistant" : "assistant offline");
+      setChip("aiChip", state.aiUp, state.aiUp ? "assistant prêt" : "assistant indisponible");
     }
-    el("scChip").textContent = m.scenario ? m.scenario : "no scenario";
+    el("scChip").textContent = m.scenario ? ("SIMULÉ · " + m.scenario) : "aucun scénario";
+    if (m.scenario_meta && m.scenario_meta.simulation) {
+      var sim = m.scenario_meta.simulation;
+      el("simChip").textContent = "SIMULÉ · " +
+        (sim.represented_duration || "TEMPS ACCÉLÉRÉ") + " / " +
+        (sim.demo_duration || "DÉMO") + " · HORS LIGNE";
+    } else {
+      el("simChip").textContent = "SIMULÉ · LIGNE SAINE · HORS LIGNE";
+    }
 
     /* Hidden at zero, loud at one. The bulkheads already show which
        zones are closed; nothing on this view showed a crew member the
@@ -486,8 +501,32 @@
     bedChip.hidden = !waiting;
     if (waiting) {
       bedChip.textContent = waiting +
-        (waiting === 1 ? " crew member awaiting a bed" : " crew awaiting a bed");
+        (waiting === 1 ? " membre en attente d’une place" : " membres en attente d’une place");
     }
+
+    var quarantine = state.quarantine || { zones: {}, candidates: 0 };
+    el("candidateCount").textContent = (quarantine.candidates || 0) + " à confirmer";
+    el("zoneRail").innerHTML = Object.keys(quarantine.zones || {}).map(function (zoneName) {
+      var zone = quarantine.zones[zoneName];
+      var capacity = Math.max(1, Number(zone.capacity) || 1);
+      var occupied = Math.max(0, Number(zone.occupied) || 0);
+      var percent = Math.min(100, occupied / capacity * 100);
+      return '<div class="zone-row ' + (zone.sealed ? "sealed" : "open") + '">' +
+        '<span class="zone-name">' + esc(zoneName) + '</span>' +
+        '<span class="zone-cap" aria-label="' + occupied + ' places occupées sur ' + capacity + '">' +
+          '<i style="width:' + percent.toFixed(1) + '%"></i></span>' +
+        '<span class="zone-state">' + occupied + '/' + capacity + ' · ' +
+          (zone.sealed ? "scellée" : "ouverte") + '</span></div>';
+    }).join("");
+
+    var duration = m.scenario_meta && Number(m.scenario_meta.duration_seconds);
+    var elapsed = m.scenario_elapsed == null ? 0 : Math.max(0, Number(m.scenario_elapsed) || 0);
+    var percentDone = duration > 0 ? Math.min(100, elapsed / duration * 100) : 0;
+    el("timelineLabel").textContent = m.scenario || "Surveillance nominale";
+    el("timelineClock").textContent = m.scenario
+      ? formatClock(elapsed) + " / " + formatClock(duration)
+      : "ligne saine personnelle";
+    el("timelineFill").style.width = percentDone.toFixed(1) + "%";
 
     if (state.selected) renderPanel();
     lastPainted = Date.now();
@@ -763,6 +802,7 @@
     document.body.classList.add("has-panel");
     flyTo(id);
     renderPanel();
+    if (MedBox.patientTools) MedBox.patientTools.select(id);
   }
 
   function closePanel() {
@@ -786,7 +826,8 @@
       '<div class="agg"><span class="n">' + t.total + '</span>' +
       '<span class="band" style="color:' + bandColor(t.urgency) + '">' + esc(t.urgency) + '</span></div>' +
       '<p class="resp">' + esc(t.response) + '</p>' +
-      '<p class="src">NEWS2 · measured: ' + t.measured.join(", ") + '</p>';
+      '<p class="src">' + esc(t.score_label || "Dépistage partiel dérivé de NEWS2") +
+      ' · mesuré : ' + t.measured.join(", ") + '</p>';
 
     var cells = [
       ["Temp", num(p.temperature,1) + " °C", "temperature"],
@@ -806,16 +847,16 @@
   function renderReported(list) {
     var box = el("pSaid");
     if (!list || !list.length) {
-      box.innerHTML = '<p class="none">Nothing reported yet.</p>';
+      box.innerHTML = '<p class="none">Aucune déclaration enregistrée.</p>';
       return;
     }
     box.innerHTML = list.map(function (r) {
-      var who = r.source === "voice" ? "heard" :
-                r.source === "answer" ? "answered" : "typed";
+      var who = r.source === "voice" ? "entendu" :
+                r.source === "answer" ? "réponse" : "saisi";
       // A transcript is a guess about what was said. Show the confidence so an
       // operator can see when the box may simply have misheard.
       if (r.source === "voice" && r.confidence != null) {
-        who = 'heard · <span class="heard">' + Math.round(r.confidence * 100) + '% sure</span>';
+        who = 'entendu · <span class="heard">confiance ' + Math.round(r.confidence * 100) + '%</span>';
       }
       return '<div class="quote ' + (r.source === "voice" ? "voice" : "") + '">' +
              "<p>&ldquo;" + esc(r.text) + "&rdquo;</p>" +
@@ -878,7 +919,7 @@
       ? (m.stand_in
           ? "A stand-in is answering, not a model. Everything below is the station's own, and all of it is true either way."
           : "Most of this works whether or not the assistant is running. Anything in cyan needs it.")
-      : "The assistant is not running. Everything in the first list still works, which is most of it.";
+      : "L’assistant ne répond pas. Les fonctions déterministes de la première liste restent actives.";
   }
 
   function openGuide() {
@@ -890,7 +931,7 @@
       .then(renderGuide)
       .catch(function () {
         el("guideBody").innerHTML =
-          '<p class="guide-lead">The station is not answering. Reload the page.</p>';
+          '<p class="guide-lead">La station ne répond pas. Rechargez la page.</p>';
       });
   }
 
@@ -908,22 +949,25 @@
       .then(function (res) {
         btn.disabled = false;
         if (!res.ok) {
-          out.innerHTML = '<div class="fail"><b>The assistant cannot answer</b>' +
+          out.innerHTML = '<div class="fail"><b>L’assistant ne peut pas répondre</b>' +
             esc(res.body.note || "") + "</div>";
           return;
         }
         var html = "";
         if (res.body.stand_in) {
           html += '<div class="standin-note"><b>Stand-in, not a language model</b>' +
-            "These are not an assistant's words. The list above is the station's own." +
+            "Ce texte ne vient pas de l’assistant. La liste ci-dessus appartient à la station." +
             "</div>";
         }
-        out.innerHTML = html + '<p class="sum">' + esc(res.body.text || "") + "</p>";
+        var introduction = res.body.text || "";
+        out.innerHTML = html + '<p class="sum">' + esc(introduction) + "</p>";
+        // Guarded on the same line, the shape the freeze-guard test reads.
+        if (introduction && MedBox.voice) MedBox.voice.speakText(introduction);
       })
       .catch(function () {
         btn.disabled = false;
-        out.innerHTML = '<div class="fail"><b>The assistant is unreachable</b>' +
-          "Everything above is unaffected.</div>";
+        out.innerHTML = '<div class="fail"><b>Assistant indisponible</b>' +
+          "Les fonctions déterministes ci-dessus restent actives.</div>";
       });
   }
 
@@ -953,50 +997,53 @@
   function runCommand(raw, spoken) {
     var text = String(raw || "").trim();
     if (!text) return;
-    var word = text.split(/\s+/)[0].toLowerCase();
+    var word = text.split(/\s+/)[0].toLowerCase().normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z]/g, "");
     var rest = text.slice(word.length).trim();
     var ids = ordered();
 
-    if (word === "help") { openGuide(); say("Opened the guide."); return; }
+    if (word === "aide" || word === "help") { openGuide(); say("Aide ouverte."); return; }
 
-    if (word === "worst") {
-      if (!ids.length) return say("No crew on the board yet.", true);
+    if (word === "prioritaire" || word === "pire" || word === "worst") {
+      if (!ids.length) return say("Aucun membre n’est encore affiché.", true);
       selectCrew(ids[0]);
-      return say("Worst: " + describe(ids[0]));
+      return say("Prioritaire : " + describe(ids[0]));
     }
 
-    if (word === "next") {
-      if (!ids.length) return say("No crew on the board yet.", true);
+    if (word === "suivant" || word === "next") {
+      if (!ids.length) return say("Aucun membre n’est encore affiché.", true);
       var at = ids.indexOf(state.selected);
       var nxt = ids[(at + 1) % ids.length];
       selectCrew(nxt);
       return say(describe(nxt));
     }
 
-    if (word === "why") {
-      if (!state.selected) return say("Select a crew member first, or say 'worst'.", true);
+    if (word === "pourquoi" || word === "why") {
+      if (!state.selected) return say("Sélectionnez un membre ou saisissez « prioritaire ».", true);
       var t = state.byId[state.selected].triage;
       var parts = (t.params || []).filter(function (q) { return q.score > 0; })
         .map(function (q) { return q.name + " +" + q.score + " (" + q.reason + ")"; });
       return say(parts.length
         ? "NEWS2 " + t.total + " = " + parts.join(", ")
-        : "NEWS2 0. Every measured parameter is in its normal range.");
+        : "NEWS2 0. Chaque paramètre mesuré est dans sa plage habituelle.");
     }
 
-    if (word === "isolated") {
+    if (word === "isoles" || word === "isolated") {
       var q = state.quarantine;
-      if (!q) return say("No quarantine data yet.", true);
+      if (!q) return say("Aucune donnée d’isolement disponible.", true);
       var zones = Object.keys(q.zones).map(function (z) {
         return z + " " + q.zones[z].occupied + "/" + q.zones[z].capacity +
-               (q.zones[z].sealed ? " sealed" : "");
+               (q.zones[z].sealed ? " scellée" : " ouverte");
       });
-      return say(q.assignments.length + " isolated · " + zones.join(" · ") +
-                 (q.awaiting_bed ? " · " + q.awaiting_bed + " awaiting a bed" : ""));
+      var confirmed = q.assignments.filter(function (a) { return a.confirmed; }).length;
+      return say(confirmed + " isolement(s) confirmé(s) · " + zones.join(" · ") +
+                 (q.candidates ? " · " + q.candidates + " à confirmer" : "") +
+                 (q.awaiting_bed ? " · " + q.awaiting_bed + " en attente d’une place" : ""));
     }
 
-    if (word === "said") {
-      if (!state.selected) return say("Select a crew member first, or say 'worst'.", true);
-      if (!rest) return say("Say what they told you: said I have a headache", true);
+    if (word === "declare" || word === "said") {
+      if (!state.selected) return say("Sélectionnez un membre ou saisissez « prioritaire ».", true);
+      if (!rest) return say("Précisez ses mots : déclaré j’ai mal à la tête", true);
       fetch("/api/patient/" + encodeURIComponent(state.selected) + "/symptom", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1005,21 +1052,21 @@
           : { text: rest, source: "typed" })
       })
         .then(function (r) { return r.json(); })
-        .then(function (d) { renderReported(d.reported || []); say("Recorded: \u201c" + rest + "\u201d"); })
-        .catch(function () { say("Could not record that.", true); });
+        .then(function (d) { renderReported(d.reported || []); say("Déclaration enregistrée : « " + rest + " »"); })
+        .catch(function () { say("La déclaration n’a pas pu être enregistrée.", true); });
       return;
     }
 
-    if (word === "assess" || word === "ask") {
-      if (!state.selected) return say("Select a crew member first, or say 'worst'.", true);
+    if (word === "evaluer" || word === "demander" || word === "assess" || word === "ask") {
+      if (!state.selected) return say("Sélectionnez un membre ou saisissez « prioritaire ».", true);
       if (!state.aiUp) {
-        return say("The assistant is not running. Everything else still works — try 'why'.", true);
+        return say("L’assistant ne répond pas. La surveillance continue ; essayez « pourquoi ».", true);
       }
       askAI();
-      return say("Asking the assistant about " + state.byId[state.selected].patient.name + "…");
+      return say("Évaluation locale de " + state.byId[state.selected].patient.name + "…");
     }
 
-    say("I do not know \u201c" + word + "\u201d. Press Help for the list.", true);
+    say("Commande « " + word + " » inconnue. Ouvrez Aide pour la liste.", true);
   }
 
   function bandColor(u) {
@@ -1034,7 +1081,7 @@
     // flown to either.
     var id = state.selected;
     var out = el("aiOut"), btn = el("aiBtn");
-    out.innerHTML = '<p class="sum">Thinking…</p>';
+    out.innerHTML = '<p class="sum">Analyse locale en cours…</p>';
     btn.disabled = true;
 
     fetch("/api/assess/" + encodeURIComponent(id), { method: "POST" })
@@ -1056,7 +1103,7 @@
         btn.disabled = false;
         if (state.selected !== id) return;
         state.held = null;
-        out.innerHTML = MedBox.assessment.failure("Vitals and triage are unaffected.");
+        out.innerHTML = MedBox.assessment.failure("Les mesures et la priorité restent actives.");
       });
   }
 
@@ -1096,7 +1143,7 @@
     if (!MedBox.voice) { if (btn) btn.hidden = true; return; }
     function paint() {
       var on = MedBox.voice.isOn();
-      btn.textContent = on ? "Sound on" : "Sound off";
+      btn.textContent = on ? "Son activé" : "Son coupé";
       btn.setAttribute("aria-pressed", on ? "true" : "false");
       btn.classList.toggle("primary", on);
     }
@@ -1108,6 +1155,24 @@
     paint();
   })();
   if (MedBox.mic) MedBox.mic.attach(function () { return state.selected; }, renderReported);
+  window.addEventListener("medbox-command", function (event) {
+    var detail = event.detail || {};
+    if (detail.action === "open_help") openGuide();
+    if (detail.patient_id && (detail.action === "select" || detail.action === "show_why" ||
+        detail.action === "assess")) {
+      selectCrew(detail.patient_id);
+    }
+    if (detail.action === "assess" && detail.patient_id) askAI();
+  });
+  if (MedBox.patientTools) {
+    MedBox.patientTools.attach(function () { return state.selected; }, renderPanel);
+  }
+
+  function formatClock(seconds) {
+    seconds = Math.max(0, Math.round(Number(seconds) || 0));
+    var minutes = Math.floor(seconds / 60);
+    return String(minutes).padStart(2, "0") + ":" + String(seconds % 60).padStart(2, "0");
+  }
   el("helpBtn").addEventListener("click", openGuide);
   el("cmdForm").addEventListener("submit", function (e) {
     e.preventDefault();

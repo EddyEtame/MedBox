@@ -1,14 +1,15 @@
-"""Quarantine zone assignment — fast track, deterministic, no model.
+"""Isolation recommendation and berth assignment — deterministic, no model.
 
 The brief asks for quarantine management during the contamination crisis. The
 rule we implement is deliberately simple and explainable, because on Friday
 somebody will ask why a specific crew member was sealed into a specific zone
 and the answer has to be one sentence.
 
-A patient is isolated when they show a respiratory-transmissible pattern:
-a fever together with either desaturation or raised respiration. Zones fill in
-order and each has a capacity; when every zone is full the patient is flagged
-as awaiting a bed rather than silently dropped.
+Vital signs can show deterioration; they cannot prove contagiousness. In the
+interactive station a scenario/exposure flag plus a concerning pattern creates
+an isolation *candidate*. A human confirms the berth assignment, and only a
+human releases it. The registry can retain its legacy automatic mode for
+isolated unit tests, but the MedBox application does not use that mode.
 """
 from __future__ import annotations
 
@@ -28,6 +29,7 @@ class Assignment:
     zone: str | None
     since: float
     reason: str
+    confirmed: bool = True
 
     def to_dict(self) -> dict:
         return {
@@ -35,12 +37,21 @@ class Assignment:
             "zone": self.zone,
             "since": self.since,
             "reason": self.reason,
-            "awaiting_bed": self.zone is None,
+            "confirmed": self.confirmed,
+            "requires_confirmation": not self.confirmed,
+            "awaiting_bed": self.confirmed and self.zone is None,
         }
 
 
-def needs_isolation(vitals: dict, triage: TriageResult) -> tuple[bool, str]:
+def needs_isolation(
+    vitals: dict,
+    triage: TriageResult,
+    *,
+    exposure_confirmed: bool = True,
+) -> tuple[bool, str]:
     """Return (isolate, human-readable reason)."""
+    if not exposure_confirmed:
+        return False, "no confirmed scenario exposure"
     temp = vitals.get("temperature")
     spo2 = vitals.get("spo2")
     resp = vitals.get("respiration")
@@ -58,15 +69,24 @@ def needs_isolation(vitals: dict, triage: TriageResult) -> tuple[bool, str]:
 
 
 class QuarantineRegistry:
-    def __init__(self, zones: tuple[str, ...], capacity: int) -> None:
+    def __init__(
+        self,
+        zones: tuple[str, ...],
+        capacity: int,
+        *,
+        require_confirmation: bool = False,
+        allow_automatic_release: bool = True,
+    ) -> None:
         self.zones = zones
         self.capacity = capacity
+        self.require_confirmation = require_confirmation
+        self.allow_automatic_release = allow_automatic_release
         self.assignments: dict[str, Assignment] = {}
 
     def occupancy(self) -> dict[str, int]:
         counts = {z: 0 for z in self.zones}
         for a in self.assignments.values():
-            if a.zone in counts:
+            if a.confirmed and a.zone in counts:
                 counts[a.zone] += 1
         return counts
 
@@ -77,27 +97,61 @@ class QuarantineRegistry:
                 return z
         return None
 
-    def evaluate(self, patient_id: str, vitals: dict, triage: TriageResult) -> Assignment | None:
-        """Assign or release. Returns the assignment only when it changed."""
-        isolate, reason = needs_isolation(vitals, triage)
+    def evaluate(
+        self,
+        patient_id: str,
+        vitals: dict,
+        triage: TriageResult,
+        *,
+        exposure_confirmed: bool = True,
+    ) -> Assignment | None:
+        """Create a candidate or legacy assignment when the state changes."""
+        isolate, reason = needs_isolation(
+            vitals, triage, exposure_confirmed=exposure_confirmed
+        )
         existing = self.assignments.get(patient_id)
 
         if isolate and existing is None:
-            a = Assignment(patient_id, self._next_zone(), time.time(), reason)
+            confirmed = not self.require_confirmation
+            a = Assignment(
+                patient_id,
+                self._next_zone() if confirmed else None,
+                time.time(),
+                reason,
+                confirmed=confirmed,
+            )
             self.assignments[patient_id] = a
             return a
 
-        if not isolate and existing is not None:
+        if not isolate and existing is not None and self.allow_automatic_release:
             del self.assignments[patient_id]
-            return Assignment(patient_id, None, time.time(), "released")
+            return Assignment(patient_id, None, time.time(), "released", confirmed=True)
 
         # Already isolated but still waiting for a bed — retry placement.
-        if isolate and existing is not None and existing.zone is None:
+        if isolate and existing is not None and existing.confirmed and existing.zone is None:
             zone = self._next_zone()
             if zone is not None:
                 existing.zone = zone
                 return existing
         return None
+
+    def confirm(self, patient_id: str) -> Assignment:
+        """Confirm a candidate and allocate the next berth if one is free."""
+        existing = self.assignments.get(patient_id)
+        if existing is None:
+            raise KeyError(patient_id)
+        if not existing.confirmed:
+            existing.confirmed = True
+            existing.zone = self._next_zone()
+            existing.since = time.time()
+        return existing
+
+    def release(self, patient_id: str, reason: str = "manual release") -> Assignment:
+        """Remove a candidate/assignment only after an explicit operator action."""
+        existing = self.assignments.pop(patient_id, None)
+        if existing is None:
+            raise KeyError(patient_id)
+        return Assignment(patient_id, None, time.time(), reason, confirmed=True)
 
     def sealed_zones(self) -> list[str]:
         return [z for z, n in self.occupancy().items() if n > 0]
@@ -109,5 +163,8 @@ class QuarantineRegistry:
                 for z, n in self.occupancy().items()
             },
             "assignments": [a.to_dict() for a in self.assignments.values()],
-            "awaiting_bed": sum(1 for a in self.assignments.values() if a.zone is None),
+            "candidates": sum(1 for a in self.assignments.values() if not a.confirmed),
+            "awaiting_bed": sum(
+                1 for a in self.assignments.values() if a.confirmed and a.zone is None
+            ),
         }

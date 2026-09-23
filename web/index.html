@@ -1,11 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MedBox · ESA Horizon</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%234fd8e2' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='5' fill='none' stroke='%234fd8e2' stroke-width='2'/%3E%3Ccircle cx='16' cy='3' r='2.5' fill='%234fd8e2'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/patient-tools.css">
 </head>
 <body>
 
@@ -19,65 +20,138 @@
   </div>
 
   <div class="stats">
-    <div class="stat"><span class="k">Crew</span><span class="v" id="crewTotal">&ndash;</span></div>
-    <div class="stat"><span class="k">Impaired</span><span class="v warn" id="crewImpaired">&ndash;</span></div>
-    <div class="stat"><span class="k">Isolated</span><span class="v crit" id="crewIsolated">&ndash;</span></div>
+    <div class="stat"><span class="k">Équipage</span><span class="v" id="crewTotal">&ndash;</span></div>
+    <div class="stat"><span class="k">À surveiller</span><span class="v warn" id="crewImpaired">&ndash;</span></div>
+    <div class="stat"><span class="k">Isolés</span><span class="v crit" id="crewIsolated">&ndash;</span></div>
   </div>
 
   <div class="ctl">
-    <select id="scenarioPick" aria-label="Scenario"></select>
-    <button id="runBtn" class="btn primary">Run</button>
-    <button id="stopBtn" class="btn">Reset</button>
-    <a class="btn" href="/ship" title="3D ship view">Ship</a>
+    <select id="scenarioPick" aria-label="Scénario"></select>
+    <button id="runBtn" class="btn primary">Lancer</button>
+    <button id="stopBtn" class="btn">Réinitialiser</button>
+    <a class="btn" href="/ship" title="Vue 3D du vaisseau">Vaisseau</a>
   </div>
 </header>
 
 <div class="ribbon">
-  <span class="chip" id="linkChip"><i class="led"></i>Screen link</span>
-  <span class="chip" id="aiChip"><i class="led"></i>AI narration</span>
-  <span class="chip" id="scenarioChip">No scenario running</span>
-  <span class="chip note">Research instrument &mdash; not a medical device. Does not diagnose.</span>
+  <span class="chip" id="linkChip"><i class="led"></i>Liaison écran</span>
+  <span class="chip" id="aiChip"><i class="led"></i>Assistant local</span>
+  <span class="chip" id="scenarioChip">Aucun scénario</span>
+  <span class="chip note">DONNÉES SIMULÉES · HORLOGE ACCÉLÉRÉE · PAS UN DISPOSITIF MÉDICAL</span>
 </div>
 
 <main>
   <section class="panel board">
     <div class="phead">
-      <h2>Crew triage</h2>
-      <p class="sub">Ordered by NEWS2 aggregate. Computed on the fast track, with no model involved.</p>
+      <h2>Surveillance de l’équipage</h2>
+      <p class="sub">Classée par dépistage partiel dérivé de NEWS2. Calcul déterministe, sans LLM.</p>
     </div>
     <div class="rows" id="rows"></div>
-    <p class="empty" id="empty">Waiting for the station&hellip;</p>
+    <p class="empty" id="empty">Connexion à la station&hellip;</p>
   </section>
 
   <aside class="side">
     <section class="panel">
-      <div class="phead"><h2>Quarantine</h2></div>
+      <div class="phead"><h2>Isolement</h2></div>
       <div class="zones" id="zones"></div>
     </section>
 
     <section class="panel detail">
       <div class="phead">
-        <h2 id="detailName">No crew member selected</h2>
-        <p class="sub" id="detailRole">Select a row to inspect.</p>
+        <h2 id="detailName">Aucun membre sélectionné</h2>
+        <p class="sub" id="detailRole">Sélectionnez une ligne pour l’inspecter.</p>
       </div>
       <div class="vitals" id="vitals"></div>
       <div class="why" id="why"></div>
+      <div class="trend-card">
+        <div class="trend-head"><span>90 dernières observations</span><a href="/api/provenance" target="_blank" rel="noopener">Voir la provenance</a></div>
+        <canvas id="vitalTrend" width="520" height="150" aria-label="Tendances récentes des paramètres vitaux"></canvas>
+      </div>
+
+      <section class="patient-tools">
+        <h3>Simulation contrôlée</h3>
+        <p class="said-rule">Chaque action est un écart par rapport à la ligne saine personnelle, jamais une mesure réelle.</p>
+        <form id="simPresetForm" class="tool-form">
+          <select id="simPreset" aria-label="Variation simulée">
+            <option value="pseudo_flu">Signes pseudo-grippaux</option>
+            <option value="respiratory">Gêne respiratoire</option>
+            <option value="effort">Effort prolongé</option>
+            <option value="cold">Baisse thermique</option>
+            <option value="baseline">Retour progressif à la ligne de base</option>
+          </select>
+          <button class="btn" type="submit">Appliquer</button>
+        </form>
+        <details class="manual-deltas">
+          <summary>Réglage manuel des écarts</summary>
+          <form id="simManualForm" class="delta-grid">
+            <label>Temp. °C <input id="simTemperature" type="number" step="0.1" min="-5" max="5" placeholder="+1,5"></label>
+            <label>SpO₂ % <input id="simSpo2" type="number" step="0.5" min="-30" max="3" placeholder="-4"></label>
+            <label>Pouls/min <input id="simPulse" type="number" step="1" min="-80" max="150" placeholder="+20"></label>
+            <label>Resp./min <input id="simRespiration" type="number" step="1" min="-20" max="40" placeholder="+6"></label>
+            <label>Transition (s) <input id="simDuration" type="number" step="1" min="1" max="180" value="25"></label>
+            <label class="wide">Motif <input id="simReason" type="text" maxlength="180" value="Exercice manuel de simulation"></label>
+            <label class="wide exposure-check"><input id="simExposure" type="checkbox"> Exposition contagieuse confirmée dans cet exercice</label>
+            <button class="btn" type="submit">Simuler ces changements</button>
+          </form>
+        </details>
+        <p id="simStatus" class="tool-status" role="status"></p>
+        <div id="isolationActions" class="isolation-actions" hidden></div>
+      </section>
+
+      <section class="patient-tools documents">
+        <h3>Rapports médicaux locaux</h3>
+        <p class="said-rule">PDF, DOCX, PNG, JPEG ou TXT · 12 Mo maximum · jamais transmis au LLM.</p>
+        <input id="documentInput" type="file" accept=".pdf,.docx,.png,.jpg,.jpeg,.txt" disabled>
+        <button id="documentUploadBtn" class="btn" type="button" disabled>Ajouter le rapport</button>
+        <p id="documentStatus" class="tool-status" role="status"></p>
+        <div id="documentList" class="document-list"></div>
+      </section>
+
+      <section class="patient-tools protocols">
+        <h3>Protocoles locaux vérifiés</h3>
+        <p class="said-rule">Correspondance déterministe · sources officielles · aucune prescription autonome.</p>
+        <div class="protocol-query">
+          <input id="protocolObservation" type="text" maxlength="500" placeholder="Observation complémentaire (facultative)">
+          <button id="protocolEvaluateBtn" class="btn" type="button">Chercher une carte</button>
+        </div>
+        <div id="protocolResult" class="protocol-result"></div>
+        <details id="protocolValidation" class="protocol-validation" hidden>
+          <summary>Validation médicale humaine de démonstration</summary>
+          <form id="protocolValidationForm" class="screening-grid">
+            <label>Âge vérifié <input id="protocolAge" type="number" min="1" max="130" required></label>
+            <label>Statut grossesse <select id="protocolPregnancy" required><option value="">À vérifier</option><option value="non_applicable">Non applicable</option><option value="negative">Négatif</option><option value="positive">Positif</option></select></label>
+            <label class="check"><input id="protocolIdentity" type="checkbox" required> Identité confirmée</label>
+            <label class="check"><input id="protocolAllergiesReviewed" type="checkbox" required> Allergies vérifiées</label>
+            <label class="check"><input id="protocolMedsReviewed" type="checkbox" required> Traitements actuels vérifiés</label>
+            <label class="check"><input id="protocolContraReviewed" type="checkbox" required> Contre-indications vérifiées</label>
+            <label class="check"><input id="protocolFlagsReviewed" type="checkbox" required> Signes d’alerte vérifiés</label>
+            <label class="check warning"><input id="protocolAllergyPresent" type="checkbox"> Allergie pertinente signalée</label>
+            <label class="check warning"><input id="protocolContraPresent" type="checkbox"> Contre-indication pertinente signalée</label>
+            <label class="check warning"><input id="protocolFlagPresent" type="checkbox"> Signe d’alerte présent</label>
+            <label>Identifiant validateur <input id="protocolValidator" type="text" maxlength="80" required placeholder="Identifiant local"></label>
+            <label>Qualité <select id="protocolRole" required><option value="clinicien">Clinicien</option><option value="medecin_responsable">Médecin responsable</option></select></label>
+            <label class="check attest"><input id="protocolAttest" type="checkbox" required> Je confirme cette décision humaine pour la démonstration.</label>
+            <button class="btn primary" type="submit">Valider et vérifier le stock simulé</button>
+          </form>
+        </details>
+        <p id="protocolStatus" class="tool-status" role="status"></p>
+      </section>
 
       <section class="said">
-        <h3>In their own words</h3>
-        <p class="said-rule">Reported, not measured. Never changes the NEWS2 score.</p>
+        <h3>Déclarations du membre</h3>
+        <p class="said-rule">Déclaré, non mesuré. Ne modifie jamais le score déterministe.</p>
         <div id="pSaid"></div>
         <form class="say" id="sayForm">
           <input id="sayInput" type="text" maxlength="200"
-                 placeholder="What did they say?" aria-label="Reported symptom" disabled>
-          <button class="btn" type="submit" id="sayBtn" disabled>Add</button>
+                 placeholder="Qu’a déclaré la personne ?" aria-label="Symptôme déclaré" disabled>
+          <button class="btn" type="submit" id="sayBtn" disabled>Ajouter</button>
         </form>
         <button class="btn mic" type="button" id="micBtn" hidden
-                title="Hold to record what they said" aria-label="Record what they said">Hold to speak</button>
+                title="Activer l’écoute locale" aria-label="Activer l’écoute locale">Activer MedBox</button>
         <p class="mic-out" id="micOut"></p>
       </section>
 
-      <button id="aiBtn" class="btn primary wide" disabled>Ask the assistant</button>
+      <button id="aiBtn" class="btn primary wide" disabled>Demander une analyse à l’assistant</button>
       <div class="stale-note" id="aiStale" hidden></div>
       <div class="ai" id="aiOut"></div>
     </section>
@@ -87,6 +161,7 @@
 <script src="/static/voice.js"></script>
 <script src="/static/mic.js"></script>
 <script src="/static/assessment.js"></script>
+<script src="/static/patient-tools.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

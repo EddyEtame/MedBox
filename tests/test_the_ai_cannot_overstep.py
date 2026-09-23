@@ -58,7 +58,7 @@ def test_a_drug_and_a_dose_are_blocked():
         "Record temperature hourly",
     ]))
     assert out["information_to_gather"] == []
-    assert any("blocked" in b.lower() for b in out["blocked"])
+    assert any("bloqu" in b.lower() for b in out["blocked"])
 
 
 def test_the_whole_array_goes_not_just_the_offending_line():
@@ -82,6 +82,16 @@ def test_a_treatment_with_no_number_in_it_is_still_a_treatment():
     assert out["information_to_gather"] == []
 
 
+def test_a_french_drug_dose_and_route_are_blocked():
+    """French output must pass through the same prescription guard."""
+    out = enforce(_ok(information_to_gather=[
+        "Administrer du paracétamol 1 g par voie orale",
+        "Relever la température dans 15 minutes",
+    ]))
+    assert out["information_to_gather"] == []
+    assert any("bloqu" in reason.lower() for reason in out["blocked"])
+
+
 def test_a_real_observation_survives():
     out = enforce(_ok(information_to_gather=[
         "Repeat the full set of observations in 15 minutes",
@@ -93,7 +103,11 @@ def test_a_real_observation_survives():
 
 def test_the_prompt_forbids_treatment_in_words_as_well_as_in_shape():
     """Belt and braces: the guard catches it, the prompt should not invite it."""
-    assert "never name a drug, a dose, a route or a treatment" in SYSTEM_PROMPT
+    assert (
+        "ne nommez jamais un médicament, une dose, une voie d’administration"
+        in SYSTEM_PROMPT
+    )
+    assert "réponse doivent être rédigées en français" in SYSTEM_PROMPT
 
 
 def test_no_field_is_named_like_an_order_set():
@@ -105,7 +119,7 @@ def test_no_field_is_named_like_an_order_set():
     assert "suggested_protocol" not in ASSESSMENT_SCHEMA["properties"]
     gather = ASSESSMENT_SCHEMA["properties"]["information_to_gather"]
     assert gather["maxItems"] == MAX_TO_GATHER <= 3
-    assert "Never a treatment" in gather["items"]["description"]
+    assert "Jamais un traitement" in gather["items"]["description"]
 
 
 # ------------------------------------------------------------- provenance
@@ -159,7 +173,7 @@ def test_a_hypothesis_citing_nothing_at_all_is_dropped():
         {"name": "Sepsis", "fit": "one measurement fits", "supporting_signs": []},
     ]))
     assert out["hypotheses"] == []
-    assert any("cited no sign" in b for b in out["blocked"])
+    assert any("ne citait aucun" in b for b in out["blocked"])
 
 
 # ----------------------------------------------------- inventing a patient
@@ -223,7 +237,16 @@ def test_the_assistant_cannot_call_a_medium_band_reassuring():
         urgency="medium",
     )
     assert out["summary"] == ""
-    assert any("suppressed" in b.lower() for b in out["blocked"])
+    assert any("supprim" in b.lower() for b in out["blocked"])
+
+
+def test_the_assistant_cannot_call_a_medium_band_reassuring_in_french():
+    out = enforce(
+        _ok(summary="Score NEWS2 faible de 3, état globalement rassurant."),
+        urgency="medium",
+    )
+    assert out["summary"] == ""
+    assert any("supprim" in reason.lower() for reason in out["blocked"])
 
 
 def test_a_summary_that_only_describes_measurements_survives():
@@ -243,7 +266,7 @@ def test_an_invented_key_never_reaches_the_browser():
     out = enforce(_ok(diagnosis="bacterial pneumonia", escalate=True))
     assert "diagnosis" not in out
     assert "escalate" not in out
-    assert any("not allowed" in b for b in out["blocked"])
+    assert any("champs interdits" in b for b in out["blocked"])
 
 
 def test_the_model_cannot_supply_its_own_honesty_flag():

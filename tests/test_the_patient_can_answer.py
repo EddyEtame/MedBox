@@ -83,4 +83,4 @@ def test_both_views_offer_the_answers_and_label_them():
     for view in ("web/app.js", "web/ship.js"):
         src = (ROOT / view).read_text(encoding="utf-8")
         assert re.search(r"MedBox\.assessment\.wireAnswers\(el\(\"aiOut\"\)", src), f"{view} never wires the answers"
-        assert 'r.source === "answer" ? "answered"' in src, f"{view} shows an answer as typed"
+        assert 'r.source === "answer" ? "réponse"' in src, f"{view} shows an answer as typed"

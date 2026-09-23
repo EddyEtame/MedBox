@@ -8,12 +8,16 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
+import math
+import sqlite3
 import tempfile
 import time
 import uuid
 from pathlib import Path
+from urllib.parse import unquote
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
@@ -25,8 +29,10 @@ from .ai.ollama import CLIENT
 from .ai.validate import enforce
 from .bus import BUS
 from .config import CONFIG, ROOT
+from .commands import classify as classify_command
 from .db import Database
 from .quarantine import QuarantineRegistry
+from .protocols import ProtocolDataError, ProtocolEngine
 from .sensors.synthetic import ScenarioSource
 from .speech import Announcer
 from .voice import TRANSCRIBER
@@ -35,6 +41,26 @@ from .triage import Urgency, assess
 
 log = logging.getLogger("medbox")
 WEB_DIR = ROOT / "web"
+DOCUMENTS_DIR = CONFIG.database.resolved.parent / "documents"
+MAX_DOCUMENT_BYTES = 12 * 1024 * 1024
+ALLOWED_DOCUMENTS = {
+    ".pdf": {"application/pdf"},
+    ".png": {"image/png"},
+    ".jpg": {"image/jpeg"},
+    ".jpeg": {"image/jpeg"},
+    ".txt": {"text/plain"},
+    ".docx": {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/zip",
+    },
+}
+MANUAL_DELTA_LIMITS = {
+    "temperature": (-5.0, 5.0),
+    "spo2": (-30.0, 3.0),
+    "pulse": (-80.0, 150.0),
+    "respiration": (-20.0, 40.0),
+}
+LISTENING_POLICY_VERSION = "continuous-local-listening-v1"
 
 
 def triage_order(row: dict) -> tuple:
@@ -59,9 +85,25 @@ class MedBox:
         self.db = Database(CONFIG.database.resolved)
         self.source = ScenarioSource(CONFIG.ship.crew_size)
         self.quarantine = QuarantineRegistry(
-            CONFIG.ship.quarantine_zones, CONFIG.ship.zone_capacity
+            CONFIG.ship.quarantine_zones,
+            CONFIG.ship.zone_capacity,
+            require_confirmation=True,
+            allow_automatic_release=False,
         )
+        try:
+            self.protocols: ProtocolEngine | None = ProtocolEngine.load()
+            self.protocol_error: str | None = None
+        except ProtocolDataError as exc:
+            # A damaged catalogue must hide every protocol option, but it must
+            # not take down vitals, triage, or the board with it.
+            self.protocols = None
+            self.protocol_error = str(exc)
+            log.error("local protocol catalogue disabled: %s", exc)
         self.db.upsert_patients(self.source.roster())
+        self.source.set_baselines(
+            {row["patient_id"]: row for row in self.db.baselines()}
+        )
+        DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
         # What crew members say, kept apart from what the box measures. The
         # log is handed the recorder rather than importing the database, so
         # nothing in the measurement path depends on it.
@@ -131,8 +173,36 @@ class MedBox:
                 for k, v in p.items()
                 if k in ("temperature", "spo2", "pulse", "respiration")
             }
-            self.source.afflict(pool, targets, float(p.get("over", 30)), now)
-            self.db.record_event("afflict", json.dumps({"patients": pool, **targets}))
+            mode = str(p.get("mode", "absolute"))
+            adjustment_provenance = str(p.get("provenance", "scenario-unspecified"))
+            exposure_confirmed = p.get("exposure_confirmed", False)
+            if not isinstance(exposure_confirmed, bool):
+                raise ValueError("exposure_confirmed must be true or false")
+            self.source.afflict(
+                pool,
+                targets,
+                float(p.get("over", 30)),
+                now,
+                mode=mode,
+                provenance=adjustment_provenance,
+                exposure_confirmed=exposure_confirmed,
+            )
+            self.db.record_event(
+                "simulation_adjustment",
+                json.dumps(
+                    {
+                        "patients": pool,
+                        "adjustments_from_healthy_baseline": targets,
+                        "duration_seconds": float(p.get("over", 30)),
+                        "mode": mode,
+                        "provenance": adjustment_provenance,
+                        "scenario": self.scenario.name if self.scenario else None,
+                        "source": "scenario_yaml",
+                        "exposure_confirmed": exposure_confirmed,
+                    },
+                    ensure_ascii=False,
+                ),
+            )
             BUS.publish({"type": "event", "kind": "onset", "patients": pool})
         elif step.action == "note":
             BUS.publish({"type": "event", "kind": "note", "text": str(p.get("text", ""))})
@@ -182,21 +252,50 @@ class MedBox:
                     "id": patient.id,
                     "name": patient.name,
                     "role": patient.role,
+                    "source": reading.source,
+                    "baseline": dict(patient.baseline),
+                    "deviation": {
+                        key: round(float(value) - float(patient.baseline[key]), 2)
+                        for key, value in v.items()
+                        if value is not None and key in patient.baseline
+                    },
                     **{k: val for k, val in v.items()},
                 },
                 "triage": result.to_dict(),
             }
-            change = self.quarantine.evaluate(reading.patient_id, v, result)
+            change = self.quarantine.evaluate(
+                reading.patient_id,
+                v,
+                result,
+                exposure_confirmed=patient.exposure_confirmed,
+            )
             if change is not None:
                 self.db.record_event(
-                    "quarantine", json.dumps(change.to_dict()), reading.patient_id
+                    "isolation_candidate" if not change.confirmed else "quarantine",
+                    json.dumps(change.to_dict()),
+                    reading.patient_id,
                 )
                 BUS.publish({"type": "quarantine", "change": change.to_dict()})
-                say.extend(self.announcer.on_quarantine(
-                    change.to_dict(), self.quarantine.sealed_zones()
-                ))
+                if change.confirmed:
+                    say.extend(self.announcer.on_quarantine(
+                        change.to_dict(), self.quarantine.sealed_zones()
+                    ))
             if self._tick % self._persist_every == 0:
-                self.db.record_reading(reading.patient_id, now, v, reading.source)
+                self.db.record_reading(
+                    reading.patient_id,
+                    now,
+                    v,
+                    reading.source,
+                    {
+                        "model": "medbox-deterministic-simulation-v2",
+                        "profile_version": "healthy-adult-reference-v1",
+                        "scenario": self.scenario.name if self.scenario else None,
+                        "adjustment": (
+                            patient.trajectory.to_dict() if patient.contaminated else None
+                        ),
+                        "clock": "accelerated" if self.scenario else "live-demo",
+                    },
+                )
 
         if self._tick % self._persist_every == 0:
             self.db.commit()
@@ -212,13 +311,24 @@ class MedBox:
                 "board": rows,
                 "quarantine": self.quarantine.to_dict(),
                 "ai": {"available": CLIENT.available, "error": CLIENT.last_error,
-                       "stand_in": CLIENT.stand_in},
+                       "stand_in": CLIENT.stand_in, "warming": CLIENT.warming,
+                       "warmed": CLIENT.warmed, "model": CLIENT.model,
+                       "timing_seconds": CLIENT.last_timing},
                 # Whether this machine can transcribe at all. A microphone
                 # button that appears and then fails is worse than one that
                 # was never offered.
                 "ears": {"available": TRANSCRIBER.available,
                          "error": TRANSCRIBER.last_error},
                 "scenario": self.scenario.name if self.scenario else None,
+                "scenario_elapsed": (
+                    max(0.0, time.monotonic() - self.scenario_t0)
+                    if self.scenario and self.scenario_t0 is not None else None
+                ),
+                "scenario_meta": ({
+                    "description": self.scenario.description,
+                    "duration_seconds": self.scenario.duration,
+                    "simulation": self.scenario.simulation,
+                } if self.scenario else None),
                 # Usually empty. Only transitions get spoken, because a
                 # station announcing a HIGH band ten times a second is a
                 # station whose sound gets turned off inside a minute.
@@ -229,7 +339,11 @@ class MedBox:
     async def watch_ai(self) -> None:
         """Poll Ollama so the screen shows its true state within a few seconds."""
         while True:
-            await CLIENT.probe()
+            reachable = await CLIENT.probe()
+            if asyncio.current_task().cancelling():
+                raise asyncio.CancelledError
+            if reachable:
+                await CLIENT.warmup()
             # A cancel that lands while httpx is mid-request can be swallowed
             # in there: probe() returns normally, and this task, already marked
             # as cancelling, polls forever. Shutdown waits for it, so the
@@ -273,13 +387,18 @@ app = FastAPI(title="MedBox", version=__version__, lifespan=lifespan,
 
 @app.get("/api/status")
 async def status() -> dict:
+    simulation = STATION.source.metadata()
     return {
         "version": __version__,
         "ship": CONFIG.ship.name,
         "crew": CONFIG.ship.crew_size,
         "ai": {
             "available": CLIENT.available,
+            "warming": CLIENT.warming,
+            "warmed": CLIENT.warmed,
             "model": CLIENT.model,
+            "ollama_version": CLIENT.server_version,
+            "timing_seconds": CLIENT.last_timing,
             "error": CLIENT.last_error,
             "stand_in": CLIENT.stand_in,
         },
@@ -291,7 +410,18 @@ async def status() -> dict:
         "scenario": STATION.scenario.name if STATION.scenario else None,
         "scenarios": scenarios.available(),
         "screens_connected": BUS.subscriber_count,
+        "simulation": {
+            "label": simulation["label_fr"],
+            "clock": simulation["clock"],
+            "model": simulation["model"],
+        },
     }
+
+
+@app.get("/api/provenance")
+async def provenance() -> dict:
+    """The exact sources, transformations and active simulation adjustments."""
+    return STATION.source.metadata()
 
 
 @app.get("/api/board")
@@ -304,11 +434,184 @@ async def patient(patient_id: str) -> dict:
     entry = STATION.latest.get(patient_id)
     if entry is None:
         raise HTTPException(404, f"No crew member {patient_id}")
+    isolation = STATION.quarantine.assignments.get(patient_id)
     return {
         **entry,
         "history": STATION.db.history(patient_id, limit=120),
         "reported": STATION.symptoms.for_patient(patient_id),
+        "documents": STATION.db.medical_documents(patient_id),
+        "isolation": isolation.to_dict() if isolation else None,
     }
+
+
+@app.post("/api/patient/{patient_id}/simulate")
+async def simulate_patient_change(patient_id: str, body: dict) -> dict:
+    """Apply auditable changes from this crew member's healthy reference.
+
+    The operator enters deltas, never replacement measurements. The simulator
+    turns those changes into a smooth, replayable sensor trajectory; the LLM
+    is absent from this path.
+    """
+    patient = STATION.source.patients.get(patient_id)
+    if patient is None:
+        raise HTTPException(404, f"No crew member {patient_id}")
+    raw_changes = body.get("changes")
+    if not isinstance(raw_changes, dict) or not raw_changes:
+        raise HTTPException(400, "At least one vital change is required.")
+
+    changes: dict[str, float] = {}
+    for vital, value in raw_changes.items():
+        if vital not in MANUAL_DELTA_LIMITS:
+            raise HTTPException(400, f"Unknown vital: {vital}")
+        try:
+            number = float(value)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(400, f"Invalid change for {vital}") from exc
+        low, high = MANUAL_DELTA_LIMITS[vital]
+        if not math.isfinite(number) or not low <= number <= high:
+            raise HTTPException(400, f"Change for {vital} must be between {low:g} and {high:g}")
+        changes[vital] = number
+
+    try:
+        over = float(body.get("over_seconds", 25.0))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(400, "Invalid transition duration") from exc
+    if not math.isfinite(over) or not 1.0 <= over <= 180.0:
+        raise HTTPException(400, "Transition duration must be between 1 and 180 seconds")
+    reason = str(body.get("reason") or "Exercice manuel de simulation").strip()
+    if not reason or len(reason) > 500:
+        raise HTTPException(400, "A short simulation reason is required")
+    exposure_confirmed = body.get("exposure_confirmed", False)
+    if not isinstance(exposure_confirmed, bool):
+        raise HTTPException(400, "exposure_confirmed must be a boolean")
+
+    now = time.time()
+    STATION.source.apply_deltas(
+        [patient_id],
+        changes,
+        over,
+        now,
+        provenance="manual-interface-delta",
+        exposure_confirmed=exposure_confirmed,
+    )
+    recorded = []
+    for vital, delta in changes.items():
+        recorded.append(
+            STATION.db.record_manual_override(
+                patient_id,
+                vital,
+                delta,
+                reason,
+                actor="operator",
+                at=now,
+                provenance={
+                    "mode": "delta_from_personal_healthy_baseline",
+                    "transition_seconds": over,
+                    "exposure_confirmed": exposure_confirmed,
+                },
+            )
+        )
+    event = {
+        "type": "event",
+        "kind": "manual_adjustment",
+        "patient_id": patient_id,
+        "changes": changes,
+        "exposure_confirmed": exposure_confirmed,
+        "over_seconds": over,
+        "text": f"Simulation manuelle appliquée à {patient.name}",
+    }
+    BUS.publish(event)
+    return {
+        "patient_id": patient_id,
+        "healthy_baseline": dict(patient.baseline),
+        "trajectory": patient.trajectory.to_dict(),
+        "audit": recorded,
+    }
+
+
+def _document_type(original_name: str, media_type: str, raw: bytes) -> tuple[str, str]:
+    clean_name = unquote(original_name or "").strip()
+    suffix = Path(clean_name).suffix.lower()
+    normalized_type = (media_type or "application/octet-stream").split(";", 1)[0].lower()
+    if suffix not in ALLOWED_DOCUMENTS or normalized_type not in ALLOWED_DOCUMENTS[suffix]:
+        raise HTTPException(415, "Format accepté : PDF, DOCX, PNG, JPEG ou TXT.")
+    signatures = {
+        ".pdf": raw.startswith(b"%PDF-"),
+        ".png": raw.startswith(b"\x89PNG\r\n\x1a\n"),
+        ".jpg": raw.startswith(b"\xff\xd8\xff"),
+        ".jpeg": raw.startswith(b"\xff\xd8\xff"),
+        ".docx": raw.startswith(b"PK\x03\x04"),
+    }
+    if suffix in signatures and not signatures[suffix]:
+        raise HTTPException(415, "Le contenu du fichier ne correspond pas à son extension.")
+    if suffix == ".txt":
+        try:
+            raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise HTTPException(415, "Le rapport texte doit être encodé en UTF-8.") from exc
+    return clean_name, normalized_type
+
+
+@app.post("/api/patient/{patient_id}/documents")
+async def upload_medical_document(patient_id: str, request: Request) -> JSONResponse:
+    """Store one report locally; it is never sent to the language model."""
+    if patient_id not in STATION.source.patients:
+        raise HTTPException(404, f"No crew member {patient_id}")
+    raw = await request.body()
+    if not raw:
+        raise HTTPException(400, "Le fichier est vide.")
+    if len(raw) > MAX_DOCUMENT_BYTES:
+        raise HTTPException(413, "Le rapport dépasse la limite locale de 12 Mo.")
+    original_name, media_type = _document_type(
+        request.headers.get("X-MedBox-Filename", ""),
+        request.headers.get("Content-Type", ""),
+        raw,
+    )
+    suffix = Path(original_name).suffix.lower()
+    blob_id = f"{uuid.uuid4().hex}{suffix}"
+    target = DOCUMENTS_DIR / blob_id
+    try:
+        await asyncio.to_thread(target.write_bytes, raw)
+        metadata = STATION.db.record_medical_document(
+            patient_id,
+            original_name=original_name,
+            media_type=media_type,
+            size_bytes=len(raw),
+            sha256=hashlib.sha256(raw).hexdigest(),
+            blob_id=blob_id,
+        )
+    except ValueError as exc:
+        target.unlink(missing_ok=True)
+        raise HTTPException(400, str(exc)) from exc
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
+    response = JSONResponse(content={"document": {k: v for k, v in metadata.items() if k != "blob_id"}})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.get("/api/patient/{patient_id}/documents")
+async def list_medical_documents(patient_id: str) -> dict:
+    if patient_id not in STATION.source.patients:
+        raise HTTPException(404, f"No crew member {patient_id}")
+    return {"documents": STATION.db.medical_documents(patient_id)}
+
+
+@app.get("/api/documents/{document_id}")
+async def download_medical_document(document_id: str) -> FileResponse:
+    metadata = STATION.db.medical_document(document_id)
+    if metadata is None:
+        raise HTTPException(404, "Document introuvable")
+    target = DOCUMENTS_DIR / metadata["blob_id"]
+    if not target.is_file():
+        raise HTTPException(410, "Le fichier local associé est absent")
+    return FileResponse(
+        target,
+        media_type=metadata["media_type"],
+        filename=metadata["original_name"],
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.post("/api/patient/{patient_id}/symptom")
@@ -355,10 +658,156 @@ async def record_answer(patient_id: str, body: dict) -> dict:
     return {"reported": STATION.symptoms.for_patient(patient_id)}
 
 
+@app.post("/api/quarantine/{patient_id}/confirm")
+async def confirm_quarantine(patient_id: str) -> dict:
+    """Human confirmation turns a recommendation into a berth assignment."""
+    try:
+        assignment = STATION.quarantine.confirm(patient_id)
+    except KeyError as exc:
+        raise HTTPException(404, "Aucune recommandation d'isolement pour ce membre") from exc
+    detail = assignment.to_dict()
+    STATION.db.record_event("quarantine_confirmed", json.dumps(detail), patient_id)
+    BUS.publish({"type": "quarantine", "change": detail})
+    return {"assignment": detail, "quarantine": STATION.quarantine.to_dict()}
+
+
+@app.post("/api/quarantine/{patient_id}/release")
+async def release_quarantine(patient_id: str, body: dict) -> dict:
+    """Release is always a recorded human decision, never a vital-sign side effect."""
+    reason = str(body.get("reason") or "Levée manuelle par l'opérateur").strip()
+    if not reason or len(reason) > 300:
+        raise HTTPException(400, "Un motif court est requis")
+    try:
+        released = STATION.quarantine.release(patient_id, reason)
+    except KeyError as exc:
+        raise HTTPException(404, "Ce membre n'est pas dans le registre d'isolement") from exc
+    detail = released.to_dict()
+    STATION.db.record_event("quarantine_released", json.dumps(detail), patient_id)
+    BUS.publish({"type": "quarantine", "change": detail})
+    return {"released": detail, "quarantine": STATION.quarantine.to_dict()}
+
+
 # A few seconds of speech is well under a megabyte. The cap is not about disk,
 # it is that an endpoint which accepts an unbounded upload from a browser is a
 # way to wedge the machine the demo runs on.
 MAX_AUDIO_BYTES = 4 * 1024 * 1024
+
+
+async def _transcribe_audio(request: Request) -> tuple[str, float, str | None] | None:
+    """Transcribe one short in-memory upload and always erase its temp file.
+
+    Consent and wake-word checks must be able to hear a phrase without filing
+    that phrase in a patient's chart. Keeping the upload plumbing here gives
+    both endpoints the same size cap and, more importantly, the same deletion
+    guarantee.
+    """
+    raw = await request.body()
+    if len(raw) > MAX_AUDIO_BYTES:
+        raise HTTPException(413, "That recording is too long. Keep it to a few seconds.")
+    if not raw:
+        raise HTTPException(400, "The recording was empty.")
+
+    # PyAV probes the container contents, so this neutral suffix also handles
+    # the Ogg or MP4 blobs browsers may produce. The UUID prevents concurrent
+    # microphones from ever sharing a path.
+    tmp = Path(tempfile.gettempdir()) / f"medbox-{uuid.uuid4().hex}.audio"
+    try:
+        tmp.write_bytes(raw)
+        return await TRANSCRIBER.listen(tmp)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def _nothing_heard() -> JSONResponse:
+    response = JSONResponse(
+        status_code=503,
+        content={
+            "error": "Aucune parole transcrite",
+            "detail": TRANSCRIBER.last_error or "aucune parole détectée dans l’enregistrement",
+            "note": "Saisissez le texte. Les constantes et la priorisation restent actives.",
+        },
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.post("/api/voice/transcribe")
+async def transcribe_voice(request: Request) -> JSONResponse:
+    """Hear one phrase without storing it or attaching it to a patient.
+
+    The browser uses this narrow route for consent and the ``MedBox`` wake
+    phrase. Only an explicit post-consent command is later sent to the symptom
+    endpoint. Audio exists only for the duration of this request, and the
+    response is marked non-cacheable so consent transcripts do not linger in
+    a browser cache.
+    """
+    heard = await _transcribe_audio(request)
+    if heard is None:
+        return _nothing_heard()
+
+    text, confidence, language = heard
+    response = JSONResponse(content={
+        "heard": {
+            "text": text,
+            "confidence": confidence,
+            "language": language,
+        }
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.post("/api/voice/sessions")
+async def start_voice_session(body: dict) -> JSONResponse:
+    """Start an auditable local-listening session without storing any audio."""
+    requested = body.get("languages", ["fr", "en"])
+    if not isinstance(requested, list):
+        raise HTTPException(400, "languages must be a list")
+    try:
+        session_id = STATION.db.start_listening_session(
+            languages=tuple(str(item) for item in requested),
+            client=str(body.get("client") or "local-web"),
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    response = JSONResponse(content={
+        "session_id": session_id,
+        "policy_version": LISTENING_POLICY_VERSION,
+        "audio_retained": False,
+        "scope": "session_ouverte_uniquement",
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.post("/api/voice/sessions/{session_id}/consent")
+async def record_voice_consent(session_id: str, body: dict) -> JSONResponse:
+    try:
+        STATION.db.record_consent(
+            session_id,
+            str(body.get("decision") or ""),
+            method=str(body.get("method") or "voice"),
+            language=str(body.get("language") or "fr"),
+            policy_version=LISTENING_POLICY_VERSION,
+        )
+        current = STATION.db.current_consent(session_id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except sqlite3.IntegrityError as exc:
+        # Keep database implementation details out of the public response.
+        raise HTTPException(404, "Session d'écoute inconnue") from exc
+    response = JSONResponse(content={"consent": current})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.post("/api/voice/sessions/{session_id}/end")
+async def end_voice_session(session_id: str) -> dict:
+    try:
+        STATION.db.end_listening_session(session_id)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return {"ended": True}
 
 
 @app.post("/api/patient/{patient_id}/listen")
@@ -376,44 +825,23 @@ async def listen(patient_id: str, request: Request) -> JSONResponse:
     if patient_id not in STATION.latest:
         raise HTTPException(404, f"No crew member {patient_id}")
 
-    # The raw body, not a multipart form. The browser posts the Blob directly,
-    # which means python-multipart is not a dependency — one fewer thing to
-    # install on a machine whose only job on Friday is to work.
-    raw = await request.body()
-    if len(raw) > MAX_AUDIO_BYTES:
-        raise HTTPException(413, "That recording is too long. Keep it to a few seconds.")
-    if not raw:
-        raise HTTPException(400, "The recording was empty.")
-
-    # A real file on disk, because PyAV demuxes from a path and a container it
-    # cannot seek in is a container it may refuse. Deleted either way.
-    tmp = Path(tempfile.gettempdir()) / f"medbox-{uuid.uuid4().hex}.webm"
-    try:
-        tmp.write_bytes(raw)
-        heard = await TRANSCRIBER.listen(tmp)
-    finally:
-        tmp.unlink(missing_ok=True)
+    heard = await _transcribe_audio(request)
 
     if heard is None:
-        return JSONResponse(
-            status_code=503,
-            content={
-                "error": "Nothing was transcribed",
-                "detail": TRANSCRIBER.last_error or "no speech was found in the recording",
-                "note": "Type it instead. Vitals and triage are unaffected.",
-            },
-        )
+        return _nothing_heard()
 
-    text, confidence = heard
+    text, confidence, language = heard
     try:
         entry = STATION.symptoms.add(patient_id, text, source="voice", confidence=confidence)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     BUS.publish({"type": "symptom", "reported": entry.to_dict()})
-    return JSONResponse(content={
-        "heard": entry.to_dict(),
+    response = JSONResponse(content={
+        "heard": {**entry.to_dict(), "language": language},
         "reported": STATION.symptoms.for_patient(patient_id),
     })
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 # This must be declared BEFORE /api/scenario/{name}. Starlette matches routes
@@ -432,7 +860,193 @@ async def start_scenario(name: str) -> dict:
         sc = STATION.load_scenario(name)
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
-    return {"started": sc.name, "description": sc.description, "duration": sc.duration}
+    return {
+        "started": sc.name,
+        "description": sc.description,
+        "duration": sc.duration,
+        "simulation": sc.simulation,
+    }
+
+
+@app.post("/api/assistant/command")
+async def assistant_command(body: dict) -> dict:
+    """Execute one post-consent, allow-listed local command.
+
+    Classification is deterministic and never passes control text to Ollama.
+    Free speech is stored only as an explicitly reported statement for the
+    selected crew member.  A doctor call is a local alert request, not a claim
+    that an external person was contacted.
+    """
+    text = str(body.get("text") or "").strip()
+    if not text or len(text) > 500:
+        raise HTTPException(400, "Une commande courte est requise")
+    patient_id = str(body.get("patient_id") or "").strip() or None
+    if patient_id is not None and patient_id not in STATION.latest:
+        raise HTTPException(404, f"Membre inconnu : {patient_id}")
+    confidence = body.get("confidence")
+    if confidence is not None:
+        try:
+            confidence = float(confidence)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(400, "Confiance vocale invalide") from exc
+        if not math.isfinite(confidence) or not 0 <= confidence <= 1:
+            raise HTTPException(400, "La confiance vocale doit être comprise entre 0 et 1")
+
+    command = classify_command(text)
+    board = STATION._board()
+    ids = [row["patient"]["id"] for row in board]
+
+    if command.kind == "help":
+        return {
+            "action": "open_help",
+            "reply": "J’ouvre l’aide. Les mesures et la priorité restent déterministes, même sans assistant.",
+        }
+    if command.kind in {"worst", "next"}:
+        if not ids:
+            return {"action": "none", "reply": "Aucun membre n’est encore présent sur le tableau."}
+        if command.kind == "worst" or patient_id not in ids:
+            target = ids[0]
+        else:
+            target = ids[(ids.index(patient_id) + 1) % len(ids)]
+        row = next(item for item in board if item["patient"]["id"] == target)
+        return {
+            "action": "select",
+            "patient_id": target,
+            "reply": (
+                f"{row['patient']['name']}, score de dépistage {row['triage']['total']}, "
+                f"niveau {row['triage']['urgency']}."
+            ),
+        }
+    if command.kind == "why":
+        if patient_id is None:
+            return {"action": "none", "reply": "Sélectionnez d’abord un membre d’équipage."}
+        triage = STATION.latest[patient_id]["triage"]
+        scored = [
+            f"{item['name']} plus {item['score']}"
+            for item in triage.get("params", []) if item.get("score", 0) > 0
+        ]
+        explanation = ", ".join(scored) if scored else "aucun point sur les paramètres mesurés"
+        return {
+            "action": "show_why",
+            "patient_id": patient_id,
+            "reply": f"Score partiel {triage['total']} : {explanation}.",
+        }
+    if command.kind == "isolated":
+        registry = STATION.quarantine.to_dict()
+        confirmed = [a for a in registry["assignments"] if a.get("confirmed")]
+        return {
+            "action": "show_isolation",
+            "reply": (
+                f"{len(confirmed)} isolement confirmé, {registry['candidates']} à confirmer, "
+                f"{registry['awaiting_bed']} en attente d’une place."
+            ),
+        }
+    if command.kind in {"assess", "ask"}:
+        if patient_id is None:
+            return {"action": "none", "reply": "Sélectionnez d’abord un membre d’équipage."}
+        return {
+            "action": "assess",
+            "patient_id": patient_id,
+            "reply": "Je lance une évaluation locale. Elle ne remplace pas un diagnostic médical.",
+        }
+    if command.kind == "pause":
+        return {"action": "pause", "reply": "Écoute mise en pause."}
+    if command.kind == "doctor_call":
+        detail = {
+            "requested_by": "voice_operator",
+            "patient_id": patient_id,
+            "network_contacted": False,
+            "status": "local_alert_only",
+        }
+        STATION.db.record_event("doctor_call_requested", json.dumps(detail), patient_id)
+        BUS.publish({"type": "event", "kind": "doctor_call_requested", **detail})
+        return {
+            "action": "doctor_call_logged",
+            "patient_id": patient_id,
+            "reply": (
+                "Demande d’appel médical enregistrée localement. "
+                "Aucun médecin externe n’a été contacté automatiquement."
+            ),
+        }
+    if command.kind in {"report", "audible_event"}:
+        if patient_id is None:
+            return {
+                "action": "none",
+                "reply": "Sélectionnez un membre avant d’enregistrer une déclaration ou un son possible.",
+            }
+        reported = command.reported_text or text
+        if command.kind == "audible_event":
+            reported = (
+                "Événement sonore possible (toux ou éternuement) détecté par transcription ; "
+                "à confirmer par une personne."
+            )
+        try:
+            entry = STATION.symptoms.add(
+                patient_id, reported, source="voice", confidence=confidence
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        BUS.publish({"type": "symptom", "reported": entry.to_dict()})
+        return {
+            "action": "reported",
+            "patient_id": patient_id,
+            "reply": "Déclaration enregistrée comme propos rapporté, jamais comme mesure.",
+            "reported": STATION.symptoms.for_patient(patient_id),
+        }
+    return {"action": "none", "reply": "Commande non reconnue. Dites « MedBox, aide »."}
+
+
+@app.post("/api/patient/{patient_id}/protocol")
+async def evaluate_local_protocol(patient_id: str, body: dict) -> JSONResponse:
+    """Match a reviewed local card; the language model is never consulted."""
+    entry = STATION.latest.get(patient_id)
+    if entry is None:
+        raise HTTPException(404, f"Membre inconnu : {patient_id}")
+    if STATION.protocols is None:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "catalogue_protocoles_indisponible",
+                "detail": STATION.protocol_error or "catalogue local non chargé",
+                "medication_options": [],
+            },
+        )
+
+    extra = str(body.get("observation") or "").strip()
+    if len(extra) > 500:
+        raise HTTPException(400, "L’observation est limitée à 500 caractères")
+    reported = STATION.symptoms.for_patient(patient_id)
+    observations = {
+        "utterance": extra,
+        "symptoms": [str(item.get("text") or "") for item in reported[-12:]],
+        "vitals": {
+            key: entry["patient"].get(key)
+            for key in ("temperature", "spo2", "pulse", "respiration")
+        },
+    }
+    try:
+        result = STATION.protocols.evaluate(
+            observations,
+            screening=body.get("screening"),
+            human_validation=body.get("human_validation"),
+        )
+    except (ProtocolDataError, TypeError, ValueError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    STATION.db.record_event(
+        "protocol_evaluated",
+        json.dumps(
+            {
+                "card_id": result.get("card", {}).get("id") if result.get("card") else None,
+                "medication_gate": result.get("medication_gate"),
+                "mode": result.get("mode"),
+            },
+            ensure_ascii=False,
+        ),
+        patient_id,
+    )
+    response = JSONResponse(content=result)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.post("/api/assess/{patient_id}")
@@ -449,9 +1063,12 @@ async def ai_assess(patient_id: str) -> JSONResponse:
         return JSONResponse(
             status_code=503,
             content={
-                "error": "AI unavailable",
+                "error": "Assistant indisponible",
                 "detail": CLIENT.last_error,
-                "note": "Vitals and triage are unaffected. This is the degraded path working as designed.",
+                "note": (
+                    "Les constantes et la priorisation restent actives. "
+                    "Le mode dégradé fonctionne comme prévu."
+                ),
             },
         )
 
@@ -465,9 +1082,12 @@ async def ai_assess(patient_id: str) -> JSONResponse:
         return JSONResponse(
             status_code=503,
             content={
-                "error": "AI output rejected",
-                "detail": "; ".join(safe["blocked"]) or "the assistant returned nothing usable",
-                "note": "Vitals and triage are unaffected. A malformed assessment takes the same degraded path as a dead assistant.",
+                "error": "Réponse de l’assistant rejetée",
+                "detail": "; ".join(safe["blocked"]) or "aucun contenu exploitable",
+                "note": (
+                    "Les constantes et la priorisation restent actives. Une réponse "
+                    "mal formée suit le même mode dégradé qu’un assistant arrêté."
+                ),
             },
         )
 
@@ -509,9 +1129,12 @@ async def assistant_introduce() -> JSONResponse:
         return JSONResponse(
             status_code=503,
             content={
-                "error": "AI unavailable",
+                "error": "Assistant indisponible",
                 "detail": CLIENT.last_error,
-                "note": "The guide above is unaffected: it is the station's own, not the model's.",
+                "note": (
+                    "Le guide ci-dessus reste disponible : il appartient à la "
+                    "station et ne dépend pas du modèle."
+                ),
             },
         )
     return JSONResponse(content={"text": text, "stand_in": CLIENT.stand_in})

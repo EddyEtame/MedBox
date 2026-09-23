@@ -52,8 +52,8 @@ def test_the_guide_never_promises_the_assistant_is_required():
     model. A guide that quietly reads as AI-first undoes that in the one
     document a jury takes away."""
     text = build()
-    assert "Works with the assistant dead" in text
-    assert "Needs the assistant" in text
+    assert "Fonctionne même sans assistant" in text
+    assert "Nécessite l’assistant" in text
     # Section 7 is the kill demo, and it has to be in the document, not only
     # on stage.
-    assert "Kill Ollama mid-consultation" in text
+    assert "Arrêter Ollama pendant une consultation" in text
