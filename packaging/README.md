@@ -7,8 +7,9 @@ folders after first checking their parent and prefix.
 
 ## Inputs
 
-The build is offline by default. Prepare these inputs on a drive with enough
-space (the current machine should use `D:`):
+The build is offline by default. The inputs live in `.build\assets\` at the
+repository root, which git ignores (build on the internal SSD; a USB stick
+copies small files at a crawl):
 
 - a Python 3.11 x64 embeddable ZIP from python.org, plus its published SHA-256;
 - a wheelhouse containing every wheel from `requirements.txt` and, when voice
@@ -36,20 +37,21 @@ Preflight does not create the destination:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build-portable.ps1 `
-  -Mode Preflight -Destination D:\MedBox-Wednesday `
-  -PythonRuntime D:\MedBox-assets\python-3.11.9-embeddable-amd64.zip `
+  -Mode Preflight -Destination .build\MedBox-Portable `
+  -PythonRuntime .build\assets\python-3.11.9-embeddable-amd64.zip `
   -PythonSha256 33b448f95fecb7c6f802157dbd5e6b40a2ad9bfc8b95ca634a06ba4073ad1ac0 `
-  -Wheelhouse D:\MedBox-assets\wheels
+  -Wheelhouse .build\assets\wheels
 ```
 
 Build uses a new destination folder. It refuses to replace an existing one:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build-portable.ps1 `
-  -Mode Build -Destination D:\MedBox-Wednesday `
-  -PythonRuntime D:\MedBox-assets\python-3.11.9-embeddable-amd64.zip `
+  -Mode Build -Destination .build\MedBox-Portable `
+  -PythonRuntime .build\assets\python-3.11.9-embeddable-amd64.zip `
   -PythonSha256 33b448f95fecb7c6f802157dbd5e6b40a2ad9bfc8b95ca634a06ba4073ad1ac0 `
-  -Wheelhouse D:\MedBox-assets\wheels `
+  -Wheelhouse .build\assets\wheels `
+  -SpeechModel models\faster-whisper-base `
   -RequireComplete
 ```
 
@@ -57,14 +59,14 @@ Verify a copied bundle without starting it:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build-portable.ps1 `
-  -Mode Check -Destination D:\MedBox-Wednesday
+  -Mode Check -Destination D:\MedBox-Portable
 ```
 
 Run the checksum verification plus the bundled Python/Ollama smoke checks:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build-portable.ps1 `
-  -Mode Smoke -Destination D:\MedBox-Wednesday
+  -Mode Smoke -Destination .build\MedBox-Portable
 ```
 
 `-AllowNetwork` is an explicit escape hatch for pip and .NET restore. It is

@@ -50,3 +50,6 @@ Thumbs.db
 # --- .NET launcher build output (70 MB of runtime DLLs); the source is what is versioned ---
 launcher/**/bin/
 launcher/**/obj/
+
+# --- Build inputs and outputs: portable bundle, installers, wheelhouse, logs. Never on GitHub. ---
+.build/

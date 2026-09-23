@@ -47,15 +47,30 @@ carry Eddy's name, there is no group number.
    French. English is fine in code and commits; not on a screen, not in a
    clip, not in a prompt the model answers under.
 
-### Two working copies, two branches
+### One folder: `Desktop\MedBox`
 
-`Desktop\MedBox` (this folder) is on `wednesday-session` and holds
-Wednesday's work. `Desktop\MedBox-code` is on `fix/demo-readiness`
-(Monday–Tuesday). `MedBox\.venv` and `MedBox\models` are NTFS junctions to
-the ones in `MedBox-code`, so nothing is installed twice. Both folders are
-owned by Administrators: **every git command needs**
+Since Thursday 24 Sep, 00:15, this is the only working copy. The Monday to
+Tuesday folder `MedBox-code` (branch `fix/demo-readiness`, fully pushed) was
+folded in and deleted: its notes are in `.research/`, its speech model is
+now the real `models\` here, and `.venv` is a fresh virtualenv on the same
+Anaconda 3.12 base (`C:\Users\Mommy Jayce\anaconda3\python.exe`), no
+junctions anywhere. Everything that is not source lives under `.build\`,
+which git ignores:
+
+| | |
+|---|---|
+| `.build\assets\` | `python-3.11.9-embeddable-amd64.zip`, `wheels\` (37 cp311 wheels), `OllamaSetup.exe` 0.13.1 |
+| `.build\brief\` | the workshop PDF and PPTX, the real specification, **never on GitHub** |
+| `.build\logs\` | build and copy logs |
+| `.build\MedBox-Portable\` | the built bundle, the one to demo from |
+
+The folder is owned by Administrators: **every git command needs**
 `git -c safe.directory="C:/Users/Mommy Jayce/Desktop/MedBox"`, quoted.
-Pushing needs Eddy's own terminal (no stored credentials elsewhere).
+Pushing from here fails with 403: Git Credential Manager holds a token for
+the GitHub account `Eddy-etame`, and the repository belongs to `EddyEtame`.
+Eddy must either sign the credential manager in as `EddyEtame`
+(`git credential-manager github logout`, then push and log in in the
+browser) or add `Eddy-etame` as a collaborator on the repository.
 
 Check the author before pushing, never after:
 
@@ -187,15 +202,17 @@ prefix and the next assessment costs 38 s. Every call in `server/ai/` uses
 ## What is not built, and what to do next (Thursday: no features)
 
 1. **The portable folder is built and was launched cold** (Wednesday
-   23 Sep, 20:00): `C:\Users\Mommy Jayce\MedBox-Portable`, from a path with
+   23 Sep, 20:00): now at `.build\MedBox-Portable`, from a path with
    a space, `PATH` reduced to `C:\Windows`, no host Python or Ollama used.
    Own Ollama on 11555, own Python with `-s`, no connection leaves the
    loopback, kill moment and relaunch proven from the bundle, Ctrl+C takes
    the children down. `packaging/README.md` says what was learned. The
-   final bundle (manifest at the tagged commit, `dirty: false`) is at
-   `C:\Users\Mommy Jayce\MedBox-Portable` and copied to `D:\MedBox-Portable`
-   with `robocopy /E /R:1 /W:1 /XD data logs`; verify any copy with
-   `-Mode Check`. Demo from the SSD copy, keep the stick as transport.
+   final bundle (manifest commit d32defa, `dirty: false`) is at
+   `.build\MedBox-Portable` and copied to `D:\MedBox-Portable`, verified
+   there with `-Mode Check` (3307 files). Demo from the SSD copy, keep the
+   stick as transport. A rebuild changes every pip-generated `.exe`, so
+   sync the stick by SHA256SUMS content, not by timestamp (robocopy would
+   re-copy all 1.5 GB).
    `tools\preflight.ps1 -Bundle <folder>` must say « Pret » first: on
    Wednesday night it did, with four things for Eddy (Performances power
    plan, airplane mode, Do Not Disturb, the idle PEM service).
@@ -206,14 +223,13 @@ prefix and the next assessment costs 38 s. Every call in `server/ai/` uses
    round requires. `docs/pitch.md` is the five minutes.
 4. **Push `wednesday-session`** and merge it: the branch has never been on
    GitHub (see above).
-5. Ollama's downloaded update 0.34.2 was moved to
-   `D:\MedBoxBuild\ollama-updates-parked`; `tools\preflight.ps1` fails if
-   it comes back — and it **does** come back: the tray app re-downloaded
+5. Ollama's downloaded update 0.34.2 was deleted (with the parked copy on
+   the stick); `tools\preflight.ps1` fails if it comes back — and it
+   **does** come back: the tray app re-downloaded
    it (1.5 GB into `updates_v2`) within four hours while the laptop was
-   online. Delete the folder again on Friday morning, then airplane mode. Build on the SSD (five minutes) and copy to the stick;
+   online. Delete the folder again on Friday morning, then airplane mode.
+   Build on the SSD (five minutes, into `.build\`) and copy to the stick;
    D: is a USB stick and hashing 1.5 GB on it takes seven minutes a pass.
-   The stale first build `D:\MedBox-Portable` (19:00 tree) is to be replaced
-   by the SSD one.
 
 ---
 
