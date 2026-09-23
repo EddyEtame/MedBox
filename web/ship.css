@@ -75,6 +75,7 @@ select:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-
   color:var(--ink2);border:1px solid var(--line);border-radius:100px;padding:3px 10px;
   background:rgba(8,18,24,.6);backdrop-filter:blur(8px);
 }
+.chip[hidden]{display:none}
 .led{width:6px;height:6px;border-radius:50%;background:var(--ink3);flex:none}
 .chip.up .led{background:var(--ok)} .chip.down .led{background:var(--crit)}
 .chip.up{color:var(--ok)} .chip.down{color:var(--crit)}
