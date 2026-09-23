@@ -407,8 +407,13 @@
   });
 
   fetch("/api/status").then(function (r) { return r.json(); }).then(function (s) {
-    el("scenarioPick").innerHTML = (s.scenarios || []).map(function (n) {
-      return '<option value="' + esc(n) + '">' + esc(n) + "</option>";
+    // French names from the catalogue, the demo first and selected. The file
+    // names were shown before, so the picker opened on "baisse-thermique",
+    // whichever sorted first, and the demo had to be hunted for.
+    var list = s.scenario_catalog || (s.scenarios || []).map(function (n) { return { stem: n, name: n }; });
+    el("scenarioPick").innerHTML = list.map(function (sc) {
+      return '<option value="' + esc(sc.stem) + '"' + (sc.demo ? ' selected' : '') + '>' +
+        esc(sc.name) + "</option>";
     }).join("");
   }).catch(function () {});
 

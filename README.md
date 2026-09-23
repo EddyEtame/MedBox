@@ -30,7 +30,7 @@ powershell -ExecutionPolicy Bypass -File setup.ps1
 .\.venv\Scripts\python medbox.py
 ```
 
-Then open <http://127.0.0.1:8080>.
+Then open <http://127.0.0.1:8765>. (8765, not 8080: on the presentation laptop 8080 belongs to an Apache that starts with Windows.)
 
 **If you are here to use the station rather than build it, read
 [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md).** It is the operator's guide, and
@@ -170,7 +170,7 @@ A scenario is a timeline applied to the synthetic crew. The same file drives the
 demo, the regression tests and — later — the fine-tuning set.
 
 ```bash
-curl -X POST http://127.0.0.1:8080/api/scenario/contamination
+curl -X POST http://127.0.0.1:8765/api/scenario/contamination
 ```
 
 `scenarios/contamination.yaml` is the crisis the brief specifies: six of forty

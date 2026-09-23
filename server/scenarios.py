@@ -90,3 +90,27 @@ def available() -> list[str]:
     if not SCENARIO_DIR.exists():
         return []
     return sorted(p.stem for p in SCENARIO_DIR.glob("*.yaml"))
+
+
+# The one to present. It goes first in every picker, and it is selected when
+# a page opens, so the demo never starts on whichever file sorts first.
+DEMO = "contamination"
+
+
+def catalog() -> list[dict]:
+    """What a picker shows: the French name, not the file name, demo first."""
+    entries = []
+    for stem in available():
+        try:
+            sc = load(stem)
+        except Exception:  # a broken file is listed by its stem, not hidden
+            entries.append({"stem": stem, "name": stem, "description": "", "demo": stem == DEMO})
+            continue
+        entries.append({
+            "stem": stem,
+            "name": sc.name,
+            "description": sc.description,
+            "demo": stem == DEMO,
+        })
+    entries.sort(key=lambda e: (not e["demo"], e["name"].lower()))
+    return entries

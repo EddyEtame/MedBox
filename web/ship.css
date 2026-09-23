@@ -96,7 +96,9 @@ select:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-
    are deliberately small and translucent so the ship remains the primary
    instrument, while every state still has a textual (not colour-only) label. */
 .zone-rail{
-  top:142px;left:18px;width:238px;padding:12px;border:1px solid var(--line);
+  /* Below the chips row, which wraps to a third line under 1100px; at 142px
+     the rail sat on top of "aucun scénario" and the simulation banner. */
+  top:168px;left:18px;width:238px;padding:12px;border:1px solid var(--line);
   border-radius:11px;background:rgba(8,18,24,.72);backdrop-filter:blur(14px);
 }
 .rail-title{display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin-bottom:9px}

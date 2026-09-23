@@ -36,7 +36,10 @@ timeline:
     patients: 2
     temperature: 1.5
     pulse: 30
-    respiration: 7
+    # 9, not 7: with a personal baseline of 12 to 17 breaths a minute, +7 left
+    # one of the two under the 21/min the isolation rule reads as raised, so
+    # the ship counted five candidates while the narration said six.
+    respiration: 9
     over: 25
 
   - at: 20s

@@ -522,9 +522,14 @@
     var duration = m.scenario_meta && Number(m.scenario_meta.duration_seconds);
     var elapsed = m.scenario_elapsed == null ? 0 : Math.max(0, Number(m.scenario_elapsed) || 0);
     var percentDone = duration > 0 ? Math.min(100, elapsed / duration * 100) : 0;
-    el("timelineLabel").textContent = m.scenario || "Surveillance nominale";
+    // Once the last step is behind us the clock stops: "03:02 / 01:30" read
+    // as a scenario that had overrun, when it had simply finished.
+    var over = duration > 0 && elapsed >= duration;
+    el("timelineLabel").textContent = m.scenario
+      ? m.scenario + (over ? " · terminé, surveillance continue" : "")
+      : "Surveillance nominale";
     el("timelineClock").textContent = m.scenario
-      ? formatClock(elapsed) + " / " + formatClock(duration)
+      ? formatClock(Math.min(elapsed, duration)) + " / " + formatClock(duration)
       : "ligne saine personnelle";
     el("timelineFill").style.width = percentDone.toFixed(1) + "%";
 
@@ -534,7 +539,15 @@
 
   /* --------------------------------------------------------------- render */
   var dpr = 1, W = 1, H = 1;
+  function placeRail() {
+    // Under the header, wherever the header ends: it wraps to two or three
+    // lines with the window, and a fixed top left the rail on the chips.
+    var rail = el("zoneRail") && el("zoneRail").parentElement, top = document.querySelector(".hud.top");
+    if (rail && top) rail.style.top = Math.round(top.getBoundingClientRect().bottom + 8) + "px";
+  }
+
   function resize() {
+    placeRail();
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     W = Math.max(1, Math.round(canvas.clientWidth * dpr));
     H = Math.max(1, Math.round(canvas.clientHeight * dpr));
@@ -900,26 +913,54 @@
     }
 
     var html =
-      '<div class="gsec"><h3>Works with the assistant dead</h3>' +
+      '<div class="gsec"><h3>Fonctionne sans l’assistant</h3>' +
       without.map(item).join("") + "</div>" +
-      '<div class="gsec"><h3>Needs the assistant</h3>' +
+      '<div class="gsec"><h3>Demande l’assistant</h3>' +
       withAI.map(item).join("") + "</div>" +
-      '<div class="gsec"><h3>What it will never do</h3>' +
+      '<div class="gsec"><h3>Ce qu’il ne fera jamais</h3>' +
       m.refusals.map(function (r) {
         return '<div class="gno"><b>' + esc(r.never) + "</b><p>" + esc(r.why) + "</p></div>";
       }).join("") + "</div>" +
-      '<div class="gsec"><h3>Type</h3><div class="keys">' +
+      '<div class="gsec"><h3>À taper, ou à dire après « MedBox »</h3><div class="keys">' +
       m.shortcuts.map(function (k) {
         return "<kbd" + (k.needs_ai ? ' class="ai"' : "") + ">" + esc(k.phrase) + "</kbd>" +
                "<span>" + esc(k.does) + "</span>";
-      }).join("") + "</div></div>";
+      }).join("") + "</div></div>" +
+      '<div class="gsec" id="guideLearned"><h3>Ce que MedBox a appris</h3>' +
+      '<p class="guide-lead">Chargement…</p></div>';
 
     el("guideBody").innerHTML = html;
     el("guideLead").textContent = m.ai_available
       ? (m.stand_in
-          ? "A stand-in is answering, not a model. Everything below is the station's own, and all of it is true either way."
-          : "Most of this works whether or not the assistant is running. Anything in cyan needs it.")
+          ? "Un substitut répond, pas un modèle. Tout ce qui suit appartient à la station et reste vrai dans les deux cas."
+          : "L’essentiel fonctionne avec ou sans l’assistant. Ce qui est en cyan a besoin de lui.")
       : "L’assistant ne répond pas. Les fonctions déterministes de la première liste restent actives.";
+    renderLearned();
+  }
+
+  /* What the station learned from every request: phrasings it did not know,
+     understood once (by the model, within the station's own actions) or taught
+     by an operator, and deterministic ever since. Shown to the jury as is. */
+  function renderLearned() {
+    var box = el("guideLearned");
+    if (!box) return;
+    fetch("/api/assistant/learned").then(function (r) { return r.json(); }).then(function (d) {
+      var s = d.stats || {}, phrases = d.phrases || [];
+      var html = "<p class=\"guide-lead\">" + esc(String(s.requests || 0)) + " demande(s) reçue(s) · " +
+        esc(String(phrases.length)) + " formulation(s) apprise(s)</p>";
+      if (!phrases.length) {
+        html += '<p class="guide-lead">Dites « MedBox » puis une demande dans vos mots : ' +
+          "si elle correspond à une action de la station, elle sera apprise ici.</p>";
+      }
+      html += phrases.slice(0, 12).map(function (p) {
+        return '<div class="gitem"><b>« ' + esc(p.example) + " »</b><p>compris comme : " + esc(p.label_fr) +
+          '</p><span class="how">' + (p.source === "operator" ? "appris d’un opérateur" : "compris par le modèle, puis retenu") +
+          " · utilisé " + esc(String(p.uses)) + " fois</span></div>";
+      }).join("");
+      box.innerHTML = '<h3>Ce que MedBox a appris</h3>' + html;
+    }).catch(function () {
+      box.innerHTML = '<h3>Ce que MedBox a appris</h3><p class="guide-lead">Indisponible.</p>';
+    });
   }
 
   function openGuide() {
@@ -1204,8 +1245,13 @@
   window.addEventListener("resize", resize);
 
   fetch("/api/status").then(function (r) { return r.json(); }).then(function (s) {
-    el("scenarioPick").innerHTML = (s.scenarios||[]).map(function (n) {
-      return '<option value="' + esc(n) + '">' + esc(n) + "</option>";
+    // French names from the catalogue, the demo first and selected. The file
+    // names were shown before, so the picker opened on "baisse-thermique",
+    // whichever sorted first, and the demo had to be hunted for.
+    var list = s.scenario_catalog || (s.scenarios || []).map(function (n) { return { stem: n, name: n }; });
+    el("scenarioPick").innerHTML = list.map(function (sc) {
+      return '<option value="' + esc(sc.stem) + '"' + (sc.demo ? ' selected' : '') + '>' +
+        esc(sc.name) + "</option>";
     }).join("");
   }).catch(function () {});
 
