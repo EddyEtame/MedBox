@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 
-BASELINE_PROFILE_VERSION = "healthy-adult-reference-v1"
+BASELINE_PROFILE_VERSION = "healthy-adult-reference-v2"  # v2: the cuff, 114-132 mmHg
 BASELINE_RANGES = {
     # Conservative resting ranges: every generated profile remains in the
     # NEWS2 zero-score interval. These are synthetic reference anchors, not
@@ -336,12 +336,14 @@ class Database:
                 "profile_version, derived_at, provenance) VALUES (?,?,?,?,?,?,?,?,?)",
                 baseline_rows,
             )
-            # A profile row from before the cuff existed gets its pressure now,
-            # from the same deterministic derivation, so the board and the
-            # database keep agreeing on every baseline.
+            # A profile row from an older reference version is re-derived in
+            # full: the first cuff range (106-128) scored resting crew members
+            # LOW, and a database that kept it would keep that on the board.
             self.conn.executemany(
-                "UPDATE healthy_baselines SET systolic_bp = ? WHERE patient_id = ? AND systolic_bp IS NULL",
-                [(row[5], row[0]) for row in baseline_rows],
+                "UPDATE healthy_baselines SET temperature = ?, spo2 = ?, pulse = ?, respiration = ?, "
+                "systolic_bp = ?, profile_version = ?, derived_at = ?, provenance = ? "
+                "WHERE patient_id = ? AND (profile_version <> ? OR systolic_bp IS NULL)",
+                [(r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[0], r[6]) for r in baseline_rows],
             )
 
     def baseline(self, patient_id: str) -> dict[str, Any] | None:

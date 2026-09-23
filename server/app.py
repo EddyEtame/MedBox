@@ -35,7 +35,7 @@ from .ai.intent import classify as classify_intent
 from .db import Database
 from .quarantine import QuarantineRegistry
 from .protocols import ProtocolDataError, ProtocolEngine
-from .sensors.synthetic import ScenarioSource
+from .sensors.synthetic import BASELINE_PROFILE_VERSION, ScenarioSource
 from .speech import Announcer
 from .voice import TRANSCRIBER
 from .symptoms import SymptomLog
@@ -311,7 +311,7 @@ class MedBox:
                     reading.source,
                     {
                         "model": "medbox-deterministic-simulation-v2",
-                        "profile_version": "healthy-adult-reference-v1",
+                        "profile_version": BASELINE_PROFILE_VERSION,
                         "scenario": self.scenario.name if self.scenario else None,
                         "adjustment": (
                             patient.trajectory.to_dict() if patient.contaminated else None

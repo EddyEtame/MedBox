@@ -31,7 +31,7 @@ BASELINE = {"temperature": 36.8, "spo2": 98.0, "pulse": 72.0, "respiration": 15.
 
 # Conservative healthy demo ranges inside the NEWS2 zero-score ranges. These
 # are not universal population reference intervals.
-BASELINE_PROFILE_VERSION = "healthy-adult-reference-v1"
+BASELINE_PROFILE_VERSION = "healthy-adult-reference-v2"
 HEALTHY_BASELINE_RANGES = {
     "temperature": (36.5, 37.1),
     "spo2": (97.0, 99.0),
