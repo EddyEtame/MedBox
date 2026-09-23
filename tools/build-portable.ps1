@@ -446,6 +446,12 @@ function Publish-Launcher([string]$Target, [string]$Work) {
         $args = @("publish", $project, "--configuration", "Release", "--runtime", "win-x64", "--self-contained", "true", "--output", $publish) + $restoreFlag
         & $dotnet @args
         if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed." }
+        # The SDK leaves compiler servers running for minutes, and they keep
+        # DLLs inside the work folder open. On a fast disk the build reached
+        # cleanup before they exited, and "Access denied" on one of their files
+        # reported a finished bundle as a failed build. The bundle does not
+        # need them; send them away now.
+        & $dotnet build-server shutdown 2>&1 | Out-Null
     } finally {
         $env:TEMP = $oldTemp
         $env:TMP = $oldTmp
@@ -459,6 +465,13 @@ function Publish-Launcher([string]$Target, [string]$Work) {
 }
 
 function Copy-Documentation([string]$BundleRoot) {
+    # The kill moment and the Friday-morning check travel with the bundle:
+    # a presenter with only this folder must be able to do both.
+    $tools = Join-Path $BundleRoot "tools"
+    New-Item -ItemType Directory -Path $tools -Force | Out-Null
+    foreach ($script in @("assistant.ps1", "preflight.ps1")) {
+        Copy-Item -LiteralPath (Join-Path $RepoRoot "tools\$script") -Destination (Join-Path $tools $script) -Force
+    }
     $documentation = Join-Path $BundleRoot "documentation"
     New-Item -ItemType Directory -Path $documentation -Force | Out-Null
     Copy-CleanTree (Join-Path $RepoRoot "docs") $documentation
@@ -605,8 +618,13 @@ function Test-Bundle([string]$BundleRoot, [switch]$RunSmoke) {
     try {
         $env:PYTHONDONTWRITEBYTECODE = "1"
         $env:MEDBOX_DATABASE = Join-Path $BundleRoot "data\smoke.db"
-        & $python $entry --check
+        # -s, as the launcher passes it: the embeddable runtime otherwise reads
+        # the current user's roaming site-packages, and a bundle that only works
+        # on the machine that built it is not portable.
+        & $python -s $entry --check
         if ($LASTEXITCODE -ne 0) { throw "medbox.py --check failed in the portable runtime." }
+        $isolated = (& $python -s -c "import site, sys; sys.stdout.write('isolated' if not site.ENABLE_USER_SITE and not any('site-packages' in p and 'runtime' not in p.lower() for p in sys.path) else 'leaking')" 2>&1 | Out-String).Trim()
+        if ($isolated -ne "isolated") { throw "The portable Python still sees a site-packages outside the bundle ($isolated)." }
     } finally {
         $env:PYTHONDONTWRITEBYTECODE = $oldNoBytecode
         $env:MEDBOX_DATABASE = $oldDatabase
@@ -761,7 +779,14 @@ try {
         $built = $true
         Write-Host "`nPortable bundle ready: $Destination" -ForegroundColor Green
     } finally {
-        Remove-Ephemeral $work $parent $workPrefix
+        try {
+            Remove-Ephemeral $work $parent $workPrefix
+        } catch {
+            if (-not $built) { throw }
+            # The bundle is whole and verified; a locked temporary file is not
+            # a reason to say otherwise.
+            Write-Host "`nWARNING: the bundle is complete, but the work folder could not be removed ($($_.Exception.Message)). Delete it by hand: $work" -ForegroundColor Yellow
+        }
         if (-not $built) { Remove-Ephemeral $stage $parent $stagePrefix }
     }
     exit 0

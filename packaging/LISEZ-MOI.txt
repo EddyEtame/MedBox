@@ -7,6 +7,12 @@ MEDBOX - STATION LOCALE HORS LIGNE
 5. Au premier usage du microphone, le navigateur demande une autorisation.
    Aucun son n'est conserve par MedBox.
 
+Pendant la demonstration, pour arreter l'assistant (et montrer que la
+station continue sans lui), puis le relancer, depuis ce dossier :
+
+  powershell -ExecutionPolicy Bypass -File tools\assistant.ps1 stop
+  powershell -ExecutionPolicy Bypass -File tools\assistant.ps1 start -Bundle .
+
 Verification avant la soutenance :
 
   powershell -NoProfile -ExecutionPolicy Bypass -File tools\build-portable.ps1

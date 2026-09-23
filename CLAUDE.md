@@ -176,6 +176,7 @@ zero is not a sign**, whatever the model says about it.
 | introduction | 3.1 s; same system prompt as an assessment, so it evicts nothing |
 | intent classification | one enum token; 8 s ceiling |
 | board during an assessment | 9–10 frames a second |
+| the portable bundle, launched cold from the SSD | station answering in < 25 s; assistant warmed at 40 s (6.7 s load + 33 s prefix); prefetched click 0.03 s; relaunched assistant back in 1 s |
 
 The cache rule: any request under a *different* system prompt evicts the
 prefix and the next assessment costs 38 s. Every call in `server/ai/` uses
@@ -185,10 +186,16 @@ prefix and the next assessment costs 38 s. Every call in `server/ai/` uses
 
 ## What is not built, and what to do next (Thursday: no features)
 
-1. **Build the portable folder on D: and launch it cold** on a path with a
-   space, as a standard user, offline, with Python and Ollama "absent"
-   (rename them). `packaging/README.md` has the commands. Until this has
-   been done the "double-click" claim is a plan.
+1. **The portable folder is built and was launched cold** (Wednesday
+   23 Sep, 20:00): `C:\Users\Mommy Jayce\MedBox-Portable`, from a path with
+   a space, `PATH` reduced to `C:\Windows`, no host Python or Ollama used.
+   Own Ollama on 11555, own Python with `-s`, no connection leaves the
+   loopback, kill moment and relaunch proven from the bundle, Ctrl+C takes
+   the children down. `packaging/README.md` says what was learned. What is
+   left: copy it to the stick (`robocopy /E /R:1 /W:1`), run `-Mode Check`
+   on the copy, and **reboot the laptop before Friday**: the `ollama.exe`
+   the installer left running is elevated and nothing but a reboot or an
+   administrator window ends it (preflight now fails on it).
 2. **Real microphone, real voice, in French**: the consent flow and the
    wake word have only been exercised with synthesised audio. Do it on
    the demo laptop with the headset, then without.
@@ -198,7 +205,10 @@ prefix and the next assessment costs 38 s. Every call in `server/ai/` uses
    GitHub (see above).
 5. Ollama's downloaded update 0.34.2 was moved to
    `D:\MedBoxBuild\ollama-updates-parked`; `tools\preflight.ps1` fails if
-   it comes back. C: had 10 GB free afterwards; build on D: regardless.
+   it comes back. Build on the SSD (five minutes) and copy to the stick;
+   D: is a USB stick and hashing 1.5 GB on it takes seven minutes a pass.
+   The stale first build `D:\MedBox-Portable` (19:00 tree) is to be replaced
+   by the SSD one.
 
 ---
 
@@ -223,7 +233,20 @@ wins.
 **Ollama on Windows**: killing `ollama.exe` alone does nothing lasting; the
 tray app restarts it in five seconds. `tools\assistant.ps1 stop|start`. A
 different system prompt evicts the prefix cache. `num_thread = 6` on this
-CPU (2P+8E); 12 threads run at 3 tokens/s.
+CPU (2P+8E); 12 threads run at 3 tokens/s. The installer leaves an
+**elevated** `ollama.exe` behind until the next reboot: `Stop-Process` gets
+"Access is denied", `.Path` reads empty, and the kill moment fails on stage.
+`assistant.ps1 stop` now names it and judges the kill by `/api/status`;
+`preflight.ps1` refuses to say « Pret » while one exists.
+
+**The portable bundle**: the embeddable Python with `import site` in its
+`._pth` still reads the user's roaming `site-packages` (`-s` and
+`PYTHONNOUSERSITE=1` in the launcher; the smoke test refuses a leaking
+runtime). Bash mangles `D:\a\b` into `D:\ab` unless single-quoted. `taskkill`
+without `/F` cannot close a console app: send a real Ctrl+C to test the
+shutdown. The .NET SDK's compiler servers hold work-folder files open for
+minutes after `publish`. A `start -Bundle` Ollama is not the launcher's
+child and outlives it.
 
 **The browser**: `[hidden]` loses to any `display:` rule (both stylesheets
 now carry `[hidden]{display:none !important}`). Rows rebuilt at 10 Hz

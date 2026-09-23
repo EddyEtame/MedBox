@@ -85,6 +85,11 @@ else {
     $ver = (& $ollama --version 2>&1 | Out-String)
     if ($ver -match '(\d+\.\d+\.\d+)') { $v = $Matches[1]; if ($v -eq $pin) { Ok "Ollama $v = version epinglee" } else { Fail "Ollama $v, config.toml epingle $pin" } }
     else { Fail "Ollama ne repond pas a --version : $ver" }
+    # An ollama.exe with rights this window does not have (.Path stays empty)
+    # survives tools\assistant.ps1 stop: the kill moment would fail on stage.
+    $elevated = @(Get-Process -Name ollama -ErrorAction SilentlyContinue | Where-Object { -not $_.Path } | ForEach-Object { $_.Id })
+    if ($elevated.Count -gt 0) { Fail ("ollama.exe PID " + ($elevated -join ", ") + " tourne avec des droits eleves : assistant.ps1 stop ne pourra pas le tuer sur scene. Redemarrer la machine avant la soutenance.") }
+    else { Ok "Aucun ollama.exe avec des droits eleves : le moment ou on le tue fonctionnera" }
     $global:LASTEXITCODE = $null
     $list = (& $ollama list 2>&1 | Out-String)
     if ($LASTEXITCODE -ne 0) { Fail "ollama list echoue : le serveur ne tourne pas. Lancer Ollama depuis le menu Demarrer." }

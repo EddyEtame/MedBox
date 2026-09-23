@@ -76,6 +76,7 @@ output, and staging all stay beside the destination, not on the system drive.
 ```text
 MedBox.exe
 LISEZ-MOI.txt           instructions operateur en francais
+tools/                  assistant.ps1 (kill and relaunch the assistant on stage), preflight.ps1
 app/                    Python application and optional speech model
 runtime/python/         Python runtime and pinned dependencies
 runtime/ollama/         CPU-only Ollama runtime when available
@@ -87,6 +88,35 @@ data/                    mutable local database and session state
 logs/                    mutable process logs
 ```
 
-The project currently has no distribution license at the repository root. The
-builder records this honestly as `licenses/PROJECT-LICENSE-MISSING.txt`; that
-file is a warning, not permission to redistribute the bundle.
+The repository root carries `LICENSE` (Apache-2.0) and the builder copies it
+into `licenses/`. If it ever went missing, the builder would record that as
+`licenses/PROJECT-LICENSE-MISSING.txt`: a warning, not permission to
+redistribute the bundle.
+
+## What was learned launching it cold
+
+Measured on the build machine, 23 September 2026, from a path with a space,
+with `PATH` reduced to `C:\Windows`, no Python and no Ollama reachable:
+
+- The embeddable Python, with `import site` enabled in its `._pth`, still
+  puts the current user's roaming `site-packages` on `sys.path`. A bundle
+  that resolves one import there works on the laptop that built it and on no
+  other. The launcher starts the runtime with `-s` and `PYTHONNOUSERSITE=1`,
+  and the builder's smoke test runs it the same way and refuses a runtime
+  that still sees the host.
+- Build on the internal SSD and copy to the USB stick afterwards. Hashing
+  1.5 GB on a USB stick took seven minutes per pass; on the SSD the whole
+  build takes five.
+- The .NET SDK leaves compiler servers running after `publish`, and on a fast
+  disk they still hold files in the work folder when cleanup runs. The
+  builder shuts them down and no longer reports a finished bundle as failed
+  because a temporary file was locked.
+- An `ollama.exe` started with elevated rights (the installer leaves one
+  behind until the next reboot) cannot be stopped from a normal window.
+  `tools\assistant.ps1 stop` names it instead of printing a stack, judges the
+  kill by what the station itself reports, and `preflight.ps1` refuses to say
+  "Pret" while one exists. The bundle's own Ollama is a normal child process
+  and dies on the first try.
+- `tools\assistant.ps1 start -Bundle <folder>` relaunches the bundle's own
+  Ollama on port 11555. That process is not a child of `MedBox.exe`: closing
+  the launcher leaves it running, and `stop` is what ends it.

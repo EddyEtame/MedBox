@@ -72,6 +72,10 @@ internal static class Program
             ["MEDBOX_DATABASE"] = Path.Combine(data, "medbox.db"),
             ["PYTHONUTF8"] = "1",
             ["PYTHONUNBUFFERED"] = "1",
+            // The embeddable runtime still honours the per-user site-packages of
+            // whoever is logged in. Without this, the bundle imports whatever that
+            // person has installed and works on one laptop only.
+            ["PYTHONNOUSERSITE"] = "1",
         };
 
         Console.WriteLine("MedBox — démarrage local hors ligne");
@@ -99,7 +103,7 @@ internal static class Program
 
         var server = StartChild(
             python,
-            [entry, "--host", "127.0.0.1", "--port", appPort.ToString()],
+            ["-s", entry, "--host", "127.0.0.1", "--port", appPort.ToString()],
             appRoot,
             common,
             Path.Combine(logs, "medbox.log"));
