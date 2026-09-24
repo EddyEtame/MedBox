@@ -238,7 +238,7 @@ def test_the_featured_member_is_one_of_the_team_when_one_qualifies():
     from server import app as station
 
     def member(pid, urgency="routine", spread=0.0):
-        return {"id": pid, "name": pid, "today": {"urgency": urgency}, "isolation": None,
+        return {"id": pid, "name": pid, "role": "Équipage", "today": {"urgency": urgency}, "isolation": None,
                 "baseline": {"temperature": 36.6, "spo2": 98, "pulse": 70, "respiration": 14, "systolic_bp": 120},
                 "week": {"vitals": {k: {"min": v - spread, "max": v + spread, "mean": v} for k, v in
                                     {"temperature": 36.6, "spo2": 98, "pulse": 70, "respiration": 14, "systolic_bp": 120}.items()}},
