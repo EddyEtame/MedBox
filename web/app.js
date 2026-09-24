@@ -263,13 +263,15 @@
     // name, band and vitals, with no stale warning.
     var id = state.selected;
     var out = el("aiOut");
-    out.innerHTML = '<p class="sum">Analyse locale en cours…</p>';
+    var thinking = MedBox.thinking ? MedBox.thinking.start(out) : null;
+    if (!thinking) out.innerHTML = '<p class="sum">Analyse locale en cours…</p>';
     state.asking = true;
     el("aiBtn").disabled = true;
 
     fetch("/api/assess/" + encodeURIComponent(id), { method: "POST" })
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
       .then(function (res) {
+        if (thinking) thinking.stop();
         state.asking = false;
         el("aiBtn").disabled = false;
         if (state.selected !== id) return;
@@ -421,10 +423,11 @@
     var input = el("askInput"), text = input.value.trim(), out = el("askOut");
     if (!text) return;
     input.value = "";
-    out.textContent = "Le référent regarde les constantes…";
-    // Spoken only when the answer is not immediate: the station answers the
-    // crew and isolation questions itself in a few milliseconds.
-    var thinking = setTimeout(function () { if (MedBox.voice) MedBox.voice.speakText("Un instant, je regarde les constantes."); }, 700);
+    // Live steps while the answer is on its way; the station answers the
+    // crew and isolation questions itself in a few milliseconds, so the
+    // spoken « un instant » only comes when the answer is not immediate.
+    var thinking = MedBox.thinking ? MedBox.thinking.start(out) : null;
+    if (!thinking) out.textContent = "Le référent regarde les constantes…";
     fetch("/api/assistant/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -432,7 +435,7 @@
     })
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
       .then(function (res) {
-        clearTimeout(thinking);
+        if (thinking) thinking.stop();
         var b = res.body || {};
         if (!res.ok) { out.textContent = b.detail || "Question refusée."; return; }
         // The answer names its own reason when the station wrote it.

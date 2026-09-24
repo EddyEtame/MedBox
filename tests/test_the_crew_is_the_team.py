@@ -294,3 +294,33 @@ def test_the_embedded_ship_waits_for_a_placed_node_before_flying():
     ship = (ROOT / "web" / "ship.js").read_text(encoding="utf-8")
     assert "if (n.sx === undefined) { requestAnimationFrame(function () { flyTo(id); }); return; }" in ship
 
+def test_the_microphone_waits_for_the_end_of_speech_and_starts_as_a_pill():
+    """Eddy, 24 Sep: "wait when speaking totally stops before you start
+    transcribing (you cut speaking after a long while)". Longer, adaptive
+    pauses; a hysteresis so soft syllables stay in; a 30 s ceiling that only
+    cuts on a dip. And the dock starts folded, with its own « Activer », so
+    the page is readable before consent."""
+    mic = (ROOT / "web" / "mic.js").read_text(encoding="utf-8")
+    assert "var END_SILENCE_MS = 1400;" in mic and "var END_SILENCE_LONG_MS = 1900;" in mic
+    assert "var MAX_UTTERANCE_MS = 30000;" in mic and "var HARD_STOP_MS = 40000;" in mic
+    assert "keepThreshold" in mic and "startThreshold" in mic
+    assert "(spoken >= MAX_UTTERANCE_MS && !loud)" in mic
+    assert 'id="micPillArm"' in mic and "setFolded(true);" in mic
+    assert "noiseSuppression: true" in mic and "echoCancellation: true" in mic
+
+def test_the_referent_thinks_out_loud_while_an_answer_is_on_its_way():
+    """Eddy, 24 Sep: "if thinking is taking a while, add things that show
+    thinking is going on". thinking.js shows the honest steps (constants,
+    baseline, isolation registers, possibilities, phrasing) with the seconds
+    ticking, and says « un instant » once; the three asks and the three
+    assessments use it."""
+    js = (ROOT / "web" / "thinking.js").read_text(encoding="utf-8")
+    assert "Je relève les constantes" in js and "J’examine toutes les possibilités" in js and "Je formule ma réponse" in js
+    assert "Un instant, je regarde vos constantes." in js and "root.MedBox.thinking = { start: start" in js
+    for name in ("index.html", "ship.html", "me.html"):
+        assert 'src="/static/thinking.js"' in (ROOT / "web" / name).read_text(encoding="utf-8"), name
+    for name, n in (("app.js", 2), ("ship.js", 2), ("me.js", 2)):
+        src = (ROOT / "web" / name).read_text(encoding="utf-8")
+        assert src.count("MedBox.thinking.start(") == n, name
+        assert src.count("thinking.stop()") >= n, name
+

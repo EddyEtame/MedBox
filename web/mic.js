@@ -15,9 +15,16 @@
 (function (root) {
   "use strict";
 
-  var MAX_UTTERANCE_MS = 12000;
+  /* End of speech (24 Sep): people pause inside a sentence. The detector
+     waits 1.4 s of silence, 1.9 s once the person has been talking for a
+     while, never cuts before 30 s unless the voice dips, and hard-stops at
+     40 s. A soft syllable stays inside the utterance (hysteresis). */
+  var MAX_UTTERANCE_MS = 30000;
+  var HARD_STOP_MS = 40000;
   var IDLE_SEGMENT_MS = 3500;
-  var END_SILENCE_MS = 850;
+  var END_SILENCE_MS = 1400;
+  var END_SILENCE_LONG_MS = 1900;
+  var LONG_UTTERANCE_MS = 4000;
   var WAKE_WINDOW_MS = 9000;
   var MAX_PENDING = 3;
   var MIN_BLOB_BYTES = 900;
@@ -103,7 +110,8 @@
       ".medbox-listener.folded{width:auto;max-width:min(390px,calc(100vw - 36px));padding:8px 12px}" +
       ".medbox-listener.folded .medbox-listener__top{margin:0;gap:10px}" +
       ".medbox-listener.folded .medbox-listener__notice,.medbox-listener.folded .medbox-listener__status," +
-      ".medbox-listener.folded .medbox-listener__actions{display:none}";
+      ".medbox-listener.folded .medbox-listener__actions{display:none}" +
+      ".medbox-listener__pillarm{margin:0 0 0 4px;padding:3px 10px;font-size:12px}";
     document.head.appendChild(style);
   }
 
@@ -118,6 +126,7 @@
     dock.innerHTML =
       '<div class="medbox-listener__top"><span class="medbox-listener__title">Écoute locale</span>' +
       '<span id="micState" class="medbox-listener__state" data-state="off">ARRÊTÉ</span>' +
+      '<button type="button" id="micPillArm" class="btn small medbox-listener__pillarm" hidden>Activer</button>' +
       '<button type="button" id="micFoldBtn" class="medbox-listener__fold" aria-label="Réduire" title="Réduire">–</button></div>' +
       '<p id="micConsentNotice" class="medbox-listener__notice">' + CONSENT_TEXT + '</p>' +
       '<p id="micStatus" class="medbox-listener__status" role="status" aria-live="polite">' +
@@ -151,9 +160,14 @@
       main: btn,
       pause: pause,
       revoke: revoke,
-      fold: el("micFoldBtn")
+      fold: el("micFoldBtn"),
+      pillArm: el("micPillArm")
     };
     ui.fold.addEventListener("click", function () { pinned = true; setFolded(!folded); });
+    ui.pillArm.addEventListener("click", function () { pinned = false; setFolded(false); arm(); });
+    // Folded from the start: the consent text opens when the person asks
+    // for the microphone, and the page underneath stays readable.
+    setFolded(true);
     return dock;
   }
 
@@ -166,6 +180,7 @@
   function setFolded(v) {
     folded = !!v;
     if (ui.dock) ui.dock.classList.toggle("folded", folded);
+    if (ui.pillArm) ui.pillArm.hidden = !folded || running || arming || !available;
     if (ui.fold) {
       ui.fold.textContent = folded ? "+" : "–";
       ui.fold.title = folded ? "Agrandir" : "Réduire";
@@ -208,6 +223,7 @@
     if (ui.pause) ui.pause.hidden = !running;
     if (ui.revoke) ui.revoke.hidden = !consented && !running && !paused;
     if (ui.notice) ui.notice.hidden = consented;
+    if (ui.pillArm) ui.pillArm.hidden = !folded || running || arming || !available;
   }
 
   function mimeType() {
@@ -373,22 +389,29 @@
 
     var now = Date.now();
     var rms = rmsLevel();
-    var threshold = Math.max(0.016, Math.min(0.075, noiseFloor * 3.2));
-    var loud = rms > threshold;
+    // Hysteresis: it takes a clear voice to start an utterance, a much
+    // softer one to keep it going, so trailing syllables are not cut.
+    var startThreshold = Math.max(0.016, Math.min(0.075, noiseFloor * 3.2));
+    var keepThreshold = Math.max(0.010, Math.min(0.05, noiseFloor * 2.0));
+    var loud = rms > (hasSpeech ? keepThreshold : startThreshold);
     if (!hasSpeech && !loud) noiseFloor = noiseFloor * 0.97 + rms * 0.03;
     if (loud) loudFrames += 1; else loudFrames = Math.max(0, loudFrames - 1);
 
-    if (!hasSpeech && loudFrames >= 2) {
+    if (!hasSpeech && loudFrames >= 3) {
       hasSpeech = true;
       speechStartedAt = now;
       lastLoudAt = now;
-      transition("SPEECH", "Parole détectée — traitement local uniquement.");
+      transition("SPEECH", "Parole détectée — je vous écoute jusqu’au bout.");
     } else if (hasSpeech && loud) {
       lastLoudAt = now;
     }
 
-    if (hasSpeech && ((now - lastLoudAt) >= END_SILENCE_MS ||
-                      (now - speechStartedAt) >= MAX_UTTERANCE_MS)) {
+    var spoken = now - speechStartedAt;
+    var pause = now - lastLoudAt;
+    var endSilence = spoken >= LONG_UTTERANCE_MS ? END_SILENCE_LONG_MS : END_SILENCE_MS;
+    if (hasSpeech && (pause >= endSilence ||
+                      (spoken >= MAX_UTTERANCE_MS && !loud) ||
+                      spoken >= HARD_STOP_MS)) {
       finishSegment(true);
     } else if (!hasSpeech && rec && (now - segmentStartedAt) >= IDLE_SEGMENT_MS) {
       finishSegment(false);
@@ -427,6 +450,8 @@
     if (paused) paused = false;
     arming = true;
     var generation = ++armGeneration;
+    pinned = false;
+    setFolded(false);
     transition("ARMING", "Autorisez le microphone dans le navigateur…");
     if (ui.notice) ui.notice.hidden = consented;
     setButtons();

@@ -90,10 +90,12 @@
 
   function askAI() {
     var out = el("aiOut");
-    out.innerHTML = "<p class=\"hint\">Le référent relit vos mesures…</p>";
+    var thinking = MedBox.thinking ? MedBox.thinking.start(out, { self: true, say: function (t) { speak(t, "fr"); } }) : null;
+    if (!thinking) out.innerHTML = "<p class=\"hint\">Le référent relit vos mesures…</p>";
     fetch("/api/assess/" + encodeURIComponent(pid) + "?me=1", { method: "POST" })
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
       .then(function (res) {
+        if (thinking) thinking.stop();
         if (!res.ok) { out.innerHTML = MedBox.assessment.failure(res.body.note || "Le référent ne répond pas ; vos mesures restent suivies."); return; }
         out.innerHTML = MedBox.assessment.render(res.body);
         if (res.body.spoken) speak(res.body.spoken, "fr");
@@ -124,13 +126,13 @@
     var input = el("askInput"), text = input.value.trim(), out = el("askOut");
     if (!text) return;
     input.value = "";
-    out.textContent = "Le référent regarde vos constantes…";
-    var thinking = setTimeout(function () { speak("Un instant, je regarde vos constantes.", "fr"); }, 700);
+    var thinking = MedBox.thinking ? MedBox.thinking.start(out, { self: true, say: function (t) { speak(t, "fr"); } }) : null;
+    if (!thinking) out.textContent = "Le référent regarde vos constantes…";
     fetch("/api/assistant/ask", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: text, patient_id: pid, self: true }) })
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
       .then(function (res) {
-        clearTimeout(thinking);
+        if (thinking) thinking.stop();
         var b = res.body || {};
         if (!res.ok) { out.textContent = b.detail || "Question refusée."; return; }
         out.textContent = b.answer;

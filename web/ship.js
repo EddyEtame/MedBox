@@ -1144,7 +1144,7 @@
     text = String(text || "").trim();
     if (!text) return;
     say("Le référent regarde les constantes…");
-    var thinking = setTimeout(function () { if (MedBox.voice) MedBox.voice.speakText("Un instant, je regarde les constantes."); }, 700);
+    var thinking = MedBox.thinking && el("aiOut") ? MedBox.thinking.start(el("aiOut")) : null;
     fetch("/api/assistant/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1152,7 +1152,7 @@
     })
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
       .then(function (res) {
-        clearTimeout(thinking);
+        if (thinking) { thinking.stop(); el("aiOut").innerHTML = ""; }
         var b = res.body || {};
         if (!res.ok) return say(b.detail || "Question refusée.", true);
         var blocked = b.blocked && b.blocked.length ? " — " + b.blocked.join(" ") : "";
@@ -1174,12 +1174,14 @@
     // flown to either.
     var id = state.selected;
     var out = el("aiOut"), btn = el("aiBtn");
-    out.innerHTML = '<p class="sum">Analyse locale en cours…</p>';
+    var thinking = MedBox.thinking ? MedBox.thinking.start(out) : null;
+    if (!thinking) out.innerHTML = '<p class="sum">Analyse locale en cours…</p>';
     btn.disabled = true;
 
     fetch("/api/assess/" + encodeURIComponent(id), { method: "POST" })
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
       .then(function (res) {
+        if (thinking) thinking.stop();
         btn.disabled = false;
         if (state.selected !== id) return;
         if (!res.ok) {
