@@ -124,14 +124,16 @@
     var input = el("askInput"), text = input.value.trim(), out = el("askOut");
     if (!text) return;
     input.value = "";
-    out.textContent = "Question posée…";
+    out.textContent = "Le référent regarde vos constantes…";
+    var thinking = setTimeout(function () { speak("Un instant, je regarde vos constantes.", "fr"); }, 700);
     fetch("/api/assistant/ask", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: text, patient_id: pid, self: true }) })
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
       .then(function (res) {
+        clearTimeout(thinking);
         var b = res.body || {};
         if (!res.ok) { out.textContent = b.detail || "Question refusée."; return; }
-        out.textContent = b.answer + (b.held_reason ? " (le référent est arrêté : réponse de la station)" : "");
+        out.textContent = b.answer;
         speak(b.spoken || b.answer, b.lang || "fr");
       })
       .catch(function () { out.textContent = "Le référent n’a pas répondu."; });

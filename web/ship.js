@@ -787,6 +787,11 @@
   function flyTo(id) {
     var n = nodes[id];
     if (!n) return;
+    // A node has a position only after its first frame. The embedded card
+    // focuses a member from the first board frame, which can land before
+    // that: flying to an unplaced node sent the camera to NaN and left the
+    // ship black (24 Sep). Wait for the frame instead.
+    if (n.sx === undefined) { requestAnimationFrame(function () { flyTo(id); }); return; }
     cam.flying = 1;
     cam.tTarget = [n.sx, n.sy, n.sz];
     cam.tDist = 6.2;
@@ -1138,7 +1143,8 @@
   function askQuestion(text) {
     text = String(text || "").trim();
     if (!text) return;
-    say("Question posée… l’assistant répond en quelques secondes.");
+    say("Le référent regarde les constantes…");
+    var thinking = setTimeout(function () { if (MedBox.voice) MedBox.voice.speakText("Un instant, je regarde les constantes."); }, 700);
     fetch("/api/assistant/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1146,11 +1152,11 @@
     })
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
       .then(function (res) {
+        clearTimeout(thinking);
         var b = res.body || {};
         if (!res.ok) return say(b.detail || "Question refusée.", true);
-        var note = b.held_reason ? " (l’assistant est arrêté : réponse de la station)" : "";
         var blocked = b.blocked && b.blocked.length ? " — " + b.blocked.join(" ") : "";
-        say(b.answer + note + blocked, !!blocked);
+        say(b.answer + blocked, !!blocked);
         if (MedBox.voice) MedBox.voice.speakText(b.spoken || b.answer);
       })
       .catch(function () { say("L’assistant n’a pas répondu. La surveillance continue.", true); });

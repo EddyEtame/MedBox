@@ -145,7 +145,8 @@
       el("crewTotal").textContent = d.summary.total;
       el("crewFit").textContent = d.summary.fit;
       el("crewImpaired").textContent = d.summary.impaired;
-      el("crewIsolated").textContent = d.summary.isolated;
+      el("crewIsolated").innerHTML = d.summary.isolated +
+        (d.summary.proposed ? ' <small class="hint" title="Isolements décidés par le référent, à confirmer par une personne">+' + d.summary.proposed + " à confirmer</small>" : "");
       var s = d.summary;
       el("crewSummary").textContent = s.impaired === 0
         ? "Tout l’équipage est dans sa plage habituelle. Rien à signaler."

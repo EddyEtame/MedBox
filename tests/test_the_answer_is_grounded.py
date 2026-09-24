@@ -25,11 +25,12 @@ def test_the_crew_facts_only_name_real_members():
     for word in ("isolement", "surveiller"):
         assert word in facts.lower()
     # Every name the station shows is a member; nobody is invented.
-    for candidate in screen.replace(";", ",").replace(":", ",").split(","):
-        token = candidate.strip().split(" (")[0]
-        if token in names:
+    import re
+    for segment in re.split(r"[;:,]", screen):
+        token = segment.strip().rstrip(".").split(" (")[0]
+        if not token or token.startswith(("Équipage de", "Tout l’équipage", "en isolement", "isolement décidé", "à surveiller")):
             continue
-        assert not any(token.startswith(n) for n in names) or token in names
+        assert token in names, token
     assert not any(ch.isdigit() for ch in spoken.replace("zone", ""))  # the voice says names, not counts
 
 

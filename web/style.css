@@ -300,3 +300,14 @@ body.alert{animation:flash 1.2s ease-out 1}
 body.me .stat .v{font-family:inherit;font-size:16px;font-weight:700;letter-spacing:0;text-transform:none}
 .champ b a{color:inherit;text-decoration:none;border-bottom:1px solid rgba(123,232,211,.45)}
 .champ b a:hover{border-bottom-color:currentColor}
+
+/* Motion (24 Sep): panels arrive, a new message pulses three times. */
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes pulseWarn{0%,100%{box-shadow:inset 3px 0 0 var(--warn),0 0 0 0 rgba(240,196,89,0)}50%{box-shadow:inset 3px 0 0 var(--warn),0 0 0 5px rgba(240,196,89,.28)}}
+main.crew .panel{animation:rise .5s cubic-bezier(.2,.7,.2,1) both}
+main.crew .panel:nth-child(2){animation-delay:.07s}
+main.crew .panel:nth-child(3){animation-delay:.14s}
+main.crew .panel:nth-child(4){animation-delay:.21s}
+.msg.unread{animation:pulseWarn 1.5s ease-in-out 3}
+.stat .v{transition:color .3s}
+@media (prefers-reduced-motion:reduce){main.crew .panel,.msg.unread{animation:none}}

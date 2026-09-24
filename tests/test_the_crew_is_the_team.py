@@ -267,3 +267,30 @@ def test_the_dock_folds_once_it_listens_and_the_featured_member_links_to_their_s
         html = (ROOT / "web" / name).read_text(encoding="utf-8")
         assert '<span class="mark" aria-hidden="true"></span>' in html and 'class="logo"' not in html, name
 
+def test_the_answer_carries_its_own_reason_and_the_referent_says_un_instant():
+    """The station's fallback sentence names its reason (down, late, nothing
+    found), so no page appends a stale « l'assistant est arrêté » suffix;
+    while a real answer is on its way the referent says so, out loud, but
+    only when the answer is not immediate."""
+    for name in ("app.js", "ship.js", "me.js"):
+        js = (ROOT / "web" / name).read_text(encoding="utf-8")
+        assert "réponse de la station" not in js, name
+        assert "clearTimeout(thinking)" in js and "setTimeout(function () {" in js, name
+        assert "Un instant, je regarde" in js, name
+    crew = (ROOT / "web" / "crew.js").read_text(encoding="utf-8")
+    assert "à confirmer</small>" in crew
+    ship_css = (ROOT / "web" / "ship.css").read_text(encoding="utf-8")
+    assert "body.embed .hud.top" in ship_css and "body.embed .hud.legend" in ship_css
+    titles = {name: (ROOT / "web" / name).read_text(encoding="utf-8") for name in ("index.html", "ship.html", "crew.html", "me.html")}
+    assert "<title>Tableau · MedBox</title>" in titles["index.html"]
+    assert "<title>Vaisseau · MedBox</title>" in titles["ship.html"]
+    css = (ROOT / "web" / "style.css").read_text(encoding="utf-8")
+    assert "@keyframes rise" in css and "prefers-reduced-motion" in css
+
+def test_the_embedded_ship_waits_for_a_placed_node_before_flying():
+    """/ship?embed=1&focus=P-06 went black: the focus flew the camera to a
+    node that had no position yet (first board frame before first render
+    frame), and the camera target became NaN. flyTo waits for the frame."""
+    ship = (ROOT / "web" / "ship.js").read_text(encoding="utf-8")
+    assert "if (n.sx === undefined) { requestAnimationFrame(function () { flyTo(id); }); return; }" in ship
+

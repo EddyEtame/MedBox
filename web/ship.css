@@ -363,7 +363,9 @@ body.has-panel .top{padding-right:342px}
 
 /* Embedded explanation mode: the ship, the lit member, the glowing zone. */
 body.embed .ctl, body.embed .cmd, body.embed .medbox-listener, body.embed .panel,
-body.embed #helpBtn, body.embed #guide, body.embed .hud.timeline { display: none !important; }
+body.embed #helpBtn, body.embed #guide, body.embed .hud.timeline,
+body.embed .hud.top, body.embed .hud.legend, body.embed .scenario-timeline { display: none !important; }
+body.embed .zone-rail { top: 12px; }
 .zone-row.glow { animation: zoneGlow 1.1s ease-in-out infinite alternate; border-color: #f0c459; }
 .zone-row.glow .zone-name { color: #f0c459; }
 @keyframes zoneGlow { from { box-shadow: 0 0 6px rgba(240,196,89,.35); } to { box-shadow: 0 0 22px rgba(240,196,89,.95); } }

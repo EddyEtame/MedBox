@@ -421,7 +421,10 @@
     var input = el("askInput"), text = input.value.trim(), out = el("askOut");
     if (!text) return;
     input.value = "";
-    out.textContent = "Question posée… l’assistant répond en quelques secondes.";
+    out.textContent = "Le référent regarde les constantes…";
+    // Spoken only when the answer is not immediate: the station answers the
+    // crew and isolation questions itself in a few milliseconds.
+    var thinking = setTimeout(function () { if (MedBox.voice) MedBox.voice.speakText("Un instant, je regarde les constantes."); }, 700);
     fetch("/api/assistant/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -429,11 +432,12 @@
     })
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
       .then(function (res) {
+        clearTimeout(thinking);
         var b = res.body || {};
         if (!res.ok) { out.textContent = b.detail || "Question refusée."; return; }
-        var note = b.held_reason ? " (l’assistant est arrêté : réponse de la station)" : "";
+        // The answer names its own reason when the station wrote it.
         var blocked = b.blocked && b.blocked.length ? " — " + b.blocked.join(" ") : "";
-        out.textContent = b.answer + note + blocked;
+        out.textContent = b.answer + blocked;
         if (MedBox.voice) MedBox.voice.speakText(b.spoken || b.answer);
       })
       .catch(function () { out.textContent = "L’assistant n’a pas répondu. La surveillance continue."; });
