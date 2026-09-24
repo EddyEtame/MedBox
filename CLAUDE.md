@@ -183,6 +183,16 @@ zero is not a sign**, whatever the model says about it.
   assessment on all three pages, two scenarios rewritten as deltas
   (`false-alarm`, `slow-burn`), `tools/build_dev2_dossier.py`. His timer
   release is not taken (xfail in `tests/test_dev2.py`).
+- **Every dashboard listens** (`5c345d6`): the crew page and each personal
+  page ship the hidden `micBtn`, load `mic.js`, and take the station's ears
+  from the board frame like the ship page. A personal page calls
+  `MedBox.mic.setSelf(true)`, so a spoken question there is answered in the
+  second person (`self` travels through `/api/assistant/command`). Before
+  this, `me.html` had the script but no button, so `attach()` returned and
+  nothing listened.
+- **The featured member is a teammate** (`7ff141e`): `_champion` tries the
+  six with a page first (`_has_a_space`), the rest of the crew only if none
+  of them is in routine today.
 - **Navigation and the named assistant** (`4c9410b`): `web/nav.js` on every
   page (ship, board, crew, and each personal space from `/api/status`
   `personal_pages`); the personal page embeds its own ship and lets the
