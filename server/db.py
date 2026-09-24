@@ -582,7 +582,7 @@ class Database:
             "kind": row["kind"], "text": row["text"], "spoken": row["spoken"], "read_at": row["read_at"],
         }
 
-    # ---- the patient record (Brad, Dev 2): answers, urgency changes, contacts, sessions
+    # ---- the patient record (Brad): answers, urgency changes, contacts, sessions
     def record_answer(self, patient_id: str, question: str, answer: str) -> dict[str, Any]:
         at = time.time()
         with self.conn:

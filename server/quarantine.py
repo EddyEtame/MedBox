@@ -82,7 +82,7 @@ class QuarantineRegistry:
         self.require_confirmation = require_confirmation
         self.allow_automatic_release = allow_automatic_release
         self.assignments: dict[str, Assignment] = {}
-        # Who shared a zone with whom, and when (Brad, Dev 2): the contact
+        # Who shared a zone with whom, and when (Brad): the contact
         # trace the crew dashboard and the record show. Persisted by the
         # station every couple of seconds.
         self.contacts: list[dict] = []

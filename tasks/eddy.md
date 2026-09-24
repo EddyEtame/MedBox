@@ -5,7 +5,7 @@ national final, *Innovation & différenciation* is 20 points and *Pitch &
 démonstration* is 20 — forty of seventy decided by your half of this list.
 
 **Your files:** `web/**`, `server/ai/**`, `docs/pitch.md`
-Everything else belongs to dev 2. Ask before touching `server/app.py`.
+Everything else belongs to Brad. Ask before touching `server/app.py`.
 
 ---
 

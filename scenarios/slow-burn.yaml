@@ -1,4 +1,4 @@
-# Dégradation lente (Brad, Dev 2, réécrit en deltas le 24 septembre) : un seul
+# Dégradation lente (Brad, réécrit en deltas le 24 septembre) : un seul
 # membre se dégrade progressivement sur dix minutes, avec exposition confirmée.
 # Toutes les valeurs sont des DELTAS par rapport à la ligne de base saine et
 # personnelle de chaque membre.

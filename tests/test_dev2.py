@@ -1,4 +1,4 @@
-"""Persistence, dialogue boundaries, and simulated quarantine behaviour (Brad, Dev 2).
+"""Persistence, dialogue boundaries, and simulated quarantine behaviour (Brad).
 
 Merged on 24 Sep onto the Wednesday base: release is a person's decision
 there (Eddy, 23 Sep), so the automatic-release tests are marked as such and

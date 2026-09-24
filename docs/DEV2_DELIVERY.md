@@ -1,4 +1,4 @@
-# Livraison Dev 2 - 22 septembre 2026
+# Livraison de Brad - 22 septembre 2026
 
 Base récupérée : `eec32cb` (pull fast-forward depuis `57de847`).
 
@@ -6,7 +6,7 @@ Base récupérée : `eec32cb` (pull fast-forward depuis `57de847`).
 
 - D1 : `answers` dans SQLite, API validée, boutons Oui / Non / Incertain et saisie libre sur les deux interfaces. Les trois dernières réponses persistées passent dans `SymptomLog` avant l'appel IA, jamais après ses délimiteurs. Une réponse ne modifie aucun score.
 - D2 : quatre courbes sur les dix dernières minutes, transitions de niveau enregistrées, journal des scénarios et contacts. Actualisation toutes les cinq secondes, indépendante de l'IA.
-- D3 : reporté, matériel indisponible confirmé par Dev 2. Pas de firmware prétendument testé, pas de courbe de calibration inventée.
+- D3 : reporté, matériel indisponible confirmé par Brad. Pas de firmware prétendument testé, pas de courbe de calibration inventée.
 - D4 : scénarios `slow-burn` (600 secondes) et `false-alarm`, avec vérification des priorités et de l'isolement.
 - D5 : durée minimale de démonstration de 120 secondes, deux relevés complets non isolants espacés d'au moins deux secondes, compteur remis à zéro après rechute ou donnée manquante. Contacts de co-présence en zone persistés. La file d'attente était déjà affichée par le collaborateur.
 - D6 : dossier PDF local préparé avec les six prénoms fournis et une capture de la crise (40 membres, 6 suivis, 6 isolés). Aucun numéro de groupe n'a été attribué ; le PDF reste ignoré par Git.

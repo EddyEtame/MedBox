@@ -113,7 +113,7 @@ def main():
     table([
         ['Responsable', 'Périmètre'],
         ['Eddy', 'Interfaces initiales 2D/3D, IA, voix, manifeste de capacités et guide.'],
-        ['Dev 2', 'Dialogue persistant, historique, scénarios complémentaires, quarantaine, contacts et dossier.'],
+        ['Brad', 'Dialogue persistant, historique, scénarios complémentaires, quarantaine, contacts et dossier.'],
         ['Intégration commune', 'API, affichage partagé et validation de non-régression.'],
     ], [4*cm,12*cm])
     h('Limites et suite')

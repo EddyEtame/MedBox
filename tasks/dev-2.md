@@ -1,4 +1,4 @@
-# Dev 2 — hardware, history, and the patient dialogue
+# Brad — hardware, history, and the patient dialogue
 
 ## Integration status - 22 September 2026
 

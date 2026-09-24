@@ -14,13 +14,13 @@ written and tested, so neither of you is blocked waiting for the other.
 | Owner | Files |
 |---|---|
 | **Eddy** | `web/**`, `server/ai/**`, `server/symptoms.py`, `tools/**`, `docs/pitch.md` |
-| **Dev 2** | `server/sensors/**`, `server/db.py`, `server/quarantine.py`, `scenarios/**` |
+| **Brad** | `server/sensors/**`, `server/db.py`, `server/quarantine.py`, `scenarios/**` |
 | **Shared — discuss before editing** | `server/app.py`, `server/triage.py`, `config.toml` |
 
 Tests belong to whoever owns the code they test, not to one person. A test is
 how you say what your own module promises, and handing that to someone else
 means the promise gets written by whoever understands it least. So
-`tests/test_triage.py` and the sensor and quarantine tests are Dev 2's, the AI
+`tests/test_triage.py` and the sensor and quarantine tests are Brad's, the AI
 and console tests are Eddy's, and neither of you needs permission to add one.
 
 If you need something changed in a shared file, say so rather than editing

@@ -229,14 +229,14 @@ Do not re-learn these.
 ## Where things live
 
 `tasks/README.md` has the file-ownership table: Eddy owns `web/**`,
-`server/ai/**`, `server/symptoms.py`, `tools/**` and `docs/pitch.md`; Dev 2
+`server/ai/**`, `server/symptoms.py`, `tools/**` and `docs/pitch.md`; Brad
 owns `server/sensors/**`, `server/db.py`, `server/quarantine.py` and
 `scenarios/**`; `server/app.py`, `server/triage.py` and `config.toml` are
 shared and discussed before editing.
 
-One open question in Dev 2's code, noticed and deliberately left alone:
+One open question in Brad's code, noticed and deliberately left alone:
 `quarantine.sealed_zones()` returns every zone with an occupant, which is the
-right rule — but if Dev 2 ever changes it to seal only on full, the wording in
+right rule — but if Brad ever changes it to seal only on full, the wording in
 `server/ai/capabilities.py` and the test in `tests/test_guide_is_honest.py`
 have to move with it. They are pinned to each other on purpose.
 

@@ -865,7 +865,7 @@ async def record_answer(patient_id: str, body: dict) -> dict:
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    # Persisted too (Brad, Dev 2): the record keeps it across restarts, and
+    # Persisted too (Brad): the record keeps it across restarts, and
     # the next assessment after a restart still reads it, inside the span.
     STATION.db.record_answer(patient_id, entry.text.split('"', 1)[1].rsplit('", answered', 1)[0]
                              if entry.text.startswith('Asked "') else str(body.get("question", ""))[:200],

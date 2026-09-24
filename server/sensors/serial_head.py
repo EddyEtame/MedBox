@@ -1,6 +1,6 @@
 """Real sensor head over USB serial — the ESP32 in the medical case.
 
-DEV 2 OWNS THIS FILE. It is a working stub with the contract already fixed, so
+BRAD OWNS THIS FILE. It is a working stub with the contract already fixed, so
 the rest of the system needs no change when real hardware arrives: implement
 `sample()` and the board, the triage and the AI all light up unchanged.
 
