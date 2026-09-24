@@ -325,7 +325,7 @@ def part_a(d: Doc, tests: int, scenarios: int):
         "moyenne ; trois zones de quatre couchettes ; registre des paires de personnes ayant partagé une zone. Le "
         "contrat de la tête de mesure série est fixé et testé avec une source simulée ; le matériel n’était pas "
         "disponible pendant le workshop.")
-    d.figure("ship.png", "Figure A2 — La vue 3D du vaisseau : anneau d’habitation, quarante membres, zones d’isolement, commande locale et écoute.")
+    d.figure("ship.png", "Figure A2 — Le vaisseau vu de trois quarts, ouvert côté lecteur : deux ponts, quarante cabines, l’infirmerie, les trois zones d’isolement, les moteurs.")
 
     d.h1("A.7 Fonctionnement détaillé")
     d.bullets(["1. Le dossier se lance (MedBox.exe) : station, six espaces personnels et modèle démarrent ; la page s’ouvre en quatre secondes.",
@@ -351,7 +351,7 @@ def part_a(d: Doc, tests: int, scenarios: int):
              ["15 % de l’équipage malade", "Scénario « contamination » : six membres sur quarante ; décisions, messages sonores, cartes, zones, contacts.", "Critique", "Le référent décide ; l’équipage confirme et lève."],
              ["Dérive progressive", "Scénario « slow-burn » : dégradation lente sur dix minutes ; le score monte cran par cran.", "À surveiller, puis préoccupant", "Une mesure isolée ne suffit pas."]],
             [3.3 * cm, 7.4 * cm, 2.8 * cm, 3.5 * cm])
-    d.figure("embed.png", "Figure A4 — La carte ouverte depuis un message : le vaisseau embarqué, la pièce d’isolement qui s’illumine.", width=12 * cm)
+    d.figure("embed.png", "Figure A4 — La carte ouverte depuis un message : la caméra entre dans la zone d’isolement, le pont du dessus effacé, les quatre couchettes.", width=12 * cm)
 
     d.h1("A.9 Choix technologiques et justification")
     d.table([["Technologie", "Rôle", "Justification"],

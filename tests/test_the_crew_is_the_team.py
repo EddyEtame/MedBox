@@ -354,7 +354,25 @@ def test_the_ship_page_draws_a_hull_under_its_overlay():
     ship = (ROOT / "web" / "ship.js").read_text(encoding="utf-8")
     assert "MedBox.hull.init(" in ship and "MedBox.hull.render({" in ship and "alpha: hullOn" in ship
     hull = (ROOT / "web" / "hull.js").read_text(encoding="utf-8")
-    for needle in ("function buildRing(", "function buildCore(", "TorusGeometry", "root.MedBox.hull = {"):
+    for needle in ("function buildShell(", "function buildInterior(", "ExtrudeGeometry", "clippingPlanes", "root.MedBox.hull = {"):
         assert needle in hull, needle
     assert (ROOT / "web" / "vendor" / "three.min.js").stat().st_size > 100_000
+
+
+def test_the_plan_places_crew_beds_and_rooms_for_both_layers():
+    """Eddy, 24 Sep: "something that actually looks like a spaceship and
+    feels like people can stay in it for a long time"; "we're supposed to
+    see the rooms inside". layout.js is the one plan both the overlay and the
+    hull build from: forty cabins on deck 1, the infirmary and three isolation
+    rooms with four beds each on deck 2, and the camera for each view."""
+    lay = (ROOT / "web" / "layout.js").read_text(encoding="utf-8")
+    for needle in ("function cabin(", "function zoneBox(", "function bedBox(", "function berth(", "function infirmarySlot(",
+                   "function plan(", "function cameraFor(", "root.MedBox.layout = {"):
+        assert needle in lay, needle
+    html = (ROOT / "web" / "ship.html").read_text(encoding="utf-8")
+    assert html.index('src="/static/layout.js"') < html.index('src="/static/hull.js"')
+    ship = (ROOT / "web" / "ship.js").read_text(encoding="utf-8")
+    for needle in ("LAY.cabin(idx - 1)", "LAY.infirmarySlot(docked++)", "LAY.berth(zi, slot)", "LAY.plan()",
+                   'LAY.cameraFor("zone", i)', 'LAY.cameraFor("medbay")', "if (!LAY) spin += dt"):
+        assert needle in ship, needle
 

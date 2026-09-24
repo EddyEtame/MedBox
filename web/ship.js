@@ -332,14 +332,22 @@
     });
     return new Float32Array(v);
   }
+  /* The ship is a long hull with two decks (layout.js). The overlay draws
+     its plan: decks, cabins, the infirmary, and for each isolation room its
+     walls (frame), its beds (berths) and, when sealed, the same walls in
+     amber (seal). buildBerths/buildZoneFrame above are the ring's, kept for
+     the fallback without layout.js. */
+  var LAY = window.MedBox && MedBox.layout;
+  var planData = LAY ? LAY.plan() : new Float32Array(0), planBuf = buffer(planData);
   var berthBufs = [], berthCounts = [], frameBufs = [], frameCounts = [];
   for (var bz = 0; bz < ZONES; bz++) {
-    var bd = buildBerths(bz), fd = buildZoneFrame(bz);
+    var bd = LAY ? LAY.bedLines(bz, 0.62) : buildBerths(bz), fd = LAY ? LAY.zoneLines(bz, 0.5) : buildZoneFrame(bz);
     berthBufs.push(buffer(bd)); berthCounts.push(bd.length / 4);
     frameBufs.push(buffer(fd)); frameCounts.push(fd.length / 4);
   }
   var sealBufs = [], sealCounts = [];
   for (var z = 0; z < ZONES; z++) {
+    if (LAY) { var sd = LAY.zoneLines(z, 1.0); sealBufs.push(buffer(sd)); sealCounts.push(sd.length / 4); continue; }
     var d = buildSealArc(z, ZONES);
     sealBufs.push(buffer(d));
     sealCounts.push(d.length / 4);
@@ -377,6 +385,13 @@
     // With the hull drawn, the ship is spine, arrays and engines as well as
     // the ring, so the overview sits further back.
     var t = Math.tan(FOV / 2), m = (aspect < 0.85 ? 0.82 : 1.10) * (hullOn ? 1.5 : 1);
+    if (LAY) {
+      // A long hull seen from three-quarters: fit its length across, its
+      // height down, with a little air around it.
+      var halfL = (LAY.L + LAY.BOW + 6) / 2, halfH = LAY.H * 0.9 + halfL * Math.sin(pitch) * 0.35;
+      var dH = halfL * 1.22 / (t * Math.max(0.2, aspect)), dV = halfH * 1.2 / t;
+      return Math.max(12, Math.min(60, Math.max(dH, dV)));
+    }
     var near = RING_R * Math.cos(pitch);          // near edge, toward camera
     var halfV = RING_R * Math.sin(pitch) + DECK_Y * 1.4;
     var needV = halfV * m / t + near;
@@ -387,12 +402,13 @@
     // Portrait has height to spare and no width, so tilt toward plan view.
     // Tilting toward plan view on a tall screen makes the ring rounder, so
     // it uses the height a phone actually has.
+    if (LAY) return aspect < 0.85 ? 0.55 : 0.30;
     return aspect < 0.85 ? 1.00 : 0.46;
   }
 
   var cam = {
-    yaw: 0.72, pitch: 0.46, dist: 14.0,
-    tYaw: 0.72, tPitch: 0.46, tDist: 14.0,
+    yaw: 1.05, pitch: 0.30, dist: 24.0,
+    tYaw: 1.05, tPitch: 0.30, tDist: 24.0,
     target: [0, 0, 0], tTarget: [0, 0, 0], flying: 0, userZoom: 0,
     // A zone index the camera rides with: the ring spins, the room moves.
     follow: null
@@ -455,7 +471,7 @@
     state.aiUp = !!(m.ai && m.ai.available);
 
     state.byId = {};
-    var fit = 0, imp = 0, respSum = 0, respN = 0, heatSum = 0, heatN = 0;
+    var fit = 0, imp = 0, respSum = 0, respN = 0, heatSum = 0, heatN = 0, docked = 0;
 
     state.board.forEach(function (r, i) {
       var p = r.patient;
@@ -467,14 +483,17 @@
         heatSum += Math.max(0, Math.min(1, (p.temperature - 36.5) / 3.0)); heatN++;
       }
       if (!nodes[p.id]) {
-        // Home berth: evenly spaced around the ring, alternating deck level.
+        // Home: the member's cabin on deck 1 (layout.js), or, without the
+        // plan, a berth on the ring.
         var idx = parseInt(p.id.replace(/\D/g, ""), 10) || (i + 1);
         var ang = (idx - 1) / CREW * Math.PI * 2;
+        var home = LAY ? LAY.cabin(idx - 1) : { x: Math.cos(ang) * RING_R, y: (idx % 2 ? 1 : -1) * 0.34, z: Math.sin(ang) * RING_R };
         nodes[p.id] = {
           ang: ang, home: ang, tang: ang, deck: (idx % 2 ? 1 : -1) * 0.34, tdeck: (idx % 2 ? 1 : -1) * 0.34,
           r: RING_R, tr: RING_R, col: URGENCY.routine.slice(),
           tcol: URGENCY.routine.slice(), size: 0.15, tsize: 0.15,
-          glow: GLOW.routine, tglow: GLOW.routine
+          glow: GLOW.routine, tglow: GLOW.routine,
+          cabin: [home.x, home.y, home.z], pos: [home.x, home.y, home.z], tgt: [home.x, home.y, home.z]
         };
       }
       var n = nodes[p.id];
@@ -486,9 +505,15 @@
       n.tr = RING_R - (RING_R - DOCK_R) * sev;
       n.tang = n.home;
       n.tdeck = n.deck;
+      // NEWS2 at 7 or more: the member is in the infirmary, on one of its
+      // eight beds; below that, in their cabin.
+      if (LAY) {
+        if (sev >= 1) { var slot = LAY.infirmarySlot(docked++); n.tgt = [slot.x, slot.y, slot.z]; }
+        else n.tgt = n.cabin.slice();
+      }
       n.tcol = URGENCY[r.triage.urgency] || URGENCY.routine;
       n.tglow = GLOW[r.triage.urgency] || GLOW.routine;
-      n.tsize = 0.13 + sev * 0.13;
+      n.tsize = (LAY ? 0.2 : 0.13) + sev * 0.13;
     });
 
     state.heat = heatN ? heatSum / heatN : 0;
@@ -516,6 +541,7 @@
         n.tang = berthAngle(zi, slot);
         n.tr = BERTH_R;
         n.tdeck = BERTH_Y;
+        if (LAY) { var bed = LAY.berth(zi, slot); n.tgt = [bed.x, bed.y, bed.z]; }
         state.berthOf[a.patient_id] = { zone: zi, slot: slot, confirmed: !!a.confirmed };
       });
     }
@@ -628,7 +654,7 @@
 
   function resize() {
     placeRail();
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    dpr = Math.min(window.devicePixelRatio || 1, 1.25);   // the processor also runs the model
     W = Math.max(1, Math.round(canvas.clientWidth * dpr));
     H = Math.max(1, Math.round(canvas.clientHeight * dpr));
     if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
@@ -668,7 +694,7 @@
 
     // Ring spins for artificial gravity; it speeds up very slightly with heat
     // so a ship in trouble reads as working harder.
-    spin += dt * (0.055 + state.heat * 0.03);
+    if (!LAY) spin += dt * (0.055 + state.heat * 0.03);   // the ring turned; the hull does not
     breathPhase += dt * state.breathHz * Math.PI * 2;
     var breath = Math.sin(breathPhase);
 
@@ -677,7 +703,7 @@
     cam.pitch += (cam.tPitch - cam.pitch) * Math.min(1, dt * 4.5);
     // Re-frame on resize and rotation, unless the operator has taken the
     // zoom themselves or we are flying to a crew member.
-    if (cam.follow !== null && cam.follow !== undefined) {
+    if (cam.follow !== null && cam.follow !== undefined && !LAY) {
       // Ride the ring: the room turns with the ship, so does the camera.
       var fa = cam.follow * zoneSpan() + zoneSpan() / 2 + spin;
       cam.tTarget = [Math.cos(fa) * (RING_R - 0.35), BERTH_Y * 0.5, Math.sin(fa) * (RING_R - 0.35)];
@@ -710,7 +736,7 @@
     upv[0]   = view[1]; upv[1]   = view[5]; upv[2]   = view[9];
 
     if (hullOn) {
-      MedBox.hull.render({ eye: eye, target: cam.target, fov: FOV, aspect: W / H, spin: spin, heat: state.heat,
+      MedBox.hull.render({ eye: eye, target: cam.target, fov: FOV, aspect: W / H, heat: state.heat,
                            breath: breath, sealed: state.sealed, view: state.view, viewZone: state.viewZone,
                            glowZone: state.glowZone, zoneNames: state.zoneNames });
     }
@@ -737,10 +763,11 @@
     }
 
     // habitation ring: spins for artificial gravity, warms with crew fever
-    drawLines(ringBuf, ringData.length / 4, state.heat, breath, spin);
+    if (LAY) drawLines(planBuf, planData.length / 4, 0.0, breath, 0, [0.45, 0.78, 0.84], [0.45, 0.78, 0.84]);
+    else drawLines(ringBuf, ringData.length / 4, state.heat, breath, spin);
 
     // the medbay is despun, so it holds still while the ring turns around it
-    drawLines(hubBuf, hubData.length / 4, state.heat * 0.5, breath, 0,
+    if (!LAY) drawLines(hubBuf, hubData.length / 4, state.heat * 0.5, breath, 0,
               [0.40, 0.66, 0.74], [0.95, 0.66, 0.46]);
 
     // every zone has a frame and four berths; the one in view is brighter
@@ -789,9 +816,15 @@
       n.glow += (n.tglow - n.glow) * Math.min(1, dt * 3);
       for (var c = 0; c < 3; c++) n.col[c] += (n.tcol[c] - n.col[c]) * Math.min(1, dt * 3);
 
-      var a = n.ang + spin;
-      var px = Math.cos(a) * n.r, pz = Math.sin(a) * n.r;
-      var py = n.deck * (n.r / RING_R);   // converge to the hub plane on the way in
+      var px, py, pz;
+      if (LAY) {
+        for (var q = 0; q < 3; q++) n.pos[q] += (n.tgt[q] - n.pos[q]) * Math.min(1, dt * 1.4);   // glide, never snap
+        px = n.pos[0]; py = n.pos[1]; pz = n.pos[2];
+      } else {
+        var a = n.ang + spin;
+        px = Math.cos(a) * n.r; pz = Math.sin(a) * n.r;
+        py = n.deck * (n.r / RING_R);   // converge to the hub plane on the way in
+      }
       n.sx = px; n.sy = py; n.sz = pz;
 
       var sel = (state.selected === ids[k]) ? 1 : 0;
@@ -891,6 +924,11 @@
     // ship black (24 Sep). Wait for the frame instead.
     if (n.sx === undefined) { requestAnimationFrame(function () { flyTo(id); }); return; }
     cam.flying = 1;
+    if (LAY) {
+      var mv = LAY.cameraFor("member", [n.sx, n.sy, n.sz]);
+      cam.tTarget = mv.target; cam.tDist = mv.dist; cam.tYaw = mv.yaw; cam.tPitch = mv.pitch;
+      return;
+    }
     cam.tTarget = [n.sx, n.sy, n.sz];
     cam.tDist = 6.2;
     cam.tYaw = Math.atan2(n.sz, n.sx) + 0.9;
@@ -901,7 +939,8 @@
     cam.flying = 0;
     cam.userZoom = 0;
     cam.follow = null;
-    cam.tTarget = [0, 0, 0];
+    cam.tTarget = LAY ? LAY.cameraFor("ship").target.slice() : [0, 0, 0];
+    if (LAY) cam.tYaw = LAY.cameraFor("ship").yaw;
     var asp = W / H;
     cam.tPitch = fitPitch(asp);
     cam.tDist = fitDist(asp, cam.tPitch);
@@ -924,6 +963,7 @@
     state.view = "zone"; state.viewZone = i;
     cam.flying = 1; cam.userZoom = 0; cam.follow = i;
     cam.tDist = 5.4; cam.tPitch = 0.30;
+    if (LAY) { var zv = LAY.cameraFor("zone", i); cam.tTarget = zv.target; cam.tDist = zv.dist; cam.tYaw = zv.yaw; cam.tPitch = zv.pitch; }
     document.body.classList.add("has-room");
     renderRoom();
   }
@@ -931,6 +971,7 @@
     state.view = "medbay"; state.viewZone = null;
     cam.flying = 1; cam.userZoom = 0; cam.follow = null;
     cam.tTarget = [0, 0, 0]; cam.tDist = 4.6; cam.tPitch = 0.55;
+    if (LAY) { var mb = LAY.cameraFor("medbay"); cam.tTarget = mb.target; cam.tDist = mb.dist; cam.tYaw = mb.yaw; cam.tPitch = mb.pitch; }
     document.body.classList.add("has-room");
     renderRoom();
   }
