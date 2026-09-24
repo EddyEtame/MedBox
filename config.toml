@@ -48,6 +48,10 @@ fallback_models = ["qwen2.5:0.5b-instruct"]
 # a jury would rather wait thirty seconds than read a 503. Measured French
 # answers on the demo laptop: 18 to 27 s.
 timeout_seconds = 40.0
+# A typed or spoken question: past this the station answers itself (Eddy, 24 Sep: three to five seconds).
+answer_timeout_seconds = 10.0
+# The model for questions only; the assessment keeps `model`. Three times faster on a processor.
+answer_model = ""
 # A cold model load is measured separately from a normal assessment. The
 # board is already live while this longer, one-time warmup runs.
 warmup_timeout_seconds = 90.0
@@ -59,14 +63,14 @@ temperature = 0.0
 # Keep the weights resident between questions. Without this the first
 # assessment after an idle gap pays five to fifteen seconds loading the model
 # off the laptop's disk, which on stage is indistinguishable from a crash.
-keep_alive = "30m"
+keep_alive = "2h"
 # CPU threads for generation, tuned on the demo laptop (i7-1255U: 2 performance
 # and 8 efficiency cores, no usable GPU). Measured on one HIGH assessment:
 # Ollama's own choice 16 tokens/s, 6 threads 20.7, 8 threads 20.1, 12 threads
 # 3.1. As shipped the answer took 22-23 s, over the timeout below, so the real
 # assistant never answered at all. 0 lets Ollama choose; re-measure on any
 # other machine before the demo.
-num_thread = 6
+num_thread = 8
 
 [database]
 path = "data/medbox.db"

@@ -50,6 +50,17 @@ Write-Host "=================================================================="
 Section "1. Machine"
 $free = [math]::Round((Get-PSDrive C).Free / 1GB, 1)
 if ($free -lt 2) { Fail "C: $free Go libres. Sous 2 Go, Windows et Ollama commencent a echouer." }
+# La memoire vive: le modele lit son texte a 10 mots par seconde quand Windows
+# le met sur le disque (24 septembre : 1,7 Go libres, reponses hors delai).
+$os = Get-CimInstance Win32_OperatingSystem
+$ramFree = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
+$hogs = (Get-Process | Where-Object { $_.Name -match '^(chrome|firefox|Spotify|WhatsApp|Teams|Discord|ProtonVPN|OneDrive|msedge)$' } |
+    Group-Object Name | ForEach-Object { "{0} ({1:N0} Mo)" -f $_.Name, (($_.Group | Measure-Object WorkingSet64 -Sum).Sum / 1MB) }) -join ", "
+if ($ramFree -lt 2.5) { Fail "$ramFree Go de memoire vive libre : le modele sera mis sur le disque. Fermer avant la demo : $hogs" }
+elseif ($ramFree -lt 4) { Warn "$ramFree Go de memoire vive libre. Pour des reponses en quelques secondes, fermer : $hogs" }
+else { Ok "$ramFree Go de memoire vive libre" }
+$ollamas = @(Get-CimInstance Win32_Process -Filter "Name='ollama.exe'" | Where-Object { $_.CommandLine -match ' serve' })
+if ($ollamas.Count -gt 1) { Warn "$($ollamas.Count) serveurs Ollama tournent (menu Demarrer et dossier portable) : quitter celui de la barre des taches" }
 elseif ($free -lt 5) { Warn "C: $free Go libres. Suffisant pour la demo, pas pour une installation." }
 else { Ok "C: $free Go libres" }
 $plan = (powercfg /getactivescheme 2>$null) -join " "

@@ -12,7 +12,7 @@ ARIA / PsychoSpace, est dans [ANTHONYSITCH/Psychospace](https://github.com/ANTHO
 | | |
 |---|---|
 | ![Le vaisseau en 3D](docs/assets/vaisseau.png) | ![Le tableau de bord de l’équipage](docs/assets/equipage.png) |
-| *Le vaisseau : quarante membres, trois zones d’isolement, la commande locale et l’écoute.* | *L’équipage : messages du référent, membre en forme, activités du jour.* |
+| *Le vaisseau, ouvert côté public : deux ponts, quarante cabines, l’infirmerie, les trois zones d’isolement.* | *L’équipage : messages du référent, membre en forme, activités du jour.* |
 | ![Un espace personnel](docs/assets/espace-personnel.png) | ![La vue par pièce](docs/assets/vue-piece.png) |
 | *L’espace personnel de Merove pendant la contamination.* | *La vue par pièce : chaque zone a ses quatre couchettes.* |
 
@@ -79,7 +79,7 @@ Le bouton micro reste masqué tant que le modèle n’est pas complet.
 
 | Page | Adresse | Ce qu’elle fait |
 |---|---|---|
-| Vaisseau 3D | `/ship` | L’anneau d’habitation, les quarante membres, les zones et leurs couchettes, l’infirmerie ; commande locale ; micro ; « Ronde ». |
+| Vaisseau 3D | `/ship` | Le vaisseau vu de trois quarts, la coque ouverte comme une maison de poupée : deux ponts, quarante cabines, l’infirmerie, les trois zones d’isolement et leurs couchettes, les moteurs ; commande locale ; micro ; « Ronde ». |
 | Tableau | `/board` | Le tableau 2D de surveillance, classé par priorité, avec le dossier de chaque membre. |
 | Équipage | `/crew` | La semaine des six, l’état de chacun, le membre en forme et ses habitudes, les activités du jour, les messages du référent. |
 | Espace personnel | `/me/P-01` … `/me/P-06`, ports **8771 à 8776** | Le référent reconnaît la personne, se présente, lit son évaluation à la deuxième personne, répond à ses questions ; sa semaine, ses messages, son dossier, le vaisseau centré sur elle. |
@@ -99,6 +99,7 @@ que je vais bien ? ». Le micro attend la fin de votre phrase avant de transcrir
 | Utiliser la station : chaque fonction, ce qu’elle fait, ce qu’elle refuse, comment la déclencher | [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) — le guide de l’opérateur, généré depuis le produit par `tools/guide.py` ; un test échoue si le guide promet ce que le code ne fait pas |
 | Comprendre MedBox sans être technicien : pourquoi deux chemins, pourquoi NEWS2, « il se prend pour un médecin ? » | [`docs/COMPRENDRE-MEDBOX.md`](docs/COMPRENDRE-MEDBOX.md) |
 | Le dossier technique et la présentation de l’équipage (deux solutions), et comment les régénérer | [`docs/dossier/NOTE-POUR-LE-DOSSIER.md`](docs/dossier/NOTE-POUR-LE-DOSSIER.md), [`tools/build_dossier.py`](tools/build_dossier.py), [`tools/build_deck.py`](tools/build_deck.py) |
+| Répéter la démonstration : chaque effet, le geste qui le déclenche, ce qui doit se passer | [`docs/CAHIER-DE-SOUTENANCE.md`](docs/CAHIER-DE-SOUTENANCE.md) |
 | Le pitch de cinq minutes | [`docs/pitch.md`](docs/pitch.md) |
 | Le dossier patient, les contacts, les scénarios de Brad | [`docs/DEV2_DELIVERY.md`](docs/DEV2_DELIVERY.md) |
 | Construire, vérifier et lancer le dossier portable | [`packaging/README.md`](packaging/README.md), [`packaging/LISEZ-MOI.txt`](packaging/LISEZ-MOI.txt) |
@@ -143,10 +144,15 @@ référent affiche et dit ce qu’il fait.
 EN, fin de phrase détectée), Piper pour parler (une voix française, une voix
 anglaise). Consentement parlé et révocable ; rien de l’audio n’est conservé.
 
-**Le vaisseau et ses pièces.** L’anneau tourne, l’infirmerie au centre est
-immobile ; trois zones, quatre couchettes chacune ; un membre isolé glisse dans
-sa couchette. La caméra entre dans une pièce, un panneau dit qui s’y trouve et
-comment il va, le référent le décrit ; « Ronde » fait le tour du vaisseau.
+**Le vaisseau et ses pièces.** Un vaisseau-monde : une coque de trente unités
+avec deux ponts, dessinée depuis un seul plan (`web/layout.js`) que la vue 3D et
+le tracé technique partagent. Le pont haut porte la passerelle, quarante cabines
+et le mess ; le pont bas l’infirmerie et les trois zones d’isolement, quatre
+couchettes chacune. Le flanc qui fait face à la caméra est ôté, et le pont du
+dessus s’efface quand une pièce du pont bas est regardée. Un membre isolé glisse
+dans sa couchette ; un score à sept ou plus le conduit à l’infirmerie. La caméra
+entre dans une pièce, un panneau dit qui s’y trouve et comment il va, le
+référent le décrit ; « Ronde » fait le tour du vaisseau.
 
 ## 5. Ce que le référent ne peut pas faire
 

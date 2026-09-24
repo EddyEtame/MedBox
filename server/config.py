@@ -56,6 +56,13 @@ class AIConfig:
     model: str = "qwen2.5:1.5b-instruct"
     fallback_models: tuple[str, ...] = ()
     timeout_seconds: float = 20.0
+    # A typed or spoken question: past this the station answers itself.
+    # Eddy, 24 Sep: three to five seconds, after that it is too long.
+    answer_timeout_seconds: float = 10.0
+    # The model that answers typed and spoken questions; empty means the
+    # assessment model. A 0.5B model answers in about three seconds where
+    # the 1.5B takes eight on the defence laptop (24 Sep).
+    answer_model: str = ""
     # Loading the model from disk is a different operation from answering a
     # warm request.  Keep its longer ceiling separate so a cold start cannot
     # weaken the normal slow-track timeout.
@@ -64,7 +71,7 @@ class AIConfig:
     # variance and nothing else, and a demo you can rehearse is worth more.
     temperature: float = 0.0
     # How long Ollama holds the weights in memory after a question.
-    keep_alive: str = "30m"
+    keep_alive: str = "2h"
     # CPU threads for generation. 0 lets Ollama choose, which on a laptop with
     # performance and efficiency cores is not the fastest choice.
     num_thread: int = 0

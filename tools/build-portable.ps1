@@ -528,6 +528,7 @@ function Write-BundleManifest([string]$BundleRoot, [bool]$HasOllama, [bool]$HasM
             python = "portable"
             ollama = [ordered]@{ present = $HasOllama; requiredVersion = $requiredOllama }
             model = [ordered]@{ present = $HasModel; name = $model }
+            answerModel = [ordered]@{ name = (Get-ConfigValue "ai" "answer_model") }
             speechModel = [ordered]@{ present = $HasSpeech; name = "faster-whisper-base" }
             voice = [ordered]@{ present = (Test-Path -LiteralPath (Join-Path $RepoRoot "models\piper\fr_FR-siwis-medium.onnx") -PathType Leaf); name = "fr_FR-siwis-medium" }
         }
@@ -689,6 +690,17 @@ function Invoke-Preflight {
         $modelBytes = ($modelClosure.Blobs | Measure-Object Size -Sum).Sum
         Write-Host ("OK: model {0}, verified closure {1:N2} GB" -f $modelName, ($modelBytes / 1GB))
     }
+    # The question model (config [ai] answer_model), when it is another one:
+    # small, so a spoken question answers in seconds on a processor.
+    $answerName = Get-ConfigValue "ai" "answer_model"
+    $answerClosure = $null
+    if ($answerName -and $answerName -ne $modelName) {
+        $answerClosure = Get-OllamaModelClosure (Get-OllamaModelsSource) $answerName
+        if ($null -ne $answerClosure) {
+            $answerBytes = ($answerClosure.Blobs | Measure-Object Size -Sum).Sum
+            Write-Host ("OK: answer model {0}, verified closure {1:N2} GB" -f $answerName, ($answerBytes / 1GB))
+        }
+    }
     $speechSource = Get-SpeechModelSource
     $hasSpeech = Test-SpeechModel $speechSource
     if ($hasSpeech) { Write-Host "OK: speech model $speechSource" }
@@ -698,11 +710,15 @@ function Invoke-Preflight {
     if ($RequireComplete -and (-not $hasOllama -or $null -eq $modelClosure -or -not $hasSpeech)) {
         Add-Blocker "RequireComplete requested, but Ollama, configured model, and speech model are not all present"
     }
+    if ($RequireComplete -and $answerName -and $answerName -ne $modelName -and $null -eq $answerClosure) {
+        Add-Blocker "RequireComplete requested, but the answer model $answerName is absent from the Ollama store"
+    }
     return [pscustomobject]@{
         Python = $pythonSource
         Wheelhouse = $wheelSource
         Ollama = $ollamaSource
         Model = $modelClosure
+        AnswerModel = $answerClosure
         Speech = $speechSource
         HasOllama = $hasOllama
         HasSpeech = $hasSpeech
@@ -766,6 +782,10 @@ try {
         if ($null -ne $inventory.Model) {
             Write-Step "Configured Ollama model closure"
             Copy-OllamaModel $inventory.Model (Join-Path $stage "models\ollama") (Join-Path $stage "licenses")
+        }
+        if ($null -ne $inventory.AnswerModel) {
+            Write-Step "Answer model closure"
+            Copy-OllamaModel $inventory.AnswerModel (Join-Path $stage "models\ollama") (Join-Path $stage "licenses")
         }
         if ($inventory.HasSpeech) {
             Write-Step "Offline speech model"

@@ -8,13 +8,14 @@ MedBox keeps measuring and simply stops narrating.
 from __future__ import annotations
 
 import json
+import re
 import logging
 import time
 
 import httpx
 
 from ..config import CONFIG
-from .schemas import ANSWER_RULES, ANSWER_SCHEMA, ASSESSMENT_SCHEMA, SYSTEM_PROMPT
+from .schemas import ANSWER_CUE, ANSWER_HEAD_SELF, ANSWER_RULES, ANSWER_RULES_BRIEF, ANSWER_SCHEMA, ASSESSMENT_SCHEMA, SYSTEM_PROMPT
 
 log = logging.getLogger("medbox.ai")
 
@@ -28,6 +29,37 @@ log = logging.getLogger("medbox.ai")
 _TLS = httpx.create_ssl_context()
 
 
+def salvage_answer(content: str) -> dict:
+    """The sentence in what the model wrote. Measured 24 Sep: asked for one
+    plain sentence, the small model still fell back to its assessment JSON
+    one time in three, cut at the token cap. A complete JSON with an
+    "answer" is the answer; a "summary", complete or cut, is the sentence;
+    anything else that starts like JSON is nothing, and the station's own
+    sentence takes its place (grounded_in "nothing")."""
+    text = str(content or "").strip()
+    if not text:
+        return {"answer": "", "grounded_in": "nothing"}
+    if text.startswith("{"):
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                for key in ("answer", "summary"):
+                    if isinstance(parsed.get(key), str) and parsed[key].strip():
+                        return {"answer": parsed[key].strip(), "grounded_in": "manual"}
+            return {"answer": "", "grounded_in": "nothing"}
+        except ValueError:
+            m = re.search(r'"(?:answer|summary)"\s*:\s*"((?:[^"\\]|\\.)*)', text)
+            if m and m.group(1).strip():
+                sentence = m.group(1).strip()
+                # Cut mid-sentence by the token cap: keep it only if it ends
+                # like a sentence, or close it at the last comma.
+                if not sentence.endswith((".", "!", "?")):
+                    sentence = sentence.rstrip(",; ") + "."
+                return {"answer": sentence, "grounded_in": "manual"}
+            return {"answer": "", "grounded_in": "nothing"}
+    return {"answer": text.strip("\"“”").strip(), "grounded_in": "manual"}
+
+
 def _options() -> dict:
     """The same generation options on every call.
 
@@ -36,7 +68,14 @@ def _options() -> dict:
     different options would pay a reload, seconds of it, each time the operator
     switched between them.
     """
-    opts: dict = {"temperature": CONFIG.ai.temperature}
+    # A fixed, small context on every call: the model's own default can be
+    # tens of thousands of tokens, and the cache for that ate the memory a
+    # 16 GB laptop did not have (24 Sep: 1.7 GB free, 10 tokens a second).
+    # Every prompt here is under 1 500 tokens.
+    opts: dict = {"temperature": CONFIG.ai.temperature, "num_ctx": 2048, "num_batch": 128}
+    # 128, not the default 512: the runner checks for a dropped request
+    # between two batches, and at 35 tokens a second (24 Sep) a batch of
+    # 512 is fifteen seconds a question would wait behind.
     if CONFIG.ai.num_thread > 0:
         opts["num_thread"] = CONFIG.ai.num_thread
     return opts
@@ -139,7 +178,10 @@ class OllamaClient:
             "options": {**_options(), "num_predict": 1},
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": "Préchauffage. Aucun membre sélectionné."},
+                # The question prefix, word for word (schemas.ANSWER_RULES_BRIEF
+                # and ANSWER_HEAD_SELF): the first spoken question then pays
+                # only for the member's line and its own words.
+                {"role": "user", "content": f"{ANSWER_RULES_BRIEF}\n{ANSWER_HEAD_SELF}\n"},
             ],
         }
         try:
@@ -148,6 +190,11 @@ class OllamaClient:
             ) as client:
                 response = await client.post(f"{self.host}/api/chat", json=body)
                 response.raise_for_status()
+                if CONFIG.ai.answer_model and CONFIG.ai.answer_model != self.model:
+                    # The question model, loaded and its prefix cached too, so the
+                    # first spoken question does not pay for the load.
+                    second = dict(body, model=CONFIG.ai.answer_model, format=ANSWER_SCHEMA)
+                    await client.post(f"{self.host}/api/chat", json=second)
                 payload = response.json()
             self.last_timing = {
                 key: round(float(payload.get(key, 0)) / 1_000_000_000, 3)
@@ -262,33 +309,43 @@ class OllamaClient:
         passes the result through `validate.enforce_answer` before anyone
         reads it. `tests/test_the_text_mode_has_a_shape.py` pins the format.
         """
+        # Short on purpose: the facts are the slim sheet, the answer is capped
+        # at 48 tokens and the wait at CONFIG.ai.answer_timeout_seconds. The
+        # system prompt stays the assessment's, so Ollama's prompt cache
+        # survives between an assessment and a question; the thread options
+        # are the same as every other call, so the model is never reloaded.
+        wait = CONFIG.ai.answer_timeout_seconds
+        # Plain text, one sentence, stopped at the first line break: the JSON
+        # shape cost a dozen of thirty tokens at seven tokens a second (24
+        # Sep). The station grounds the sentence itself (app._ungrounded).
         body = {
-            "model": self.model,
+            "model": CONFIG.ai.answer_model or self.model,
             "stream": False,
             "keep_alive": CONFIG.ai.keep_alive,
-            "format": ANSWER_SCHEMA,
-            "options": {**_options(), "num_predict": 72},
+            "options": {**_options(), "num_predict": 26, "stop": ["\n"]},
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {
                     "role": "user",
-                    "content": f"{facts}\n\nQuestion de l’opérateur : {question}\n\n{ANSWER_RULES}",
+                    # Rules first, facts, then the question: the prompt cache
+                    # keeps everything up to the first changed token.
+                    "content": f"{ANSWER_RULES_BRIEF}\n{facts}\n\nQuestion : {question}\n{ANSWER_CUE}",
                 },
             ],
         }
         try:
-            async with httpx.AsyncClient(timeout=self.timeout, verify=_TLS) as client:
+            async with httpx.AsyncClient(timeout=wait, verify=_TLS) as client:
                 r = await client.post(f"{self.host}/api/chat", json=body)
                 r.raise_for_status()
                 payload = r.json()
-                content = payload.get("message", {}).get("content", "")
+                content = str(payload.get("message", {}).get("content", "")).strip()
             self.warmed = True
             self.slow = False
-            return json.loads(content)
+            return salvage_answer(content)
         except httpx.TimeoutException:
-            log.warning("AI answer to a question exceeded %.0f s; the model is still up", self.timeout)
+            log.warning("AI answer to a question exceeded %.0f s; the model is still up", wait)
             self.slow = True
-            self.last_error = f"délai dépassé ({self.timeout:.0f} s)"
+            self.last_error = f"délai dépassé ({wait:.0f} s)"
             return None
         except Exception as exc:
             log.warning("AI unavailable for a question: %s", exc)

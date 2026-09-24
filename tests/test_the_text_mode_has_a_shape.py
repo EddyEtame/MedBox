@@ -28,7 +28,11 @@ from server.ai.validate import NO_ANSWER, SUPPRESSED_ANSWER, enforce_answer  # n
 def test_the_question_path_always_sends_a_shape():
     assert list(inspect.signature(OllamaClient.answer).parameters) == ["self", "question", "facts"]
     src = inspect.getsource(OllamaClient.answer)
-    assert '"format": ANSWER_SCHEMA' in src, "a question must be decoded under the answer schema"
+    # 24 Sep: the JSON shape cost a dozen of thirty tokens at seven tokens a
+    # second on the defence laptop; a question is now plain text, one line,
+    # and the station grounds it itself (app._ungrounded). ANSWER_SCHEMA
+    # remains the shape enforce_answer reads.
+    assert '"stop": ["\\n"]' in src and '"num_predict": 26' in src, "one sentence, stopped at the line break"
     assert '{"role": "system", "content": SYSTEM_PROMPT}' in src, "same prompt as an assessment, or the cache is evicted"
 
 
@@ -77,7 +81,7 @@ def test_the_facts_are_written_by_the_station():
     assert "Ce que la station sait faire" in facts
     # The crew's state is in the facts, and the station's own sentence is
     # about the crew; the reason (down, late, ungrounded) is added by the route.
-    assert "État de l’équipage maintenant" in facts and "Ne citez que ces noms" in facts
+    assert "Équipage :" in facts and "Ne citez que ces noms" in facts
     assert not own.startswith("L’assistant est arrêté") and "isolement" in own
     assert not spoken.startswith("L’assistant est arrêté") and len(spoken.split()) <= 40
 
@@ -138,7 +142,7 @@ def test_a_question_and_its_answer_carry_the_language_asked_for(monkeypatch):
     monkeypatch.setattr(station.CLIENT, "answer", echo)
     out = asyncio.run(station.assistant_ask({"text": "Why this score?", "lang": "en", "self": True}))
     assert out["lang"] == "en" and out["spoken"] == out["answer"]
-    assert "Answer in English" in seen["facts"] and "en personne" in seen["facts"]
+    assert "Answer in English" in seen["facts"] and seen["facts"].startswith(station.ANSWER_HEAD_SELF)
 
 
 def test_the_manifest_tells_the_operator_both_new_things():

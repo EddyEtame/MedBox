@@ -104,3 +104,59 @@ def test_the_kill_moment_serves_what_the_assistant_wrote_before_it_died(monkeypa
     body = response.body
     assert b'"held_reason":"assistant_down"' in body or b'"held_reason": "assistant_down"' in body
     assert calls == [pid], "a dead assistant was asked again"
+
+
+def test_a_question_drops_the_background_assessment_but_not_its_own_member():
+    """24 Sep: a spoken question waited behind a prefetch and ran out its
+    seconds. The prefetch is a task of its own now; a question cancels it,
+    the on-demand assessment of the same member joins it instead."""
+    async def scenario():
+        started, dropped = asyncio.Event(), asyncio.Event()
+
+        async def slow():
+            started.set()
+            try:
+                await asyncio.sleep(30)
+            except asyncio.CancelledError:
+                dropped.set()
+                raise
+
+        s = station.STATION
+        s._prefetch_task = asyncio.create_task(slow())
+        s._prefetch_pid = "P-07"
+        await started.wait()
+        s.yield_to_question("P-07")
+        await asyncio.sleep(0.02)
+        assert not dropped.is_set(), "the member being asked about keeps its assessment"
+        s.yield_to_question()
+        await asyncio.sleep(0.05)
+        assert dropped.is_set(), "a question frees the model at once"
+        s._prefetch_task = None
+        s._prefetch_pid = None
+
+    asyncio.run(scenario())
+
+
+def test_the_prefetch_survives_being_dropped(monkeypatch):
+    """The prefetcher's own loop is not the task that is cancelled: it logs
+    and carries on, so the member is assessed later."""
+    async def scenario():
+        s = station.STATION
+        gate = asyncio.Event()
+
+        async def never(*a, **k):
+            gate.set()
+            await asyncio.sleep(30)
+
+        monkeypatch.setattr(s, "assess_now", never)
+        monkeypatch.setattr(station.CLIENT, "available", True)
+        monkeypatch.setattr(station.CLIENT, "warming", False)
+        s._prefetch_wanted = ["P-03"]
+        s.questions_pending = 0
+        run = asyncio.create_task(s.prefetch_once())
+        await gate.wait()
+        s.yield_to_question()
+        assert await run == "P-03"
+        assert s._prefetch_task is None
+
+    asyncio.run(scenario())

@@ -26,8 +26,9 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, scenarios
-from .ai.capabilities import manifest
+from .ai.capabilities import manifest, deterministic_introduction
 from .ai.ollama import CLIENT
+from .ai.schemas import ANSWER_HEAD_OPERATOR, ANSWER_HEAD_SELF
 from .ai.validate import enforce, enforce_answer
 from .bus import BUS
 from .config import CONFIG, ROOT
@@ -150,6 +151,10 @@ class MedBox:
         self.observations: dict[str, dict] = self.db.observations()
         self._prefetch_wanted: list[str] = []
         self._assessing: set[str] = set()
+        # The background assessment in flight, so a question can drop it:
+        # the model serves one request at a time on the laptop CPU.
+        self._prefetch_task: asyncio.Task | None = None
+        self._prefetch_pid: str | None = None
         self._ai_lock = asyncio.Lock()
 
     # ---- scenario control -------------------------------------------------
@@ -481,10 +486,45 @@ class MedBox:
                 continue
             # Nobody is waiting on this one, so it may take as long as a cold
             # load: on the demo laptop a French answer runs 18 to 25 s and the
-            # operator's ceiling is 25.
-            await self.assess_now(pid, timeout=CONFIG.ai.warmup_timeout_seconds)
+            # operator's ceiling is 25. It runs as its own task so that a
+            # question can cancel it (yield_to_question): nobody asked for
+            # it, and the model serves one request at a time.
+            self._prefetch_task = asyncio.create_task(self.assess_now(pid, timeout=CONFIG.ai.warmup_timeout_seconds))
+            self._prefetch_pid = pid
+            try:
+                await self._prefetch_task
+            except asyncio.CancelledError:
+                if asyncio.current_task().cancelling():
+                    raise
+                log.info("prefetch of %s dropped for a question; it comes back", pid)
+            finally:
+                self._prefetch_task = None
+                self._prefetch_pid = None
             return pid
         return None
+
+    def yield_to_question(self, patient_id: str | None = None) -> None:
+        """Drop the background assessment in flight so the model is free for
+        a question at once. Measured 24 Sep on the defence laptop: a spoken
+        question that waited behind a prefetch ran out its eight seconds and
+        the station answered with its facts instead. A prefetch of the very
+        member being asked about is kept: assess_or_join waits for it."""
+        task = self._prefetch_task
+        if task is not None and not task.done() and self._prefetch_pid != patient_id:
+            task.cancel()
+
+    async def assess_or_join(self, patient_id: str) -> dict | None:
+        """The on-demand assessment: joins the prefetch of the same member if
+        one is in flight, drops any other, then assesses."""
+        task = self._prefetch_task
+        if task is not None and not task.done() and self._prefetch_pid == patient_id:
+            try:
+                return await asyncio.shield(task)
+            except asyncio.CancelledError:
+                if asyncio.current_task().cancelling():
+                    raise
+        self.yield_to_question(patient_id)
+        return await self.assess_now(patient_id)
 
     async def prefetch_ai(self) -> None:
         """Slow track, on its own initiative. It can die; the board does not care."""
@@ -593,6 +633,7 @@ async def status() -> dict:
         "scenario_catalog": scenarios.catalog(),
         "screens_connected": BUS.subscriber_count,
         "assessments_ready": sorted(STATION.assessments),
+        "answer_model": CONFIG.ai.answer_model or CONFIG.ai.model,
         "personal_ports": PERSONAL_PORTS,
         "personal_pages": [
             {"id": pid, "name": STATION.source.patients[pid].name, "port": PERSONAL_PORTS.get(pid)}
@@ -1432,7 +1473,7 @@ async def ai_assess(patient_id: str, fresh: bool = False, me: bool = False) -> J
             "held_reason": "assistant_down",
         }
         return JSONResponse(content={**body, "spoken": _spoken_for(patient_id, name, body, me)})
-    result = await STATION.assess_now(patient_id)
+    result = await STATION.assess_or_join(patient_id)
     if result is None:
         return JSONResponse(
             status_code=503,
@@ -1538,11 +1579,9 @@ def _crew_facts() -> tuple[str, str, str]:
         name = str((STATION.latest.get(pid) or {}).get("patient", {}).get("name") or pid)
         (confirmed if a.confirmed else decided).append(f"{name} (zone {a.zone})" if a.zone else name)
     facts = (
-        f"État de l’équipage maintenant : {len(rows)} membres, {routine} en routine. "
-        f"À surveiller : {', '.join(watch) or 'personne'}. "
-        f"Isolement confirmé : {', '.join(confirmed) or 'personne'}. "
-        f"Isolement décidé, à confirmer par une personne : {', '.join(decided) or 'personne'}. "
-        "Ne citez que ces noms ; s’il est écrit « personne », dites que personne n’est concerné."
+        f"Équipage : {len(rows)} membres, {routine} en routine ; à surveiller : {', '.join(watch) or 'personne'} ; "
+        f"isolés : {', '.join(confirmed) or 'personne'} ; isolement à confirmer : {', '.join(decided) or 'personne'}. "
+        "Ne citez que ces noms."
     )
     if not watch and not confirmed and not decided:
         screen = f"Tout l’équipage ({len(rows)} membres) est dans sa plage habituelle. Personne n’est en isolement."
@@ -1555,6 +1594,10 @@ def _crew_facts() -> tuple[str, str, str]:
         parts.append("isolement décidé, à confirmer : " + ", ".join(decided))
     if watch:
         parts.append("à surveiller : " + ", ".join(watch))
+    if not confirmed and not decided:
+        # The question is who is isolated: say it, even when the answer is
+        # nobody and the news is elsewhere.
+        parts.append("personne en isolement")
     screen = f"Équipage de {len(rows)} : " + " ; ".join(parts) + "."
     spoken = " ".join(p[0].upper() + p[1:] + "." for p in parts).replace(" (zone ", ", zone ").replace(")", "")
     return facts, screen, spoken
@@ -1566,10 +1609,222 @@ ISOLATION_QUESTION = re.compile(r"isol|quarant", re.I)
 CREW_QUESTION = re.compile(r"[ée]quipage|crew|tout le monde|[àa] bord|combien", re.I)
 
 
-def _station_shortcut(text: str, patient_id: str | None) -> dict | None:
-    """An instant, deterministic answer when the question is about isolation
-    or the crew as a whole and no member is the subject. None otherwise."""
+INTRO_QUESTION = re.compile(r"pr[ée]sent(e|ez)[- ]?(toi|vous)|qui (es[- ]tu|[êe]tes[- ]vous)|who are you|introduce yourself|"
+                            r"c.est quoi medbox|qu.est[- ]ce que medbox|what is medbox|tu es qui|vous [êe]tes qui", re.I)
+INTRO_SPOKEN = ("Je suis MedBox, le référent médical du bord. Je surveille l’équipage en continu, je décide des "
+                "isolements et je réponds à vos questions. Je ne prescris aucun médicament.")
+
+
+VITAL_WORDS = [
+    ("pulse", re.compile(r"pouls|c[oœ]ur|cardiaque|battement", re.I)),
+    ("temperature", re.compile(r"temp[ée]rature|fi[èe]vre|chaud|frisson", re.I)),
+    ("spo2", re.compile(r"spo2|oxyg[èe]ne|saturation", re.I)),
+    ("respiration", re.compile(r"respir|souffle|essouffl", re.I)),
+    ("systolic_bp", re.compile(r"tension|pression", re.I)),
+]
+VITAL_TOL = {"temperature": 0.5, "spo2": 2.0, "pulse": 15.0, "respiration": 4.0, "systolic_bp": 15.0}
+VITAL_UNIT_SPOKEN = {"temperature": "degrés", "spo2": "pour cent", "pulse": "par minute", "respiration": "par minute", "systolic_bp": ""}
+STATUS_QUESTION = re.compile(r"vais[- ]je bien|je vais bien|comment (je vais|[çc]a va|vais[- ]je)|mon [ée]tat|suis[- ]je (malade|en forme|bien)|"
+                             r"comment va\b|comment (il|elle) va|est[- ]ce qu[e’'] ?(il|elle) va bien|son [ée]tat|am i (ok|fine|well)|how (am i|is)", re.I)
+SYMPTOM_STATEMENT = re.compile(r"\bj[’']ai (mal|de la fi[èe]vre|des vertiges|des nausées|la naus[ée]e|du mal|froid|chaud)|"
+                               r"je (tousse|vomis|saigne|suis (fatigu|essouffl|malade|faible|pris)|me sens (mal|faible|fatigu))|"
+                               r"\b(douleur|migraine|mal de t[êe]te|mal au ventre|mal à la gorge|frissons|vertige|naus[ée]e|toux)\b", re.I)
+
+
+def _symptom_answer(patient_id: str, text: str, second_person: bool) -> str | None:
+    """A complaint is written to the dossier as a quotation, and answered from
+    the constants of the moment: the station never diagnoses a headache, it
+    says what it measures and what it will do."""
+    facts = _member_facts(patient_id)
+    if not facts:
+        return None
+    try:
+        entry = STATION.symptoms.add(patient_id, text.strip(), source="typed")
+        BUS.publish({"type": "symptom", "reported": entry.to_dict()})
+    except ValueError:
+        pass
+    p, t, baseline = facts
+    name = p.get("name") or patient_id
+    devs = _deviations(p, baseline)
+    you = "vous" if second_person else name
+    noted = f"Je note « {text.strip().rstrip('?').strip()} » dans {'votre' if second_person else 'son'} dossier."
+    if not devs and (t.get("urgency") or "routine") == "routine":
+        return (f"{noted} Pour l’instant, {'vos' if second_person else 'ses'} constantes ne montrent rien d’anormal : score {t.get('total', 0)}. "
+                f"Reposez-{'vous' if second_person else 'le' if p.get('role') else 'vous'}, buvez, et redemandez-moi dans une heure ; si cela s’aggrave, dites-le-moi tout de suite.")
+    urgency = URGENCY_FR.get(t.get("urgency"), t.get("urgency") or "routine")
+    return (f"{noted} {'Vos' if second_person else 'Ses'} constantes montrent {', '.join(devs) if devs else 'un écart'} : score {t.get('total')}, "
+            f"priorité {urgency}. Je {'vous' if second_person else 'le'} garde sous surveillance rapprochée.")
+
+
+def _member_facts(patient_id: str) -> tuple[dict, dict, dict] | None:
+    entry = STATION.latest.get(patient_id)
+    if not entry:
+        return None
+    p, t = entry["patient"], entry["triage"]
+    return p, t, (p.get("baseline") or {})
+
+
+def _deviations(p: dict, baseline: dict) -> list[str]:
+    """The vitals outside their usual range, said in words."""
+    out = []
+    for key, tol in VITAL_TOL.items():
+        v, b = p.get(key), baseline.get(key)
+        if v is None or b is None:
+            continue
+        if key == "spo2" and v < b - tol:
+            out.append("une saturation plus basse que d’habitude")
+        elif key != "spo2" and v > b + tol:
+            out.append({"temperature": "de la fièvre", "pulse": "un pouls plus rapide que d’habitude",
+                        "respiration": "une respiration plus rapide que d’habitude", "systolic_bp": "une tension plus haute que d’habitude"}[key])
+        elif key != "spo2" and v < b - tol:
+            out.append({"temperature": "une température plus basse que d’habitude", "pulse": "un pouls plus lent que d’habitude",
+                        "respiration": "une respiration plus lente que d’habitude", "systolic_bp": "une tension plus basse que d’habitude"}[key])
+    return out
+
+
+def _status_answer(patient_id: str, second_person: bool) -> str | None:
+    facts = _member_facts(patient_id)
+    if not facts:
+        return None
+    p, t, baseline = facts
+    name = p.get("name") or patient_id
+    urgency = URGENCY_FR.get(t.get("urgency"), t.get("urgency") or "routine")
+    iso = STATION.quarantine.assignments.get(patient_id)
+    who = "Vous êtes" if second_person else f"{name} est"
+    your = "vos" if second_person else "ses"
+    devs = _deviations(p, baseline)
+    if not devs and (t.get("urgency") or "routine") == "routine":
+        return f"{who} en routine aujourd’hui : score {t.get('total', 0)}, toutes {your} constantes dans {your.replace('vos', 'votre').replace('ses', 'sa')} plage habituelle."
+    seen = ", ".join(devs) if devs else "un écart dans " + your + " constantes"
+    iso_text = ("" if iso is None else (" L’isolement est confirmé." if iso.confirmed else " L’isolement est décidé, à confirmer."))
+    return f"{who} à surveiller : score {t.get('total')}, priorité {urgency}, avec {seen}.{iso_text}"
+
+
+def _vital_answer(patient_id: str, key: str, second_person: bool) -> str | None:
+    facts = _member_facts(patient_id)
+    if not facts:
+        return None
+    p, t, baseline = facts
+    v, b = p.get(key), baseline.get(key)
+    if v is None:
+        return None
+    label = VITAL_FR[key][0]
+    name = p.get("name") or patient_id
+    owner = f"Votre {label}" if second_person else f"{label.capitalize()} de {name}"
+    fmt = (lambda x: f"{x:.1f}") if key in ("temperature", "spo2") else (lambda x: f"{x:.0f}")
+    unit = VITAL_UNIT_SPOKEN.get(key, "")
+    if b is None:
+        return f"{owner} est à {fmt(v)} {unit}.".replace("  ", " ")
+    tol = VITAL_TOL[key]
+    if abs(v - b) <= tol:
+        return f"{owner} est à {fmt(v)} {unit}, dans {'votre' if second_person else 'sa'} plage habituelle (autour de {fmt(b)}). Rien d’anormal.".replace("  ", " ")
+    direction = "au-dessus" if v > b else "au-dessous"
+    urgency = URGENCY_FR.get(t.get("urgency"), t.get("urgency") or "routine")
+    return (f"{owner} est à {fmt(v)} {unit}, {direction} de {'votre' if second_person else 'son'} habitude (autour de {fmt(b)}). "
+            f"C’est ce qui pèse dans {'votre' if second_person else 'son'} score aujourd’hui : {t.get('total')}, priorité {urgency}.").replace("  ", " ")
+
+
+def _named_member(text: str) -> str | None:
+    """The crew member a question names, by full name or by a first name
+    nobody else shares; None when the question names nobody."""
+    low = text.lower()
+    firsts: dict[str, list[str]] = {}
+    for pid, e in STATION.latest.items():
+        name = str(e["patient"].get("name") or "").strip()
+        if not name:
+            continue
+        if re.search(r"(?<!\w)" + re.escape(name.lower()) + r"(?!\w)", low):
+            return pid
+        firsts.setdefault(name.split()[0].lower(), []).append(pid)
+    for first, pids in firsts.items():
+        if len(pids) == 1 and re.search(r"(?<!\w)" + re.escape(first) + r"(?!\w)", low):
+            return pids[0]
+    return None
+
+
+def _subject(text: str, patient_id: str | None, second_person: bool) -> tuple[str | None, bool]:
+    """« Comment va Brad ? » asked from Eddy's page is about Brad: the
+    member the question names is its subject, in the third person."""
+    named = _named_member(text)
+    if named is not None and named != patient_id:
+        return named, False
+    return patient_id, second_person
+
+
+ACTIVITY_QUESTION = re.compile(r"sport|entra[îi]n|courir|course|effort|muscul|exercice|travailler|reprendre|sortir|activit", re.I)
+REST_QUESTION = re.compile(r"dormir|sommeil|repos|me reposer|se reposer|coucher|fatigu", re.I)
+WHAT_TO_DO = re.compile(r"que (dois|devrais|puis)[- ]je faire|quoi faire|que faire|qu[’']est[- ]ce que je (dois|peux) faire|conseil|recommand", re.I)
+
+
+def _advice_answer(patient_id: str, text: str, second_person: bool) -> str | None:
+    """Activity, rest, « que dois-je faire ? » : answered from the state the
+    station holds. 24 Sep: asked about sport, the small model said « non »
+    to a member with a score of 0 and every constant in its usual range."""
+    facts = _member_facts(patient_id)
+    if not facts:
+        return None
+    p, t, baseline = facts
+    name = p.get("name") or patient_id
+    devs = _deviations(p, baseline)
+    total = t.get("total", 0) or 0
+    urgency = URGENCY_FR.get(t.get("urgency"), t.get("urgency") or "routine")
+    iso = STATION.quarantine.assignments.get(patient_id)
+    calm = not devs and (t.get("urgency") or "routine") == "routine" and iso is None
+    you, your = ("vous", "vos") if second_person else (name, "ses")
+    seen = ", ".join(devs) if devs else "un écart"
+    if ACTIVITY_QUESTION.search(text):
+        if calm:
+            return (f"Oui : score {total}, toutes {your} constantes dans {'votre' if second_person else 'sa'} plage habituelle. "
+                    f"{'Allez-y' if second_person else 'Il peut y aller'}, et {'dites-moi' if second_person else 'qu’il me dise'} si quelque chose change.")
+        hold = (" L’isolement est décidé, à confirmer." if iso is not None and not iso.confirmed else " L’isolement est confirmé." if iso is not None else "")
+        return (f"Pas aujourd’hui : score {total}, priorité {urgency}, avec {seen}. "
+                f"{'Reposez-vous' if second_person else 'Qu’il se repose'}, {'buvez' if second_person else 'boive'}, et je {'vous' if second_person else 'le'} garde sous surveillance rapprochée.{hold}")
+    if REST_QUESTION.search(text):
+        if calm:
+            return (f"Rien ne l’impose : score {total}, {your} constantes dans {'votre' if second_person else 'sa'} plage habituelle. "
+                    f"{'Dormez' if second_person else 'Qu’il dorme'} selon {'votre' if second_person else 'son'} besoin ; si la fatigue persiste, {'dites-le-moi' if second_person else 'qu’il me le dise'}.")
+        return (f"Oui : score {total}, priorité {urgency}, avec {seen}. Le repos est ce qui aide le plus maintenant ; "
+                f"je {'vous' if second_person else 'le'} garde sous surveillance et je {'vous' if second_person else 'le'} réveille si une constante bouge.")
+    if WHAT_TO_DO.search(text):
+        if calm:
+            return (f"Rien de particulier : score {total}, toutes {your} constantes dans {'votre' if second_person else 'sa'} plage habituelle. "
+                    f"{'Continuez vos activités' if second_person else 'Qu’il continue ses activités'} ; je mesure en continu et je {'vous' if second_person else 'le'} préviens au premier écart.")
+        hold = (" Rejoignez la zone d’isolement décidée, à confirmer avec l’équipage." if second_person and iso is not None and not iso.confirmed else
+                " L’isolement est décidé, à confirmer." if iso is not None and not iso.confirmed else
+                (" Restez en zone d’isolement." if second_person else " Il reste en zone d’isolement.") if iso is not None else "")
+        return (f"{'Reposez-vous, buvez, restez joignable' if second_person else 'Qu’il se repose, boive et reste joignable'} : score {total}, priorité {urgency}, "
+                f"avec {seen}. Je mesure en continu et je {'vous' if second_person else 'le'} garde sous surveillance rapprochée.{hold}")
+    return None
+
+
+def _station_shortcut(text: str, patient_id: str | None, second_person: bool = False) -> dict | None:
+    """An instant, deterministic answer when the station holds it: the
+    introduction, the crew and isolation questions, a member's state, one
+    of a member's vitals. None otherwise: the model phrases the rest."""
+    def out(answer, spoken=None):
+        return {"ok": True, "answer": answer, "spoken": spoken or answer, "grounded_in": "manual",
+                "blocked": [], "stand_in": False, "held_reason": None, "resolved_by": "station"}
+    if INTRO_QUESTION.search(text):
+        # Eddy, 24 Sep: asked to present himself, the model found nothing in
+        # eight seconds. The introduction is the station's own text.
+        return out(deterministic_introduction(), INTRO_SPOKEN)
+    patient_id, second_person = _subject(text, patient_id, second_person)
     if patient_id is not None:
+        # « Est-ce que je vais bien ? », « pourquoi mon pouls monte ? » : the
+        # registers hold the answer; the jury hears it in a second.
+        if STATUS_QUESTION.search(text):
+            answer = _status_answer(patient_id, second_person)
+            return out(answer) if answer else None
+        if SYMPTOM_STATEMENT.search(text):
+            answer = _symptom_answer(patient_id, text, second_person)
+            return out(answer) if answer else None
+        if ACTIVITY_QUESTION.search(text) or REST_QUESTION.search(text) or WHAT_TO_DO.search(text):
+            answer = _advice_answer(patient_id, text, second_person)
+            return out(answer) if answer else None
+        for key, rx in VITAL_WORDS.items() if isinstance(VITAL_WORDS, dict) else VITAL_WORDS:
+            if rx.search(text):
+                answer = _vital_answer(patient_id, key, second_person)
+                return out(answer) if answer else None
         return None
     if not (ISOLATION_QUESTION.search(text) or CREW_QUESTION.search(text)):
         return None
@@ -1578,13 +1833,15 @@ def _station_shortcut(text: str, patient_id: str | None) -> dict | None:
             "stand_in": False, "held_reason": None, "resolved_by": "station"}
 
 
-def _facts_for(patient_id: str | None) -> tuple[str, str, str]:
+def _facts_for(patient_id: str | None, brief: bool = False) -> tuple[str, str, str]:
     """The facts the assistant may answer from, and the station's own answer.
 
     Deterministic, written by the station: the model reads them, it never
     supplies them. Returns (facts for the model, the sentence the station
     shows instead when the model is absent, silent or ungrounded, and the
     short form of that sentence for the voice, which carries no baselines).
+    `brief` drops the capability list and the long preamble: the text mode
+    pays for every token of prompt before its first word (24 Sep).
     """
     caps = " ; ".join(c["title"] for c in manifest()["capabilities"])
     crew_facts, crew_screen, crew_spoken = _crew_facts()
@@ -1598,6 +1855,8 @@ def _facts_for(patient_id: str | None) -> tuple[str, str, str]:
         f"Ce que la station sait faire : {caps}.",
         crew_facts,
     ]
+    if brief:
+        lines = [crew_facts]
     station_answer = crew_screen
     station_spoken = crew_spoken
     entry = STATION.latest.get(patient_id) if patient_id else None
@@ -1621,11 +1880,33 @@ def _facts_for(patient_id: str | None) -> tuple[str, str, str]:
             iso_text = "isolement proposé, à confirmer par une personne"
         said = [s.get("text", "") for s in STATION.symptoms.for_patient(patient_id)][-3:]
         said_text = " ; ".join(x for x in said if x) or "rien"
-        lines.append(
-            f"Membre sélectionné : {p.get('name')} ({p.get('role', '')}). Mesures actuelles : {vitals}. "
-            f"NEWS2 {t.get('total')} ({urgency}) ; paramètres mesurés : {measured} ; non mesurés : {missing}. "
-            f"{iso_text}. Déclarations récentes : {said_text}."
-        )
+        if brief:
+            # A question pays for every token the model has not seen (35 a
+            # second on the defence laptop, 24 Sep): the state, the
+            # isolation, the vitals out of their range with their numbers,
+            # what was declared. The station itself answers questions about
+            # a single vital, with the exact value.
+            off = []
+            for key, tol in VITAL_TOL.items():
+                v, b = p.get(key), baseline.get(key)
+                if v is None or b is None:
+                    continue
+                if (v < b - tol) if key == "spo2" else abs(v - b) > tol:
+                    off.append(f"{VITAL_FR[key][0]} {v} (base {b})")
+            where = ("écarts : " + ", ".join(off) + " ; le reste dans sa plage habituelle") if off else "toutes ses constantes dans sa plage habituelle"
+            line = f"{p.get('name')} : NEWS2 {t.get('total')} ({urgency}), {iso_text} ; {where}."
+            if said_text != "rien":
+                line += f" Déclaré : {said_text}."
+            # The crew line is for questions about the crew; a member's
+            # question carries the member only. Any other name in the answer
+            # is then not in the facts, and _ungrounded holds it back.
+            lines = [line]
+        else:
+            lines.append(
+                f"Membre sélectionné : {p.get('name')} ({p.get('role', '')}). Mesures actuelles : {vitals}. "
+                f"NEWS2 {t.get('total')} ({urgency}) ; paramètres mesurés : {measured} ; non mesurés : {missing}. "
+                f"{iso_text}. Déclarations récentes : {said_text}."
+            )
         station_answer = f"{p.get('name')} : NEWS2 {t.get('total')} ({urgency}), {iso_text}. Mesures : {vitals}."
         station_spoken = _without_down_prefix(spoken_station_answer(p.get("name"), t.get("total"), urgency, iso_text))
     return "\n".join(lines), station_answer, station_spoken
@@ -1638,6 +1919,34 @@ def _without_down_prefix(spoken: str) -> str:
         if spoken.startswith(prefix):
             return spoken[len(prefix):]
     return spoken
+
+
+def _ungrounded(answer: str, facts: str) -> bool:
+    """The station's own check on a plain-text answer: a crew name the facts
+    do not mention, or an isolation the registers do not hold, and the
+    sentence is not shown."""
+    low = answer.lower()
+    names = {str(e["patient"].get("name") or "") for e in STATION.latest.values()}
+    facts_low = facts.lower()
+    for name in names:
+        if name and name.lower() in low and name.lower() not in facts_low:
+            return True
+    nobody_isolated = (("isolés : personne" in facts_low and "isolement à confirmer : personne" in facts_low)
+                       or not STATION.quarantine.assignments)
+    if nobody_isolated and ("isol" in low or "quarant" in low) and "pas d" not in low and "personne" not in low and "aucun" not in low:
+        return True
+    # A number the facts do not hold: 24 Sep, asked for the most important
+    # vital of a member whose facts carried no number, the model answered
+    # « Pouls 112 /min » for a pulse of 61.
+    held = {_num(x) for x in re.findall(r"\d+(?:[.,]\d+)?", facts)}
+    for x in re.findall(r"\d+(?:[.,]\d+)?", answer):
+        if _num(x) not in held:
+            return True
+    return False
+
+
+def _num(text: str) -> float:
+    return float(text.replace(",", "."))
 
 
 DOWN = "Le référent est arrêté ; voici ce que la station sait. "
@@ -1662,12 +1971,17 @@ async def assistant_ask(body: dict) -> dict:
     if patient_id is not None and patient_id not in STATION.latest:
         raise HTTPException(404, f"Membre inconnu : {patient_id}")
     lang = str(body.get("lang") or "fr").lower()[:2]
-    facts, station_answer, station_spoken = _facts_for(patient_id)
-    if body.get("self"):
-        facts += "\nL’interlocuteur est ce membre en personne : adressez-vous à lui directement, à la deuxième personne."
+    second_person = bool(body.get("self"))
+    patient_id, second_person = _subject(text, patient_id, second_person)
+    facts, station_answer, station_spoken = _facts_for(patient_id, brief=True)
+    # Fixed line first: the warm-up primed it, and only the member's line
+    # and the question are read again (24 Sep: 35 tokens a second of prompt
+    # on the defence laptop, 16 of answer).
+    head = ANSWER_HEAD_SELF if second_person else ANSWER_HEAD_OPERATOR
     if lang == "en":
-        facts += "\nAnswer in English: the person asked for English."
-    shortcut = _station_shortcut(text, patient_id)
+        head += " Answer in English: the person asked for English."
+    facts = head + "\n" + facts
+    shortcut = _station_shortcut(text, patient_id, second_person)
     if shortcut is not None:
         shortcut["lang"] = lang
         return shortcut
@@ -1675,6 +1989,7 @@ async def assistant_ask(body: dict) -> dict:
         return {"ok": True, "answer": DOWN + station_answer, "spoken": DOWN + station_spoken, "grounded_in": "manual",
                 "blocked": [], "stand_in": False, "held_reason": "assistant_down", "lang": lang}
     STATION.questions_pending += 1
+    STATION.yield_to_question()
     try:
         async with STATION._ai_lock:
             raw = await CLIENT.answer(text, facts)
@@ -1685,6 +2000,8 @@ async def assistant_ask(body: dict) -> dict:
                 "blocked": [], "stand_in": False, "held_reason": "assistant_silent", "detail": CLIENT.last_error,
                 "lang": lang}
     out = enforce_answer(raw)
+    if out["grounded_in"] != "nothing" and not out["blocked"] and _ungrounded(out["answer"], facts):
+        out["grounded_in"] = "nothing"
     if out["grounded_in"] == "nothing" and not out["blocked"]:
         # The model itself says nothing in the facts supports its sentence:
         # that sentence is not shown. The station's own is.

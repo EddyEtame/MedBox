@@ -283,3 +283,26 @@ Exemple de réponse attendue, pour des mesures température 39,0 °C, SpO2 93 %,
 {"summary": "Température 39,0 °C, SpO2 93 %, pouls 112 et respiration 24 relevés.", "insufficient_data": false, "hypotheses": [{"name": "Fièvre avec atteinte respiratoire", "fit": "several measurements fit", "supporting_signs": [{"source": "temperature", "text": "39,0 °C"}, {"source": "respiration", "text": "24 /min"}]}, {"name": "Fièvre avec désaturation", "fit": "several measurements fit", "supporting_signs": [{"source": "temperature", "text": "39,0 °C"}, {"source": "spo2", "text": "93 %"}]}], "questions_for_patient": ["Depuis quand avez-vous de la fièvre ?"], "information_to_gather": ["Répéter les quatre constantes dans 15 minutes."]}
 Un nom d’hypothèse décrit ce que montrent les instruments (fièvre, désaturation, tachycardie, atteinte respiratoire), jamais une cause ni un conseil.
 """
+
+# The text mode's own system prompt: short, because every token of it is
+# read again on a processor before the first word of the answer. The
+# persona and the rules that matter for a two-sentence reply, nothing else;
+# the assessment keeps SYSTEM_PROMPT.
+ANSWER_SYSTEM = (
+    "Vous êtes le référent médical du bord d’un vaisseau sans médecin. Vous répondez en français, "
+    "en une ou deux phrases courtes, uniquement à partir des faits fournis. Vous nommez ce que les "
+    "mesures montrent, vous ne prescrivez jamais de médicament ni de dose, vous n’inventez ni "
+    "membre ni isolement. Répondez en JSON : {\"answer\": \"...\", \"grounded_in\": "
+    "\"measurements\"|\"manual\"|\"nothing\"}."
+)
+
+# The rules a question carries when every token costs a tenth of a second:
+# the schema already forces the JSON shape, so one line says the rest.
+ANSWER_RULES_BRIEF = ("Réponds en une seule phrase de français courant, d’après les faits ci-dessous et rien d’autre : "
+                      "aucun chiffre qui n’y figure pas, aucun médicament ni dose, pas de JSON. "
+                      "Score 0 et constantes habituelles : rassure ; sinon, dis ce qui s’écarte et que la station surveille.")
+# The closing cue, after the question: the last thing the model reads.
+ANSWER_CUE = "Réponse, une phrase :"
+# The fixed first line of every question, so the warm-up can prime it.
+ANSWER_HEAD_SELF = "Vous parlez au membre lui-même : vouvoyez-le."
+ANSWER_HEAD_OPERATOR = "Vous parlez à l’opérateur du bord."

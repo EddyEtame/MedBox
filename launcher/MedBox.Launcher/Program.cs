@@ -87,6 +87,14 @@ internal static class Program
             {
                 ["OLLAMA_HOST"] = $"127.0.0.1:{ollamaPort}",
                 ["OLLAMA_MODELS"] = Path.Combine(bundleRoot, "models", "ollama"),
+                // Two cache slots, not two requests at once: the station
+                // sends one request at a time (a question drops the
+                // background assessment, server/app.py yield_to_question),
+                // and the second slot keeps a question's prompt prefix alive
+                // across an assessment. Measured 24 Sep: 35 tokens a second
+                // of prompt on the defence laptop, so every cached token is
+                // a token not read again.
+                ["OLLAMA_NUM_PARALLEL"] = "2",
             };
             StartChild(
                 ollama,
