@@ -192,7 +192,8 @@
     if (foldTimer) { clearTimeout(foldTimer); foldTimer = null; }
     if (code === "LISTENING" && consented) {
       foldTimer = setTimeout(function () { foldTimer = null; if (!pinned && running && !paused) setFolded(true); }, 6000);
-    } else {
+    } else if (code === "WAKE" || code === "SPEECH" || code === "TRANSCRIBING" || code === "ERROR" || code === "ARMING") {
+      // Something to read: open. OFF and PAUSED keep whatever fold the person has.
       setFolded(false);
     }
   }
