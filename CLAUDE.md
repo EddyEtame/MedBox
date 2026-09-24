@@ -258,6 +258,12 @@ zero is not a sign**, whatever the model says about it.
   the other half: two Ollama servers (the tray app's and the bundle's, on
   11434 and 11555) held 2.8 GB of duplicate runners with 0.8 GB free;
   `tools/preflight.ps1` flags both. Rehearsal script: `docs/CAHIER-DE-SOUTENANCE.md`.
+- **« Mon évaluation » is instant for the six** (00:40, 25 Sep): `_note_prefetch_targets`
+  queues the members with a page (`_has_a_page`) after the worst, and a
+  routine assessment stands fifteen minutes (`assessment_fresh_for`: 900 s
+  routine, 180 s otherwise). Measured: six assessments ready 58 s after the
+  warm-up, a click 0.01 s. A routine member without a page is still never
+  prefetched.
 - **The screen and the voice, night of 24 Sep** (Eddy: « responsive issues,
   fix and go over all again, optimize speed again, including voice speed »).
   The crew and personal pages wrote a bare `<header>` that no rule styled:

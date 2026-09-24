@@ -54,7 +54,7 @@ ce n’est pas normal.
 |---|---|
 | Ouvrir | « Bonjour Merove. Je suis MedBox, le référent médical du bord… » ; ses constantes du jour face à ses valeurs habituelles ; sa semaine ; ses messages ; ses activités ; son dossier ; le vaisseau centré sur elle. |
 | **Écouter le référent** | La présentation est lue à voix haute, à la deuxième personne. |
-| **Mon évaluation** | Les étapes de réflexion s’affichent (je relève vos constantes… je compare… je vérifie…) ; l’évaluation arrive et est lue. Pendant le scénario : elle nomme ce que les mesures montrent et la décision. |
+| **Mon évaluation** | Pour les six membres qui ont une page, l’évaluation est préparée en arrière-plan dès que le modèle est chaud (compter deux minutes après le lancement) : le clic l’affiche aussitôt et elle est lue. Sinon les étapes de réflexion s’affichent (je relève vos constantes… je compare… je vérifie…) et l’évaluation arrive en dix à vingt secondes. Pendant le scénario : elle nomme ce que les mesures montrent et la décision. |
 | Écrire ou dire **« est-ce que je vais bien ? »** | Réponse immédiate : « Vous êtes en routine aujourd’hui : score 0… » ou « Vous êtes à surveiller : score 5, priorité moyenne, avec de la fièvre et une respiration plus rapide que d’habitude. L’isolement est décidé, à confirmer. » |
 | **« pourquoi mon pouls monte ? »**, **« ma température ? »** | Réponse immédiate avec la valeur, la plage habituelle et le poids dans le score. |
 | **« j’ai mal à la tête, c’est grave ? »** | Immédiat : « Je note « j’ai mal à la tête… » dans votre dossier. Pour l’instant, vos constantes ne montrent rien d’anormal… » ; la plainte apparaît dans le dossier. |

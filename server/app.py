@@ -438,6 +438,22 @@ class MedBox:
             if held is not None and time.time() - held.get("at", 0) < 20:
                 continue  # let a fresh answer stand while the score settles
             wanted.append(pid)
+        # Then the members with a page of their own, in routine or not: on
+        # stage « Mon évaluation » is clicked on one of them, and a routine
+        # assessment stands for fifteen minutes (assessment_fresh_for), so
+        # six assessments after the warm-up buy an instant click for the
+        # whole demo (24 Sep: a cold click was fifteen seconds of waiting).
+        for row in rows:
+            pid = row["patient"]["id"]
+            if pid in wanted or not _has_a_page(pid):
+                continue
+            triage = row["triage"]
+            held = self.assessments.get(pid)
+            if held is not None and held.get("ok") and held.get("news2_at_assessment") == triage["total"]                     and time.time() - held.get("at", 0) < assessment_fresh_for(triage):
+                continue
+            if held is not None and time.time() - held.get("at", 0) < 20:
+                continue
+            wanted.append(pid)
         self._prefetch_wanted = wanted
 
     async def assess_now(self, patient_id: str, timeout: float | None = None) -> dict | None:
@@ -553,6 +569,21 @@ class MedBox:
             if asyncio.current_task().cancelling():
                 raise asyncio.CancelledError
             await asyncio.sleep(5.0)
+
+
+def _has_a_page(pid: str) -> bool:
+    """The six with a personal server (the team), whatever the ports say."""
+    try:
+        return pid in PERSONAL_PORTS or int(str(pid)[2:]) <= 6
+    except ValueError:
+        return False
+
+
+def assessment_fresh_for(triage: dict) -> float:
+    """How long a held assessment stands, in seconds: three minutes once
+    something is wrong, fifteen while everything is in its usual range and
+    the total has not moved (the sentence would be the same)."""
+    return 900.0 if (triage.get("urgency") or "routine") == "routine" else 180.0
 
 
 STATION = MedBox()
@@ -1477,7 +1508,7 @@ async def ai_assess(patient_id: str, fresh: bool = False, me: bool = False) -> J
     held = STATION.assessments.get(patient_id)
     if (not fresh and held is not None and held.get("ok")
             and held.get("news2_at_assessment") == triage.get("total")
-            and time.time() - held.get("at", 0) < 180):
+            and time.time() - held.get("at", 0) < assessment_fresh_for(triage)):
         body = {**held, "cached": True, "age_seconds": round(time.time() - held["at"], 1)}
         return JSONResponse(content={**body, "spoken": _spoken_for(patient_id, name, body, me)})
     if held is not None and held.get("ok") and not CLIENT.available:

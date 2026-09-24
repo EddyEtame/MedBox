@@ -79,8 +79,17 @@ def test_fresh_asks_again_and_a_routine_crew_member_is_never_prefetched(monkeypa
     asyncio.run(station.STATION.prefetch_once())
     asyncio.run(station.ai_assess(pid, fresh=True))
     assert calls == [pid, pid]
-    routine = [r["patient"]["id"] for r in station.STATION._board() if r["triage"]["urgency"] == "routine"]
+    # A routine member without a page of their own is never prefetched; the
+    # six with a page are queued after the worst, so that « Mon évaluation »
+    # on stage is instant, and their routine assessment stands fifteen minutes.
+    routine = [r["patient"]["id"] for r in station.STATION._board()
+               if r["triage"]["urgency"] == "routine" and not station._has_a_page(r["patient"]["id"])]
     assert routine and not (set(routine) & set(station.STATION._prefetch_wanted))
+    with_page = [p for p in station.STATION._prefetch_wanted if station._has_a_page(p)]
+    assert with_page, "the members with a page are prepared before anybody clicks"
+    assert station.STATION._prefetch_wanted.index(pid) < station.STATION._prefetch_wanted.index(with_page[0]) or pid in with_page
+    assert station.assessment_fresh_for({"urgency": "routine"}) == 900.0
+    assert station.assessment_fresh_for({"urgency": "high"}) == 180.0
 
 
 def test_a_dead_assistant_prefetches_nothing(monkeypatch):
