@@ -108,7 +108,8 @@
   function renderChampion(c) {
     var box = el("champion");
     if (!c) { box.innerHTML = '<p class="hint">Personne n’est dans sa plage habituelle toute la semaine.</p>'; return; }
-    box.innerHTML = '<div class="champ"><div class="avatar">' + esc(initials(c.name)) + "</div><div><b>" + esc(c.name) + "</b> <span class=\"hint\">" + esc(c.role) + "</span>" +
+    var link = c.port ? ("http://" + location.hostname + ":" + c.port + "/") : ("/me/" + c.id);
+    box.innerHTML = '<div class="champ"><div class="avatar">' + esc(initials(c.name)) + "</div><div><b><a href=\"" + link + "\" title=\"Son espace personnel\">" + esc(c.name) + "</a></b> <span class=\"hint\">" + esc(c.role) + "</span>" +
       "<p>" + esc(c.why) + "</p><p>Ce que " + esc(c.name) + " fait, à suivre :</p><ul>" +
       c.habits.map(function (h) { return "<li>" + esc(h) + "</li>"; }).join("") + "</ul></div></div>";
   }

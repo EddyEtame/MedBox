@@ -75,17 +75,20 @@ def test_the_facts_are_written_by_the_station():
     facts, own, spoken = station._facts_for(None)
     assert "NEWS2" in facts and "référent médical du bord" in facts
     assert "Ce que la station sait faire" in facts
-    assert own.startswith("L’assistant est arrêté.")
-    assert spoken.startswith("L’assistant est arrêté.") and len(spoken.split()) <= 25
+    # The crew's state is in the facts, and the station's own sentence is
+    # about the crew; the reason (down, late, ungrounded) is added by the route.
+    assert "État de l’équipage maintenant" in facts and "Ne citez que ces noms" in facts
+    assert not own.startswith("L’assistant est arrêté") and "isolement" in own
+    assert not spoken.startswith("L’assistant est arrêté") and len(spoken.split()) <= 40
 
 
 def test_without_the_model_the_station_answers_itself(monkeypatch):
     monkeypatch.setattr(station.CLIENT, "available", False)
     out = asyncio.run(station.assistant_ask({"text": "Que mesure MedBox ?"}))
     assert out["held_reason"] == "assistant_down" and out["grounded_in"] == "manual"
-    assert "MedBox mesure cinq constantes" in out["answer"]
+    assert out["answer"].startswith(station.DOWN) and "isolement" in out["answer"]
     # The voice gets the short form, never the fact sheet with the baselines.
-    assert "ligne de base" not in out["spoken"] and len(out["spoken"].split()) <= 25
+    assert "ligne de base" not in out["spoken"] and len(out["spoken"].split()) <= 45
 
 
 def test_the_model_answer_passes_the_validator_before_anyone_reads_it(monkeypatch):
@@ -111,7 +114,7 @@ def test_a_silent_model_yields_the_station_sentence(monkeypatch):
     monkeypatch.setattr(station.CLIENT, "answer", silent)
     out = asyncio.run(station.assistant_ask({"text": "Pourquoi ce score ?"}))
     assert out["held_reason"] == "assistant_silent"
-    assert out["answer"].startswith("L’assistant est arrêté.")
+    assert out["answer"].startswith(station.LATE), "a slow model is not a stopped one"
 
 
 def test_an_empty_or_endless_question_is_refused():

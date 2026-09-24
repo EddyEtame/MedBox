@@ -96,7 +96,14 @@
       ".medbox-listener__status{min-height:38px;margin:8px 0;color:#cfe2e6}" +
       ".medbox-listener__status.bad{color:#ff9eaa}" +
       ".medbox-listener__actions{display:flex;flex-wrap:wrap;gap:8px}.medbox-listener .btn{margin:0}" +
-      ".medbox-listener button[hidden]{display:none!important}";
+      ".medbox-listener button[hidden]{display:none!important}" +
+      ".medbox-listener__fold{flex:none;width:26px;height:26px;border:1px solid rgba(123,232,211,.34);border-radius:7px;" +
+      "background:transparent;color:#eafbf8;font:800 16px/1 system-ui,sans-serif;cursor:pointer}" +
+      ".medbox-listener__fold:hover{background:rgba(123,232,211,.12)}" +
+      ".medbox-listener.folded{width:auto;max-width:min(390px,calc(100vw - 36px));padding:8px 12px}" +
+      ".medbox-listener.folded .medbox-listener__top{margin:0;gap:10px}" +
+      ".medbox-listener.folded .medbox-listener__notice,.medbox-listener.folded .medbox-listener__status," +
+      ".medbox-listener.folded .medbox-listener__actions{display:none}";
     document.head.appendChild(style);
   }
 
@@ -110,7 +117,8 @@
     dock.setAttribute("aria-label", "Écoute locale MedBox");
     dock.innerHTML =
       '<div class="medbox-listener__top"><span class="medbox-listener__title">Écoute locale</span>' +
-      '<span id="micState" class="medbox-listener__state" data-state="off">ARRÊTÉ</span></div>' +
+      '<span id="micState" class="medbox-listener__state" data-state="off">ARRÊTÉ</span>' +
+      '<button type="button" id="micFoldBtn" class="medbox-listener__fold" aria-label="Réduire" title="Réduire">–</button></div>' +
       '<p id="micConsentNotice" class="medbox-listener__notice">' + CONSENT_TEXT + '</p>' +
       '<p id="micStatus" class="medbox-listener__status" role="status" aria-live="polite">' +
       'Activez le microphone pour commencer.</p>' +
@@ -142,9 +150,36 @@
       notice: el("micConsentNotice"),
       main: btn,
       pause: pause,
-      revoke: revoke
+      revoke: revoke,
+      fold: el("micFoldBtn")
     };
+    ui.fold.addEventListener("click", function () { pinned = true; setFolded(!folded); });
     return dock;
+  }
+
+  /* The dock is a wall of text before consent, by design: the person reads
+     what they accept. Once it listens it folds to a pill in the corner and
+     stops covering the page; it opens again when it hears something or
+     fails, and whenever the person clicks the corner button, which then
+     pins their choice. */
+  var folded = false, pinned = false, foldTimer = null;
+  function setFolded(v) {
+    folded = !!v;
+    if (ui.dock) ui.dock.classList.toggle("folded", folded);
+    if (ui.fold) {
+      ui.fold.textContent = folded ? "+" : "–";
+      ui.fold.title = folded ? "Agrandir" : "Réduire";
+      ui.fold.setAttribute("aria-label", ui.fold.title);
+    }
+  }
+  function autoFold(code) {
+    if (pinned) return;
+    if (foldTimer) { clearTimeout(foldTimer); foldTimer = null; }
+    if (code === "LISTENING" && consented) {
+      foldTimer = setTimeout(function () { foldTimer = null; if (!pinned && running && !paused) setFolded(true); }, 6000);
+    } else {
+      setFolded(false);
+    }
   }
 
   function transition(code, message, bad) {
@@ -157,6 +192,7 @@
       ui.status.textContent = message || "";
       ui.status.classList.toggle("bad", !!bad);
     }
+    autoFold(code);
     var legacy = el("micOut");
     if (legacy) {
       legacy.textContent = message || "";

@@ -295,3 +295,8 @@ body.alert{animation:flash 1.2s ease-out 1}
 .nav-menu .nav-h{font-family:var(--mono,monospace);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
   color:var(--ink3,#6c8b99);padding:8px 10px 4px}
 .nav-menu .hint{opacity:.6;font-size:11px;margin-left:6px}
+
+/* The personal page header: words, not a counter (24 Sep). */
+body.me .stat .v{font-family:inherit;font-size:16px;font-weight:700;letter-spacing:0;text-transform:none}
+.champ b a{color:inherit;text-decoration:none;border-bottom:1px solid rgba(123,232,211,.45)}
+.champ b a:hover{border-bottom-color:currentColor}

@@ -252,3 +252,18 @@ def test_the_featured_member_is_one_of_the_team_when_one_qualifies():
     members = [member("P-01", "high"), member("P-02", "medium"), member("P-18", spread=0.0)]
     assert station._champion(members)["id"] == "P-18"
 
+def test_the_dock_folds_once_it_listens_and_the_featured_member_links_to_their_space():
+    """The consent text covered the board, the crew table and the personal
+    page at laptop size (1366 x 768, 24 Sep). The dock folds to a pill once it
+    listens, opens on a wake or an error, and the corner button pins the
+    person's choice. The featured member's name opens their space."""
+    mic = (ROOT / "web" / "mic.js").read_text(encoding="utf-8")
+    assert 'id="micFoldBtn"' in mic and "function setFolded(" in mic and "function autoFold(" in mic
+    assert "pinned = true; setFolded(!folded);" in mic
+    assert 'code === "LISTENING" && consented' in mic
+    crew = (ROOT / "web" / "crew.js").read_text(encoding="utf-8")
+    assert 'title=\\"Son espace personnel\\"' in crew
+    for name in ("me.html", "crew.html"):
+        html = (ROOT / "web" / name).read_text(encoding="utf-8")
+        assert '<span class="mark" aria-hidden="true"></span>' in html and 'class="logo"' not in html, name
+

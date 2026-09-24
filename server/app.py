@@ -13,6 +13,7 @@ import json
 import logging
 import math
 import os
+import re
 import sqlite3
 import tempfile
 import time
@@ -1503,15 +1504,76 @@ VITAL_FR = {
 URGENCY_FR = {"routine": "routine", "low": "faible", "medium": "moyenne", "high": "haute"}
 
 
+def _crew_facts() -> tuple[str, str, str]:
+    """What the station knows about the whole crew right now: one line for
+    the model, one sentence for the screen, one for the voice (names, no
+    numbers). Deterministic, so the model cannot invent who is isolated.
+    Eddy's page, 24 Sep: asked « Qui est en isolement ? » with nobody
+    isolated, the model answered that two members were."""
+    rows = list(STATION.latest.values())
+    watch: list[str] = []
+    routine = 0
+    for e in rows:
+        if (e["triage"].get("urgency") or "routine") == "routine":
+            routine += 1
+        else:
+            watch.append(str(e["patient"].get("name") or e["patient"].get("id")))
+    confirmed: list[str] = []
+    decided: list[str] = []
+    for pid, a in STATION.quarantine.assignments.items():
+        name = str((STATION.latest.get(pid) or {}).get("patient", {}).get("name") or pid)
+        (confirmed if a.confirmed else decided).append(f"{name} (zone {a.zone})" if a.zone else name)
+    facts = (
+        f"État de l’équipage maintenant : {len(rows)} membres, {routine} en routine. "
+        f"À surveiller : {', '.join(watch) or 'personne'}. "
+        f"Isolement confirmé : {', '.join(confirmed) or 'personne'}. "
+        f"Isolement décidé, à confirmer par une personne : {', '.join(decided) or 'personne'}. "
+        "Ne citez que ces noms ; s’il est écrit « personne », dites que personne n’est concerné."
+    )
+    if not watch and not confirmed and not decided:
+        screen = f"Tout l’équipage ({len(rows)} membres) est dans sa plage habituelle. Personne n’est en isolement."
+        spoken = "Tout l’équipage est dans sa plage habituelle. Personne n’est en isolement."
+        return facts, screen, spoken
+    parts = []
+    if confirmed:
+        parts.append("en isolement : " + ", ".join(confirmed))
+    if decided:
+        parts.append("isolement décidé, à confirmer : " + ", ".join(decided))
+    if watch:
+        parts.append("à surveiller : " + ", ".join(watch))
+    screen = f"Équipage de {len(rows)} : " + " ; ".join(parts) + "."
+    spoken = " ".join(p[0].upper() + p[1:] + "." for p in parts).replace(" (zone ", ", zone ").replace(")", "")
+    return facts, screen, spoken
+
+
+# Questions the station answers itself, at once and from its own registers:
+# who is isolated, how the crew is doing. The model phrases everything else.
+ISOLATION_QUESTION = re.compile(r"isol|quarant", re.I)
+CREW_QUESTION = re.compile(r"[ée]quipage|crew|tout le monde|[àa] bord|combien", re.I)
+
+
+def _station_shortcut(text: str, patient_id: str | None) -> dict | None:
+    """An instant, deterministic answer when the question is about isolation
+    or the crew as a whole and no member is the subject. None otherwise."""
+    if patient_id is not None:
+        return None
+    if not (ISOLATION_QUESTION.search(text) or CREW_QUESTION.search(text)):
+        return None
+    _facts, screen, spoken = _crew_facts()
+    return {"ok": True, "answer": screen, "spoken": spoken, "grounded_in": "manual", "blocked": [],
+            "stand_in": False, "held_reason": None, "resolved_by": "station"}
+
+
 def _facts_for(patient_id: str | None) -> tuple[str, str, str]:
     """The facts the assistant may answer from, and the station's own answer.
 
     Deterministic, written by the station: the model reads them, it never
     supplies them. Returns (facts for the model, the sentence the station
-    shows instead when the model is absent or silent, and the short form of
-    that sentence for the voice, which carries no baselines).
+    shows instead when the model is absent, silent or ungrounded, and the
+    short form of that sentence for the voice, which carries no baselines).
     """
     caps = " ; ".join(c["title"] for c in manifest()["capabilities"])
+    crew_facts, crew_screen, crew_spoken = _crew_facts()
     lines = [
         "Faits de la station : MedBox mesure cinq constantes (température, SpO2, pouls, "
         "respiration, tension systolique) et reçoit deux observations saisies (conscience "
@@ -1520,9 +1582,10 @@ def _facts_for(patient_id: str | None) -> tuple[str, str, str]:
         "décide des isolements, que l’équipage accuse réception, et répond aux questions ; "
         "il ne prescrit aucun médicament.",
         f"Ce que la station sait faire : {caps}.",
+        crew_facts,
     ]
-    station_answer = "L’assistant est arrêté. " + lines[0]
-    station_spoken = spoken_station_answer()
+    station_answer = crew_screen
+    station_spoken = crew_spoken
     entry = STATION.latest.get(patient_id) if patient_id else None
     if entry:
         p, t = entry["patient"], entry["triage"]
@@ -1549,12 +1612,23 @@ def _facts_for(patient_id: str | None) -> tuple[str, str, str]:
             f"NEWS2 {t.get('total')} ({urgency}) ; paramètres mesurés : {measured} ; non mesurés : {missing}. "
             f"{iso_text}. Déclarations récentes : {said_text}."
         )
-        station_answer = (
-            f"L’assistant est arrêté. {p.get('name')} : NEWS2 {t.get('total')} ({urgency}), "
-            f"{iso_text}. Mesures : {vitals}."
-        )
-        station_spoken = spoken_station_answer(p.get("name"), t.get("total"), urgency, iso_text)
+        station_answer = f"{p.get('name')} : NEWS2 {t.get('total')} ({urgency}), {iso_text}. Mesures : {vitals}."
+        station_spoken = _without_down_prefix(spoken_station_answer(p.get("name"), t.get("total"), urgency, iso_text))
     return "\n".join(lines), station_answer, station_spoken
+
+
+def _without_down_prefix(spoken: str) -> str:
+    """The spoken station sentence starts by saying the assistant is down;
+    the text mode adds the real reason itself."""
+    for prefix in ("L’assistant est arrêté ; ", "L’assistant est arrêté. ", "L’assistant est arrêté "):
+        if spoken.startswith(prefix):
+            return spoken[len(prefix):]
+    return spoken
+
+
+DOWN = "Le référent est arrêté ; voici ce que la station sait. "
+LATE = "Le référent n’a pas répondu à temps ; voici ce que la station sait. "
+UNGROUNDED = "Le référent n’a rien trouvé dans les mesures pour répondre ; voici ce que la station sait. "
 
 
 @app.post("/api/assistant/ask")
@@ -1579,9 +1653,13 @@ async def assistant_ask(body: dict) -> dict:
         facts += "\nL’interlocuteur est ce membre en personne : adressez-vous à lui directement, à la deuxième personne."
     if lang == "en":
         facts += "\nAnswer in English: the person asked for English."
+    shortcut = _station_shortcut(text, patient_id)
+    if shortcut is not None:
+        shortcut["lang"] = lang
+        return shortcut
     if not CLIENT.available:
-        return {"ok": True, "answer": station_answer, "spoken": station_spoken, "grounded_in": "manual",
-                "blocked": [], "stand_in": False, "held_reason": "assistant_down"}
+        return {"ok": True, "answer": DOWN + station_answer, "spoken": DOWN + station_spoken, "grounded_in": "manual",
+                "blocked": [], "stand_in": False, "held_reason": "assistant_down", "lang": lang}
     STATION.questions_pending += 1
     try:
         async with STATION._ai_lock:
@@ -1589,9 +1667,20 @@ async def assistant_ask(body: dict) -> dict:
     finally:
         STATION.questions_pending -= 1
     if raw is None:
-        return {"ok": True, "answer": station_answer, "spoken": station_spoken, "grounded_in": "manual",
-                "blocked": [], "stand_in": False, "held_reason": "assistant_silent", "detail": CLIENT.last_error}
+        return {"ok": True, "answer": LATE + station_answer, "spoken": LATE + station_spoken, "grounded_in": "manual",
+                "blocked": [], "stand_in": False, "held_reason": "assistant_silent", "detail": CLIENT.last_error,
+                "lang": lang}
     out = enforce_answer(raw)
+    if out["grounded_in"] == "nothing" and not out["blocked"]:
+        # The model itself says nothing in the facts supports its sentence:
+        # that sentence is not shown. The station's own is.
+        out["answer"] = UNGROUNDED + station_answer
+        out["grounded_in"] = "manual"
+        out["held_reason"] = "ungrounded"
+        out["spoken"] = UNGROUNDED + station_spoken
+        out["lang"] = lang
+        out["stand_in"] = CLIENT.stand_in
+        return out
     # Two validated sentences read as they are; the voice module says the units.
     out["spoken"] = out["answer"]
     out["lang"] = lang

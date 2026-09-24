@@ -38,8 +38,11 @@
     });
     el("today").querySelector("tbody").innerHTML = rows.join("");
     var t = me.today;
-    el("meToday").textContent = t.total == null ? "–" : t.total + " · " + URGENCY[t.urgency || "routine"];
-    el("meWeek").textContent = me.week_ok ? "stable" : "écarts";
+    var u = t.urgency || "routine", label = URGENCY[u];
+    el("meToday").textContent = t.total == null ? "–" : label.charAt(0).toUpperCase() + label.slice(1) + " · " + t.total;
+    el("meToday").className = "v" + (u === "routine" ? "" : (u === "high" ? " crit" : " warn"));
+    el("meWeek").textContent = me.week_ok ? "Stable" : "Écarts";
+    el("meWeek").className = "v" + (me.week_ok ? "" : " warn");
   }
   function renderWeek(week) {
     el("week").querySelector("tbody").innerHTML = (week.daily || []).map(function (d) {
