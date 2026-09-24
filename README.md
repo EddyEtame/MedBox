@@ -1,28 +1,54 @@
-# MedBox
+# MedBox — la station médicale d’un vaisseau sans médecin
 
-**Autonomous medical station for a ship with no doctor and no contact with Earth.**
+**Quarante membres d’équipage, aucun médecin, aucun contact avec la Terre.**
+MedBox mesure tout le monde en continu, calcule une priorité par des règles que
+vous pouvez relire, décide qui isoler, l’explique à la personne et à l’équipage,
+et le dit à voix haute. Tout tourne sur un portable, sans réseau.
 
-EPSI Workshop B3 2026-27 — *Horizon 2080* — Pillar 1 (HumanTech & HealthTech), option A.
+Workshop National EPSI B3 2026 — *Horizon 2080* — pilier HumanTech &amp;
+HealthTech Spatiales, projet **1A**. Le projet **1B** de l’équipage,
+ARIA / PsychoSpace, est dans [ANTHONYSITCH/Psychospace](https://github.com/ANTHONYSITCH/Psychospace).
 
-MedBox is a medical case with sensors and a local AI. It reads a crew member's
-vitals, scores how urgently they need attention, manages quarantine during an
-outbreak, and keeps a medical history — entirely offline, with no cloud, no
-account and no internet connection at any point.
-
-> **This is a research and education instrument. It is not a medical device and
-> it does not diagnose.** It offers ranked hypotheses and an urgency level
-> computed from a published clinical score, and every claim it makes can be
-> traced back to the reading that produced it.
+| | |
+|---|---|
+| ![Le vaisseau en 3D](docs/assets/vaisseau.png) | ![Le tableau de bord de l’équipage](docs/assets/equipage.png) |
+| *Le vaisseau : quarante membres, trois zones d’isolement, la commande locale et l’écoute.* | *L’équipage : messages du référent, membre en forme, activités du jour.* |
+| ![Un espace personnel](docs/assets/espace-personnel.png) | ![La vue par pièce](docs/assets/vue-piece.png) |
+| *L’espace personnel de Merove pendant la contamination.* | *La vue par pièce : chaque zone a ses quatre couchettes.* |
 
 ---
 
-## Quick start
+## Sommaire
 
-**Linux / macOS**
-```bash
-./setup.sh
-.venv/bin/python medbox.py
-```
+1. [Lancer MedBox](#1-lancer-medbox)
+2. [Ce que vous voyez](#2-ce-que-vous-voyez)
+3. [Documentation : où lire quoi](#3-documentation--où-lire-quoi)
+4. [Comment c’est construit](#4-comment-cest-construit)
+5. [Ce que le référent ne peut pas faire](#5-ce-que-le-référent-ne-peut-pas-faire)
+6. [Les chiffres](#6-les-chiffres)
+7. [Scénarios](#7-scénarios)
+8. [API](#8-api)
+9. [Tests](#9-tests)
+10. [Structure du dépôt](#10-structure-du-dépôt)
+11. [L’équipage](#11-léquipage)
+
+---
+
+## 1. Lancer MedBox
+
+### Le dossier portable (la façon de la soutenance)
+
+Un dossier `MedBox-Portable` de 1,6 Go contient tout : Python, Ollama et le
+modèle, les modèles de voix, les pages, les outils. Double-cliquez `MedBox.exe`.
+La station est prête en quatre secondes, le modèle chaud en moins d’une minute,
+six espaces personnels ouverts. Aucun accès réseau. Comment le construire et le
+vérifier : [`packaging/README.md`](packaging/README.md) et
+[`packaging/LISEZ-MOI.txt`](packaging/LISEZ-MOI.txt).
+
+Avant une démonstration : `tools\preflight.ps1` (ports libres, modèle, voix).
+Pour le moment de panne : `tools\assistant.ps1 stop`, puis `start`.
+
+### Depuis les sources
 
 **Windows**
 ```powershell
@@ -30,188 +56,207 @@ powershell -ExecutionPolicy Bypass -File setup.ps1
 .\.venv\Scripts\python medbox.py
 ```
 
-Then open <http://127.0.0.1:8765>. (8765, not 8080: on the presentation laptop 8080 belongs to an Apache that starts with Windows.)
-
-**If you are here to use the station rather than build it, read
-[`docs/USER_GUIDE.md`](docs/USER_GUIDE.md).** It is the operator's guide, and
-it is generated from the product by `python tools/guide.py`, so it cannot
-describe a MedBox that does not exist. The same facts are on the Help button
-inside the console, which keeps working with the assistant killed.
-
-`setup` creates the virtual environment, installs pinned dependencies, installs
-and version-checks Ollama, pulls the model, creates the database and runs the
-tests. It is safe to run again at any time — every step checks before it acts.
-
-**On Windows it takes two passes.** Ollama ships as an installer. Setup asks
-before fetching it — it is 1.2 GB — and the default is No, so nothing large is
-downloaded behind your back. Say `y` and it downloads, launches the installer
-and stops. Finish the installer, then run `setup.ps1` again: the second pass
-finds Ollama and pulls the model. You never need to type `ollama` yourself,
-which is just as well, because its installer does not add itself to the PATH
-of a PowerShell window that was already open.
-
-Answer that prompt in advance with `-y`:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File setup.ps1 -y
-```
-
-Use it whenever setup is not looking at a terminal — piping the output to a
-file, running it from an editor, running it unattended. Without `-y` in those
-cases setup declines the download and says so, rather than asking a question
-into a log file and waiting forever for an answer.
-
-In a hurry, or on a network that will not carry it? `python setup.py --no-ollama`
-skips both downloads. Everything works except the narration, which is the point
-of the next section. (A plain `python` is right here — `setup.py` uses only the
-standard library, because it is what runs before anything is installed.)
-
-### Hold-to-speak (optional)
-
-The station always talks — the clips are in the repo and need nothing
-installed. To let it *listen*, fetch the speech model once:
-
 **Linux / macOS**
 ```bash
-.venv/bin/python tools/assets.py
+./setup.sh
+.venv/bin/python medbox.py
 ```
 
-**Windows**
-```powershell
-.\.venv\Scripts\python tools\assets.py
-```
+Puis ouvrez <http://127.0.0.1:8765>. `setup` crée l’environnement, installe les
+dépendances, installe et vérifie Ollama, télécharge le modèle, crée la base et
+lance les tests ; il peut être relancé à tout moment. Sur Windows, Ollama est
+un installateur de 1,2 Go : `setup` demande avant de le télécharger (répondez
+d’avance avec `-y` : `powershell -ExecutionPolicy Bypass -File setup.ps1 -y`),
+puis se relance une seconde fois pour tirer le modèle. Sans réseau :
+`python setup.py --no-ollama` ; tout fonctionne sauf le référent.
 
-Run it from this folder, the one holding `setup.py`, and use the interpreter
-inside `.venv` — a bare `python` has none of the dependencies and will tell you
-faster-whisper is missing when it is sitting right there.
+**La voix.** La station parle sans rien installer (les phrases sont dans le
+dépôt). Pour qu’elle écoute, récupérez une fois le modèle de reconnaissance :
+`.\.venv\Scripts\python tools\assets.py` (ou `--from D:\...` depuis une clé).
+Le bouton micro reste masqué tant que le modèle n’est pas complet.
 
-No network in the room? Copy `models/faster-whisper-base` (a folder, or a zip
-of it) onto a USB drive and use `--from /path/to/the/drive`. Either way the
-microphone button stays hidden until a complete model is present, and typing a
-symptom works throughout.
+## 2. Ce que vous voyez
 
----
-
-## The one design decision
-
-**The AI never touches a measurement.**
-
-Two tracks run side by side:
-
-| | Fast track | Slow track |
+| Page | Adresse | Ce qu’elle fait |
 |---|---|---|
-| **Does** | sensors → NEWS2 score → screen | hypotheses, questions, protocol |
-| **Speed** | milliseconds, every tick | hundreds of milliseconds, on demand |
-| **Model** | none, anywhere | Ollama, schema-constrained |
-| **If it fails** | it doesn't — it has no dependencies | the narration stops, nothing else |
+| Vaisseau 3D | `/ship` | L’anneau d’habitation, les quarante membres, les zones et leurs couchettes, l’infirmerie ; commande locale ; micro ; « Ronde ». |
+| Tableau | `/board` | Le tableau 2D de surveillance, classé par priorité, avec le dossier de chaque membre. |
+| Équipage | `/crew` | La semaine des six, l’état de chacun, le membre en forme et ses habitudes, les activités du jour, les messages du référent. |
+| Espace personnel | `/me/P-01` … `/me/P-06`, ports **8771 à 8776** | Le référent reconnaît la personne, se présente, lit son évaluation à la deuxième personne, répond à ses questions ; sa semaine, ses messages, son dossier, le vaisseau centré sur elle. |
 
-Kill Ollama mid-consultation and the vitals keep updating, the triage ordering
-holds, quarantine still works and the session keeps recording. Only the
-narration stops. That is what "standalone" has to mean: not merely no internet,
-but no single process whose death takes the instrument down.
+Sept serveurs démarrent ensemble : la station sur 8765 et un serveur par membre.
+Chaque page a le menu Navigation, le micro et la voix.
 
-**The rule that keeps it true:** nothing in `server/triage.py`,
-`server/sensors/` or `server/db.py` may import from `server/ai/`. If you ever
-need to, the design has drifted — stop and fix it instead.
+**Parler à la station.** Dites « j’accepte » quand elle demande le consentement,
+puis « MedBox » (ou le nom que vous avez donné à votre assistant) suivi de la
+demande : « montre la zone A », « ronde », « qui est en isolement ? », « est-ce
+que je vais bien ? ». Le micro attend la fin de votre phrase avant de transcrire.
 
----
+## 3. Documentation : où lire quoi
 
-## Urgency is NEWS2, not something we invented
+| Vous voulez… | Lisez |
+|---|---|
+| Utiliser la station : chaque fonction, ce qu’elle fait, ce qu’elle refuse, comment la déclencher | [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) — le guide de l’opérateur, généré depuis le produit par `tools/guide.py` ; un test échoue si le guide promet ce que le code ne fait pas |
+| Comprendre MedBox sans être technicien : pourquoi deux chemins, pourquoi NEWS2, « il se prend pour un médecin ? » | [`docs/COMPRENDRE-MEDBOX.md`](docs/COMPRENDRE-MEDBOX.md) |
+| Le dossier technique et la présentation de l’équipage (deux solutions), et comment les régénérer | [`docs/dossier/NOTE-POUR-LE-DOSSIER.md`](docs/dossier/NOTE-POUR-LE-DOSSIER.md), [`tools/build_dossier.py`](tools/build_dossier.py), [`tools/build_deck.py`](tools/build_deck.py) |
+| Le pitch de cinq minutes | [`docs/pitch.md`](docs/pitch.md) |
+| Le dossier patient, les contacts, les scénarios de Brad | [`docs/DEV2_DELIVERY.md`](docs/DEV2_DELIVERY.md) |
+| Construire, vérifier et lancer le dossier portable | [`packaging/README.md`](packaging/README.md), [`packaging/LISEZ-MOI.txt`](packaging/LISEZ-MOI.txt) |
+| Le barème NEWS2 tel qu’il est codé | [`server/triage.py`](server/triage.py) |
+| Ce que le référent sait faire et ce qu’il refuse, à la source | [`server/ai/capabilities.py`](server/ai/capabilities.py) |
+| Les scénarios rejouables | [`scenarios/`](scenarios/) |
+| La passation technique : décisions, pièges de la machine, ce qui reste à faire | [`CLAUDE.md`](CLAUDE.md) |
+| Qui a fait quoi | [`tasks/README.md`](tasks/README.md) |
 
-`server/triage.py` implements the National Early Warning Score 2 (Royal College
-of Physicians, 2017), the score used across the NHS to decide how urgently a
-deteriorating patient must be seen.
+## 4. Comment c’est construit
 
-Five of its seven parameters are measured — temperature, SpO₂, pulse,
-respiration and systolic blood pressure — and the two that no instrument gives,
-consciousness (ACVPU) and supplemental oxygen, are entered by a person at the
-console. Every result carries the list of parameters actually measured or
-observed; the rest are assumed normal and the score is labelled a partial
-screen, so the screen never implies more confidence than the hardware earned.
+**Une seule décision commande tout le reste : le modèle ne touche jamais une
+mesure.** Deux chemins tournent côte à côte.
 
-Using a real clinical standard means the urgency level is deterministic,
-explainable, defensible, and works with the AI switched off.
+| | Chemin rapide | Chemin lent |
+|---|---|---|
+| **Fait** | capteurs → score NEWS2 → isolement → écran | évaluation nommée, décision expliquée, réponses, messages |
+| **Cadence** | dix fois par seconde, à chaque mesure | quelques secondes, à la demande |
+| **Modèle** | aucun, nulle part | Ollama, réponse sous schéma JSON, validateur derrière |
+| **S’il tombe** | il ne tombe pas : il n’a pas de dépendance | la voix du référent s’arrête, rien d’autre |
 
----
+Arrêtez Ollama en pleine consultation : les constantes continuent, le classement
+tient, l’isolement fonctionne, la session s’enregistre. La règle qui garde cela
+vrai : rien dans `server/triage.py`, `server/sensors/`, `server/quarantine.py`,
+`server/bus.py` ou `server/db.py` n’importe `server/ai/`. Un test le vérifie.
 
-## Layout
+**La priorité est NEWS2, pas une invention.** `server/triage.py` reprend le
+National Early Warning Score 2 (Royal College of Physicians, 2017) : des points
+par constante selon son écart, une somme, un niveau. Cinq paramètres sont
+mesurés (température, SpO₂, pouls, respiration, tension), deux sont saisis
+(conscience, oxygène d’appoint) ; chaque résultat dit ce qui a été mesuré et le
+score est marqué comme un dépistage partiel.
 
-```
-medbox.py              entry point — python medbox.py
-setup.py               cross-platform installer (Windows + Linux)
-config.toml            everything configurable, in one file
+**Le référent médical du bord.** Un modèle léger (`qwen2.5:1.5b-instruct`, Ollama,
+processeur seul) ne reçoit que des faits écrits par la station et doit répondre
+dans une forme imposée ; un validateur relit chaque phrase. Les questions sur
+l’isolement et sur l’équipage sont répondues par la station elle-même, en
+millisecondes, à partir de ses registres. Pendant qu’une réponse arrive, le
+référent affiche et dit ce qu’il fait.
 
-server/
-  app.py               FastAPI: API, WebSocket and the UI, one port
-  triage.py            NEWS2 scoring — pure functions, no I/O      [FAST]
-  quarantine.py        zone assignment rules                        [FAST]
-  bus.py               pub/sub to every connected screen            [FAST]
-  db.py                SQLite: roster, readings, events, history    [FAST]
-  sensors/
-    synthetic.py       scenario-driven crew — the demo source       [FAST]
-    serial_head.py     real ESP32 over USB                          [FAST]
-  ai/
-    ollama.py          client that is allowed to fail               [SLOW]
-    schemas.py         the JSON shape the model must return         [SLOW]
+**La voix, dans les deux sens, hors ligne.** faster-whisper pour écouter (FR et
+EN, fin de phrase détectée), Piper pour parler (une voix française, une voix
+anglaise). Consentement parlé et révocable ; rien de l’audio n’est conservé.
 
-web/                   the 2D console (always works — the fallback)
-scenarios/             YAML timelines: demo, tests and training data
-tasks/                 who is building what this week
-tests/                 pytest
+**Le vaisseau et ses pièces.** L’anneau tourne, l’infirmerie au centre est
+immobile ; trois zones, quatre couchettes chacune ; un membre isolé glisse dans
+sa couchette. La caméra entre dans une pièce, un panneau dit qui s’y trouve et
+comment il va, le référent le décrit ; « Ronde » fait le tour du vaisseau.
 
-docs/
-  USER_GUIDE.md        the operator's guide — GENERATED, do not hand-edit
-tools/
-  guide.py             builds it; --check fails the suite when it drifts
-```
+## 5. Ce que le référent ne peut pas faire
 
----
+- **Décider du score.** Le score et la proposition d’isolement viennent de règles explicites.
+- **Prescrire.** Aucun médicament, aucune dose ne passe le validateur.
+- **Inventer.** Une condition n’est nommée que si les mesures la montrent ; un isolé n’existe que dans les registres de la station.
+- **Décider seul.** Confirmation et levée d’isolement sont humaines.
+- **Tomber en silence.** Si le modèle s’arrête, la surveillance continue et l’écran le dit.
 
-## Scenarios
+MedBox est un prototype de simulation : les mesures sont synthétiques et le
+disent ; ce n’est pas un dispositif médical validé.
 
-A scenario is a timeline applied to the synthetic crew. The same file drives the
-demo, the regression tests and — later — the fine-tuning set.
+## 6. Les chiffres
+
+| | |
+|---|---|
+| Membres suivis | 40, dont 6 réels avec une semaine de mesures en base |
+| Cadence | 10 mesures par seconde et par membre |
+| Pages / serveurs | 4 pages, 7 serveurs (station + 6 espaces personnels) |
+| Scénarios | 9, écrits en écarts par rapport à la ligne de base |
+| Tests | 407 réussis, 3 ignorés, 1 échec attendu (la levée automatique, non retenue) |
+| Dossier portable | 1,6 Go, 3 791 fichiers vérifiés par SHA-256, lancement en 4 s |
+| Réponse du référent | instantanée quand la station répond ; 9 à 14 s quand le modèle formule |
+
+## 7. Scénarios
+
+Un scénario est une chronologie appliquée à l’équipage simulé, en écarts par
+rapport à la ligne de base personnelle de chacun. Le même fichier sert à la
+démonstration et aux tests.
 
 ```bash
 curl -X POST http://127.0.0.1:8765/api/scenario/contamination
 ```
 
-`scenarios/contamination.yaml` is the crisis the brief specifies: six of forty
-crew (15%) develop a respiratory infection over ninety seconds. The board
-re-orders by urgency, quarantine zones fill and spill, and partway through you
-kill Ollama by hand to show the station carrying on.
-
-**Demo from a scenario, never from live sensors.** A rehearsed replay cannot
-embarrass you in front of a jury. Live hardware can.
-
----
-
-## API
-
-| Endpoint | Purpose |
+| Scénario | Ce qui se passe |
 |---|---|
-| `GET /api/status` | version, AI state, available scenarios |
-| `GET /api/board` | the full crew board with triage |
-| `GET /api/patient/{id}` | one crew member plus their history |
-| `POST /api/scenario/{name}` | start a scenario |
-| `POST /api/scenario/stop` | reset to nominal |
-| `POST /api/assess/{id}` | ask the AI — **503 when it is down, by design** |
-| `GET /api/interconnect/health` | crew health summary for other ESA teams |
-| `WS /ws` | live telemetry |
+| `contamination` | Six membres sur quarante se dégradent en quatre-vingt-dix secondes : le scénario du cahier des charges. |
+| `single-patient` | Une consultation : un membre, des mesures qui évoluent, les questions du référent. |
+| `slow-burn` | Une dégradation lente sur dix minutes ; le score monte cran par cran. |
+| `false-alarm` | Une fièvre seule après l’effort : surveillance, pas d’isolement. |
+| `baisse-thermique` · `effort-prolonge` · `exposition-environnementale` · `gene-respiratoire` · `signes-pseudo-grippaux` | Les situations du bord, une par fichier, dans [`scenarios/`](scenarios/). |
 
-`/api/interconnect/health` carries no names and no per-person readings. Another
-team's power grid needs to know a zone is sealed and how many crew are down —
-not who.
+Démontrez toujours depuis un scénario, jamais depuis des capteurs en direct : un
+rejeu répété ne surprend personne devant un jury.
 
----
+## 8. API
 
-## Tests
+| Route | Rôle |
+|---|---|
+| `GET /api/status` | version, état du modèle, des oreilles et de la voix, ports personnels |
+| `GET /api/board` | le tableau complet avec le score de chacun |
+| `GET /api/patient/{id}` | un membre, son historique, ses réponses, ses contacts |
+| `GET /api/crew/week` | la semaine de l’équipage, le membre en forme, les activités |
+| `GET /api/me/{id}` | l’espace personnel : présentation, semaine, messages |
+| `GET /api/messages` · `POST /api/messages/{id}/read` | les messages du référent ; « Lire » |
+| `POST /api/scenario/{name}` · `POST /api/scenario/stop` | lancer un scénario ; revenir au nominal |
+| `POST /api/assess/{id}` | l’évaluation du référent (503 quand le modèle est arrêté, exprès) |
+| `POST /api/assistant/ask` | une question en texte ; la station répond elle-même sur l’isolement et l’équipage |
+| `POST /api/voice/say` | faire parler la station (Piper, fr ou en) |
+| `POST /api/quarantine/{id}/confirm` · `/release` | confirmer, lever : des décisions humaines |
+| `GET /api/interconnect/health` | la santé du bord pour les autres systèmes du vaisseau, sans nom ni mesure individuelle |
+| `WS /ws` | la télémétrie en direct, dix fois par seconde |
 
-```bash
-.venv/bin/python -m pytest tests/ -q      # Linux
-.\.venv\Scripts\python -m pytest tests\ -q  # Windows
+## 9. Tests
+
+```powershell
+.\.venv\Scripts\python -m pytest tests\ -q
 ```
 
-The triage tests matter more than they look: the score is what the jury sees and
-what quarantine keys off, so a silent regression changes the demo's behaviour
-without anything visibly breaking.
+```bash
+.venv/bin/python -m pytest tests/ -q
+```
+
+Les tests de triage comptent plus qu’ils n’en ont l’air : le score est ce que le
+jury voit et ce qui commande l’isolement. D’autres tests vérifient que le chemin
+rapide n’importe jamais le modèle, que le guide ne promet rien que le code ne
+fait pas, que le dossier portable ne voit pas la machine hôte, et que le
+référent n’invente pas un isolé.
+
+## 10. Structure du dépôt
+
+```
+medbox.py              point d’entrée — la station et les six espaces personnels
+setup.py / setup.ps1   installation (Windows et Linux), relançable
+config.toml            tout ce qui se configure, en un fichier
+
+server/
+  app.py               FastAPI : API, WebSocket, pages, messages, espaces
+  triage.py            NEWS2 — fonctions pures, aucune entrée-sortie      [RAPIDE]
+  quarantine.py        zones, couchettes, contacts, confirmation humaine   [RAPIDE]
+  bus.py               diffusion vers chaque écran                         [RAPIDE]
+  db.py                SQLite : membres, mesures, semaine, messages        [RAPIDE]
+  sensors/             équipage synthétique et tête de mesure série        [RAPIDE]
+  ai/                  client Ollama, schémas, validateur, capacités       [LENT]
+  spoken.py, tts.py, voice.py, speech.py   la voix : phrases, Piper, faster-whisper
+  personal.py          un serveur par membre
+  activities.py        activités du jour et habitudes
+
+web/                   les pages : vaisseau (WebGL), tableau, équipage, espace ; micro, voix, réflexion
+scenarios/             les neuf chronologies
+tests/                 pytest
+tools/                 guide, dossier, deck, bundle portable, contrôle avant soutenance
+packaging/             le dossier portable Windows
+docs/                  guide de l’opérateur, comprendre MedBox, dossier, pitch
+```
+
+## 11. L’équipage
+
+| | Projet | Périmètre |
+|---|---|---|
+| **Eddy** | 1A MedBox | Direction ; vues 2D/3D et vue par pièce ; référent médical ; voix ; équipage et espaces personnels ; messages et cartes ; dossier portable ; tests ; dossier et présentation. |
+| **Brad** | 1A MedBox | Dossier patient persistant, historique de priorité, contacts, sessions ; scénarios `slow-burn` et `false-alarm` ; règles de quarantaine ; premier dossier technique. |
+| **Davidson, Anthony, Frederic, Merove** | 1B ARIA / PsychoSpace | Conception et développement d’ARIA : orchestration FastAPI, base documentaire locale, suivi du bien-être et dérive, interface de mission — [ANTHONYSITCH/Psychospace](https://github.com/ANTHONYSITCH/Psychospace). |

@@ -87,6 +87,21 @@ CAPABILITIES = [
         "how": "Ouvrir /crew sur le port principal.",
     },
     {
+        "id": "rooms",
+        "title": "Montrer le vaisseau pièce par pièce et faire la ronde",
+        "does": (
+            "Sur la vue 3D, chaque zone d’isolement est une pièce avec quatre couchettes ; "
+            "un membre isolé y prend sa place. La caméra entre dans une zone (clic sur la "
+            "zone, ou « MedBox, montre la zone A »), un panneau liste qui s’y trouve avec "
+            "son score et ses constantes, et le référent décrit la pièce à voix haute. "
+            "« Ronde » fait le tour du vaisseau : état de l’équipage, chaque zone, "
+            "l’infirmerie, retour. Ces vues et ces briefs viennent des registres de la "
+            "station, sans modèle."
+        ),
+        "needs_ai": False,
+        "how": "Cliquer une zone dans le rail, ou dire « MedBox, montre la zone A », « infirmerie », « vaisseau », « ronde ».",
+    },
+    {
         "id": "personal_space",
         "title": "Parler à chaque membre sur sa propre page, sur son propre port",
         "does": (

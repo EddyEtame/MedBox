@@ -1,20 +1,22 @@
-# Note pour le dossier et la présentation — état au jeudi 24 septembre 2026, 13 h 15
+# Le dossier et la présentation de l’équipage
 
-Ce dossier `docs/dossier/` existe pour une seule raison : le dossier technique
-(PDF) et la présentation (PPTX) que nous rendons aujourd'hui doivent dire tout
-ce qui est fait. Le dossier du 23 septembre (« Dossier technique — 23 septembre
-2026 », cinq pages) est une bonne base, mais il décrit l'état de mardi soir.
-Depuis, le projet a beaucoup avancé. Cette note liste ce qui est fait, ce qui
-est en cours, ce qu'il faut corriger dans le PDF et le PPTX, et donne des
-paragraphes prêts à coller.
+Le dossier technique et la présentation remis le 24 septembre 2026 sont générés
+depuis le dépôt, à partir du code et des derniers résultats de tests :
 
-Le PDF et le PPTX eux-mêmes ne vont pas sur GitHub (règle de l'équipe) ; seule
-cette note y est.
+```powershell
+.\.venv\Scripts\python toolsuild_dossier.py     # PDF, 18 pages, deux parties
+.\.venv\Scripts\python toolsuild_deck.py        # PPTX, 10 diapositives
+```
 
-Rappel du cadre : nous **présentons** le projet (soutenance locale vendredi
-25 septembre, cinq minutes de démonstration puis questions ; finale nationale
-mercredi 30 septembre). Nous ne déposons pas le code : la version autonome
-(bundle) reste sur le PC d'Eddy et sur la clé USB.
+Les fichiers sortent dans `.build\deliverables\` (ignoré par Git) ; les captures
+d’écran utilisées sont dans `.build\deliverables\shots\`. Structure : l’équipage
+et ses deux solutions ; partie A, MedBox (1A, Eddy et Brad) ; partie B, ARIA /
+PsychoSpace (1B, Davidson, Anthony, Frederic, Merove), dossier de l’équipe 1B
+repris tel quel ; organisation, conclusion, références.
+
+La note ci-dessous est l’état de MedBox au 24 septembre à 13 h 15, telle qu’elle
+a servi à écrire la partie A. Elle reste utile pour les chiffres et le déroulé de
+démonstration.
 
 ---
 

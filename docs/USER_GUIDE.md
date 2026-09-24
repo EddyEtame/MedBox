@@ -145,6 +145,12 @@ Le tableau d’équipage (/crew) montre, pour chacun, sa semaine (moyennes, mini
 
 *Ouvrir /crew sur le port principal.*
 
+#### Montrer le vaisseau pièce par pièce et faire la ronde
+
+Sur la vue 3D, chaque zone d’isolement est une pièce avec quatre couchettes ; un membre isolé y prend sa place. La caméra entre dans une zone (clic sur la zone, ou « MedBox, montre la zone A »), un panneau liste qui s’y trouve avec son score et ses constantes, et le référent décrit la pièce à voix haute. « Ronde » fait le tour du vaisseau : état de l’équipage, chaque zone, l’infirmerie, retour. Ces vues et ces briefs viennent des registres de la station, sans modèle.
+
+*Cliquer une zone dans le rail, ou dire « MedBox, montre la zone A », « infirmerie », « vaisseau », « ronde ».*
+
 #### Parler à chaque membre sur sa propre page, sur son propre port
 
 Chaque membre de l’équipe a un serveur personnel (un port par personne). Sa page montre ses constantes du jour face à sa ligne de base, sa semaine, ses messages, deux activités pour lui ; le référent le salue par son nom, lui dit où il en est, lit son évaluation à la deuxième personne et répond à ses questions, tapées ou dites.
@@ -219,7 +225,7 @@ MedBox mesure cinq paramètres et en fait observer deux. L’assistant peut donc
 
 *Inclus dans chaque évaluation de l’assistant.*
 
-13 des 16 capacités documentées ne dépendent pas du modèle. L’IA reste une couche d’explication au-dessus d’un système déterministe.
+14 des 17 capacités documentées ne dépendent pas du modèle. L’IA reste une couche d’explication au-dessus d’un système déterministe.
 
 ## 11. Limites absolues de l’assistant
 
