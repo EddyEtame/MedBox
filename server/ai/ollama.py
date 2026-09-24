@@ -201,6 +201,10 @@ class OllamaClient:
                 for key in ("total_duration", "load_duration", "prompt_eval_duration", "eval_duration")
                 if payload.get(key) is not None
             }
+            for key in ("prompt_eval_count", "eval_count"):
+                if payload.get(key) is not None:
+                    self.last_timing[key] = int(payload[key])
+            log.warning("warm-up: %s", self.last_timing)
             self.warmed = True
             self.available = True
             self.last_error = None
@@ -341,6 +345,13 @@ class OllamaClient:
                 content = str(payload.get("message", {}).get("content", "")).strip()
             self.warmed = True
             self.slow = False
+            # Where the seconds went, in the station's own log: the prompt
+            # tokens read again (cache misses), the tokens written, the wall.
+            total = float(payload.get("total_duration", 0)) / 1e9
+            (log.warning if total > 4.0 else log.info)(
+                "answer in %.1f s: %s prompt tokens read in %.1f s, %s tokens written in %.1f s",
+                total, payload.get("prompt_eval_count"), float(payload.get("prompt_eval_duration", 0)) / 1e9,
+                payload.get("eval_count"), float(payload.get("eval_duration", 0)) / 1e9)
             return salvage_answer(content)
         except httpx.TimeoutException:
             log.warning("AI answer to a question exceeded %.0f s; the model is still up", wait)

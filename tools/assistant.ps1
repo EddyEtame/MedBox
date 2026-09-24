@@ -137,6 +137,9 @@ if ($Action -eq "start") {
         }
         # --hide --fast-startup: what the tray autostart uses. Without them the app
         # opens its own chat window on top of the demo (seen by Eddy, 24 Sep).
+        # The same two cache slots the launcher gives it (tools\demarrer.ps1).
+        $env:OLLAMA_NUM_PARALLEL = "2"
+        $env:OLLAMA_KEEP_ALIVE = "2h"
         Start-Process -FilePath $APP -ArgumentList "--hide", "--fast-startup"
         $port = $INSTALLED_PORT
     }

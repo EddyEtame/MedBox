@@ -36,18 +36,26 @@ ARIA / PsychoSpace, est dans [ANTHONYSITCH/Psychospace](https://github.com/ANTHO
 
 ## 1. Lancer MedBox
 
-### Le dossier portable (la façon de la soutenance)
+### Un double-clic (la façon de la soutenance)
+
+Sur une machine où le dépôt est installé (`setup.ps1` une fois) et où Ollama
+est présent, double-cliquez `DEMARRER-LA-DEMO.cmd` à la racine du dossier. Une
+fenêtre noire fait le reste : elle réveille Ollama s’il dort, démarre la
+station et ses six espaces personnels, ouvre le navigateur dès que la station
+répond, et reste ouverte pendant toute la démonstration ; la fermer arrête
+tout. Station en une dizaine de secondes, référent chaud en moins d’une
+minute. Si MedBox tourne déjà, le double-clic ouvre simplement le navigateur.
+
+### Le dossier portable
 
 Un dossier `MedBox-Portable` de 1,6 Go contient tout : Python, Ollama et le
-modèle, les modèles de voix, les pages, les outils. Double-cliquez
-`DEMARRER-LA-DEMO.cmd` : il contrôle la machine puis lance `MedBox.exe`.
-La station est prête en quatre secondes, le modèle chaud en moins d’une minute,
-six espaces personnels ouverts. Aucun accès réseau. Comment le construire et le
-vérifier : [`packaging/README.md`](packaging/README.md) et
-[`packaging/LISEZ-MOI.txt`](packaging/LISEZ-MOI.txt).
-
-Avant une démonstration, `DEMARRER-LA-DEMO.cmd` fait le contrôle (mémoire, ports, modèle, voix) et lance ; `tools\preflight.ps1` est le contrôle seul.
-Pour le moment de panne : `tools\assistant.ps1 stop`, puis `start`.
+modèle, les modèles de voix, les pages, les outils. Son `DEMARRER-LA-DEMO.cmd`
+contrôle la machine (mémoire, ports, modèle, voix) puis lance `MedBox.exe`.
+Aucun accès réseau. Comment le construire et le vérifier :
+[`packaging/README.md`](packaging/README.md) et
+[`packaging/LISEZ-MOI.txt`](packaging/LISEZ-MOI.txt). `tools\preflight.ps1`
+est le contrôle seul, depuis le dépôt ou depuis le dossier portable. Pour le
+moment de panne : `toolsssistant.ps1 stop`, puis `start`.
 
 ### Depuis les sources
 

@@ -9,8 +9,9 @@ ce n’est pas normal.
 | Geste | Attendu |
 |---|---|
 | Brancher le chargeur ; fermer Chrome, WhatsApp, Spotify, le VPN | Le modèle a besoin de mémoire vive : sous 4 Go libres, il ralentit ; sous 2,5 Go, il rame. |
-| Double-clic `DEMARRER-LA-DEMO.cmd` à la racine du dossier `MedBox-Portable`, cinq minutes avant | Une fenêtre noire fait le contrôle (mémoire, ports, modèle, voix) : « Prêt. » en vert, puis MedBox se lance tout seul ; la page vaisseau s’ouvre dans le navigateur en moins de vingt secondes ; la puce « assistant » passe à « prêt » en moins d’une minute. Si une ligne ECHEC apparaît, la fenêtre reste ouverte et dit quoi faire (mémoire, Ollama en double, port pris) : corriger, relancer. |
-| Si tu préfères à la main | PowerShell dans le dossier : `powershell -ExecutionPolicy Bypass -File tools\preflight.ps1 -Bundle .` puis double-clic `MedBox.exe`. |
+| Double-clic `DEMARRER-LA-DEMO.cmd` à la racine de `Desktop\MedBox`, cinq minutes avant | Une fenêtre noire : « Ollama installé en écoute », la mémoire libre, « Démarrage de la station », puis « MedBox répond » et le navigateur s’ouvre sur le vaisseau, en une dizaine de secondes. La puce « assistant » passe de « préchauffage » à « prêt » en moins d’une minute. **Garder cette fenêtre ouverte** : la fermer arrête MedBox. Si MedBox tournait déjà, le double-clic ouvre juste le navigateur. |
+| Une ligne ECHEC dans cette fenêtre | Port pris par un autre programme (le nom est écrit) ou `.venv` absent : corriger, relancer. Ollama absent ou muet ne bloque pas : la station démarre et la page dit que le référent est arrêté. |
+| Le dossier portable (`MedBox-Portable`, sur le PC ou la clé) | Même bouton à sa racine : contrôle complet puis `MedBox.exe`. Ne pas le lancer en même temps que la version du dossier `MedBox` : ils veulent les mêmes ports. |
 | `http://127.0.0.1:8771` à `8776` dans des onglets | Les six espaces personnels répondent (Eddy, Brad, Davidson, Anthony, Frederic, Merove). |
 
 ## 1. La page vaisseau (`/ship`)
