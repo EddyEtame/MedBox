@@ -1,4 +1,4 @@
-# Note pour le dossier et la présentation — état au jeudi 24 septembre 2026, 10 h 45
+# Note pour le dossier et la présentation — état au jeudi 24 septembre 2026, 13 h 15
 
 Ce dossier `docs/dossier/` existe pour une seule raison : le dossier technique
 (PDF) et la présentation (PPTX) que nous rendons aujourd'hui doivent dire tout
@@ -41,7 +41,7 @@ mercredi 30 septembre). Nous ne déposons pas le code : la version autonome
 | 2 | « aucune mesure réelle ni diagnostic médical » | « aucune mesure réelle ; dans la simulation, le référent nomme ce que les mesures montrent et décide des isolements, il ne prescrit rien ». |
 | 3 | « 1. Lancer le scénario 2. Ouvrir un patient 3. Lire courbe, réponses et quarantaine » | Suivre le déroulé de démonstration du § 8 (voix, message, carte, vaisseau, espace personnel). |
 | 4 | « Ma contribution Dev 2 » / « Contribution du collaborateur » | « Contribution de Brad » / « Contribution d'Eddy », puis les autres membres (§ 6). |
-| 5 | « 150 tests réussis », « 3 scénarios » | **397 tests réussis** (3 ignorés, 1 échec attendu), **9 scénarios**. |
+| 5 | « 150 tests réussis », « 3 scénarios » | **407 tests réussis** (3 ignorés, 1 échec attendu), **9 scénarios**. |
 
 ---
 
@@ -94,7 +94,10 @@ mercredi 30 septembre). Nous ne déposons pas le code : la version autonome
 - **Mode texte** : une question libre depuis n'importe quelle page
   (`/api/assistant/ask`), réponse courte (≤ 280 caractères), ancrée dans les
   mesures, en français ou en anglais ; à la deuxième personne sur un espace
-  personnel.
+  personnel. Les questions sur l'isolement et sur l'état de l'équipage sont
+  répondues **par la station elle-même, en quelques millisecondes**, à partir
+  de ses registres ; le modèle ne peut pas inventer un isolé. Quand la réponse
+  prend du temps, le référent dit « un instant, je regarde les constantes ».
 - **Messages** : à chaque décision d'isolement, un message à la personne et un
   message au tableau de bord équipage, avec **signal sonore fort** ; « Lire »
   ouvre la **carte de la personne** avec le vaisseau 3D et la **zone
@@ -119,8 +122,8 @@ mercredi 30 septembre). Nous ne déposons pas le code : la version autonome
 
 ### 3.5 Qualité et tests
 
-- **397 tests réussis, 3 ignorés, 1 échec attendu** (la levée automatique
-  d'isolement, volontairement non retenue), 53 secondes, le 24 septembre.
+- **407 tests réussis, 3 ignorés, 1 échec attendu** (la levée automatique
+  d'isolement, volontairement non retenue), 73 secondes, le 24 septembre à 13 h.
 - Tests de bout en bout sur la station réelle (HTTP + WebSocket) et
   vérifications dans le navigateur (pages, menu, micro, carte, vaisseau
   embarqué).
@@ -177,7 +180,7 @@ mercredi 30 septembre). Nous ne déposons pas le code : la version autonome
 | Pages | 4 (vaisseau, tableau, équipage, espace personnel) |
 | Serveurs au lancement | 7 (station 8765 + espaces personnels 8771 à 8776) |
 | Scénarios | 9 |
-| Tests | 397 réussis, 3 ignorés, 1 échec attendu |
+| Tests | 407 réussis, 3 ignorés, 1 échec attendu |
 | Modèle | qwen2.5:1.5b-instruct, Ollama 0.13.1, processeur seul |
 | Voix | faster-whisper base (FR + EN) ; Piper fr_FR-siwis-medium + en_US-lessac-medium |
 | Bundle | 1,6 Go, 3 790 fichiers, SHA-256 vérifié, lancement en 9 s |
@@ -229,7 +232,7 @@ personnel sur son propre port, où le référent le reconnaît, se présente, lu
 lit son évaluation et répond à ses questions ; chacun peut nommer son
 assistant, et ce nom devient son mot de réveil.
 
-**Validation.** 397 tests réussis (3 ignorés, 1 échec attendu) le
+**Validation.** 407 tests réussis (3 ignorés, 1 échec attendu) le
 24 septembre, dont des tests de bout en bout sur la station réelle et un test
 d'honnêteté du guide. Le bundle a été lancé à froid sur la machine de
 soutenance : station prête en neuf secondes, modèle, oreilles et voix
@@ -273,4 +276,4 @@ Avant de commencer : `tools\preflight.ps1` (ports libres, modèle, voix).
 `server/ai/schemas.py`, `server/ai/validate.py`, `server/ai/capabilities.py`,
 `server/db.py`, `server/quarantine.py`, `web/crew.*`, `web/me.*`, `web/mic.js`,
 `web/voice.js`, `web/nav.js`, `web/patient-record.js`, `scenarios/*.yaml`,
-`tests/` (397 tests), `tools/build-portable.ps1`, `packaging/`.
+`tests/` (407 tests), `tools/build-portable.ps1`, `packaging/`.
