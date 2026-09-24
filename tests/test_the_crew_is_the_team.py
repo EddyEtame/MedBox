@@ -209,3 +209,25 @@ def test_a_member_names_their_assistant_and_it_becomes_their_wake_word(tmp_path)
     assert "setWakeName: setWakeName" in mic and "wakePattern()" in mic
     me_js = (ROOT / "web" / "me.js").read_text(encoding="utf-8")
     assert "MedBox.mic.setWakeName(" in me_js and "/agent" in me_js
+
+def test_every_dashboard_listens_like_the_ship_page():
+    """Eddy, 24 Sep: "All personal dashboards should be like the main one...
+    there's still voice constantly on, that triggers when medbox is called".
+    The crew page and each personal page load the microphone, give it the
+    button the dock needs, and take the station's ears from the board frame.
+    A personal page also tells the microphone the speaker is its member."""
+    for name in ("crew.html", "me.html"):
+        html = (ROOT / "web" / name).read_text(encoding="utf-8")
+        assert 'src="/static/mic.js"' in html, name
+        assert 'id="micBtn"' in html, name
+    for name in ("crew.js", "me.js"):
+        js = (ROOT / "web" / name).read_text(encoding="utf-8")
+        assert "MedBox.mic.setAvailable(m.ears.available, m.ears.error)" in js, name
+        assert "MedBox.mic.attach(" in js, name
+    me_js = (ROOT / "web" / "me.js").read_text(encoding="utf-8")
+    assert "MedBox.mic.setSelf(true)" in me_js
+    mic = (ROOT / "web" / "mic.js").read_text(encoding="utf-8")
+    assert "self: selfMode" in mic and "setSelf: setSelf" in mic
+    app = (ROOT / "server" / "app.py").read_text(encoding="utf-8")
+    assert '"self": bool(body.get("self"))' in app
+

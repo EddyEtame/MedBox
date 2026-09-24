@@ -467,6 +467,10 @@
 
   /* The language the person asked for, once, after consent. */
   var lang = "fr";
+  // Set by a personal page: the person speaking is the member the page
+  // belongs to, so the referent answers them in the second person.
+  var selfMode = false;
+  function setSelf(v) { selfMode = !!v; }
   var askingLang = false;
   // Kept for the session only: this file stores nothing, by design.
   function setLang(code) { lang = code === "en" ? "en" : "fr"; }
@@ -531,7 +535,7 @@
       method: "POST",
       cache: "no-store",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: text, patient_id: patientId, confidence: confidence, lang: lang })
+      body: JSON.stringify({ text: text, patient_id: patientId, confidence: confidence, lang: lang, self: selfMode })
     }).then(function (response) {
       return response.json().then(function (body) { return { ok: response.ok, body: body }; });
     }).then(function (result) {
@@ -739,6 +743,7 @@
   root.MedBox.mic = {
     attach: attach,
     setWakeName: setWakeName,
+    setSelf: setSelf,
     hasWakeWord: hasWakeWord,
     setAvailable: setAvailable,
     supported: supported,

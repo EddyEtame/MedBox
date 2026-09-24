@@ -105,7 +105,7 @@ def test_the_microphone_is_hidden_until_the_station_says_it_can_listen():
     The markup ships it hidden and the server's `ears` field is what reveals
     it, so a machine with no speech model never offers one.
     """
-    for page in ("web/index.html", "web/ship.html"):
+    for page in ("web/index.html", "web/ship.html", "web/crew.html", "web/me.html"):
         html = (ROOT / page).read_text(encoding="utf-8")
         tag = re.search(r"<button[^>]*id=\"micBtn\"[^>]*>", html)
         assert tag, f"{page} has no microphone button"

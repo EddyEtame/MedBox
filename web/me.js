@@ -145,6 +145,10 @@
     var ws = new WebSocket(proto + "//" + location.host + "/ws");
     ws.onmessage = function (ev) {
       var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+      // The same ears as the ship page: the dock appears when the station
+      // has a speech model, and the wake word is « MedBox » or the name this
+      // member gave their assistant.
+      if (m.type === "board" && m.ears && MedBox.mic) MedBox.mic.setAvailable(m.ears.available, m.ears.error);
       if (m.type === "message" && m.message && m.message.recipient === pid) {
         if (!state.seen[m.message.id]) { state.seen[m.message.id] = true; ping(); load(); }
       } else if (m.type === "board" && state.me) {
@@ -170,7 +174,9 @@
     MedBox.voice.setOn(MedBox.voice.restore());
     paintVoice();
   })();
-  if (MedBox.mic) MedBox.mic.attach(function () { return pid; }, function () {});
+  // Spoken questions here are the member's own: the referent answers in
+  // the second person, as it does for the typed ones.
+  if (MedBox.mic) { MedBox.mic.attach(function () { return pid; }, function () {}); MedBox.mic.setSelf(true); }
   if (MedBox.patientRecord) MedBox.patientRecord.select(pid);
   root.MedBox = root.MedBox || {};
   load();

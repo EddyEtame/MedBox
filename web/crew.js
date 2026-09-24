@@ -167,6 +167,7 @@
     var ws = new WebSocket(proto + "//" + location.host + "/ws");
     ws.onmessage = function (ev) {
       var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+      if (m.type === "board" && m.ears && MedBox.mic) MedBox.mic.setAvailable(m.ears.available, m.ears.error);
       if (m.type === "message" && m.message && m.message.recipient === "crew") {
         if (!state.seen[m.message.id]) { state.seen[m.message.id] = true; ping(); load(); }
       } else if (m.type === "message_read") {
@@ -185,6 +186,9 @@
     btn.classList.toggle("primary", on);
   }
 
+  // No member is selected on this page: a spoken question goes to the
+  // referent as a question about the crew.
+  if (MedBox.mic) MedBox.mic.attach(function () { return null; }, function () {});
   el("msgList").addEventListener("click", function (e) {
     var b = e.target.closest("button.read");
     if (b) readMessage(b.dataset.id);

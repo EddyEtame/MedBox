@@ -1135,7 +1135,8 @@ async def assistant_command(body: dict) -> dict:
         # Not a command the station knows, and not a statement filed under a
         # selected member: a person is talking to the assistant. Answer them,
         # out loud. Eddy, 24 Sep: "it detected speech but did not respond".
-        answer = await assistant_ask({"text": text, "patient_id": patient_id, "lang": lang})
+        answer = await assistant_ask({"text": text, "patient_id": patient_id, "lang": lang,
+                                      "self": bool(body.get("self"))})
         STATION.learning.record(text, command.kind, resolved_by, patient_id)
         return {
             "action": "answer",
