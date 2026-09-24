@@ -153,7 +153,7 @@ Cela a été vérifié contre un faux Ollama volontairement malveillant
 | | |
 |---|---|
 | Une évaluation, modèle chaud | 18 à 36 s ; plafond du clic : 40 s |
-| Une question tapée | 5 à 10 s, sous la même grammaire fermée |
+| Une question tapée | 7 à 12 s, sous la même grammaire fermée |
 | La voix lit une phrase | moins d'une seconde (processeur libre), 3,7 s pour charger la voix la première fois |
 | Clic sur un membre déjà **préparé** | 1 à 2 s depuis le dépôt ; 0,03 s mesuré depuis le dossier portable |
 | Génération | 14 à 15,5 jetons par seconde |
@@ -192,7 +192,7 @@ texte au modèle sans forme de réponse imposée. Concrètement :
 4. **si l'assistant est mort**, la station répond elle-même avec ses faits,
    et le dit (« l'assistant est arrêté : réponse de la station »).
 
-Mesuré : cinq à dix secondes par réponse, sous le même préambule que les
+Mesuré : sept à douze secondes par réponse, sous le même préambule que les
 évaluations, donc sans vider le cache.
 
 ## 7. Ce qu'il apprend

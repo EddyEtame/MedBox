@@ -159,6 +159,23 @@ zero is not a sign**, whatever the model says about it.
   cutting the stream into utterances transcribed locally by faster-whisper
   (language detected per utterance). Only an utterance with the wake word
   « MedBox » is acted on. No browser speech recognition, ever: that is Google.
+- **The assistant speaks and answers typed questions** (Thursday 24 Sep,
+  02:00). `server/tts.py`: Piper `fr_FR-siwis-medium` under `models/piper`,
+  rendered on the server in a worker thread, `POST /api/voice/say` → WAV,
+  `mouth` in `/api/status`; the browser tries it first in
+  `MedBox.voice.speakText` and falls back to a local browser voice, then to
+  silence. What is read is `MedBox.assessment.spoken(body)`: the rebuilt
+  summary, hypothesis names, the one question. `POST /api/assistant/ask`
+  is the text mode: `_facts_for()` writes the facts, `CLIENT.answer()`
+  decodes under `ANSWER_SCHEMA` (two sentences and a source, nothing else),
+  `enforce_answer()` rebuilds it; when the model is down the station answers
+  with the facts and says `held_reason`. « Commande / Question » toggle in
+  the ship's command bar (or a leading `?`), a « Question à l’assistant »
+  field on the flat board. Both are in the manifest, so the guide and the
+  Help panel carry them. Optional dependency `piper-tts==1.8.0`
+  (`requirements-speech.txt`); the builder copies `models\piper` when it
+  exists and the manifest records `voice`. Measured: a sentence in 0.27 s
+  (3.4 s the first time, loading the voice), a question in 7 to 12 s.
 - **The station's voice**: 59 clips rendered with Piper `fr_FR-siwis-medium`
   (CC BY 4.0) and committed, so the demo laptop needs no speech engine and no
   French Windows voice (this laptop has none). Lines are French, twelve
@@ -175,7 +192,7 @@ zero is not a sign**, whatever the model says about it.
   « Rejouer » resets and restarts the scenario identically.
 - **`tools\preflight.ps1`**: the Friday-morning check, one screen, changes
   nothing. **`LICENSE`**: Apache-2.0.
-- **337 tests**: `.\.venv\Scripts\python -m pytest tests\ -q`.
+- **367 tests**: `.\.venv\Scripts\python -m pytest tests\ -q`.
 
 ---
 
