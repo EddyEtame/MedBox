@@ -545,6 +545,20 @@ app = FastAPI(title="MedBox", version=__version__, lifespan=lifespan,
               docs_url=None, redoc_url=None)
 
 
+@app.middleware("http")
+async def revalidate_pages_and_scripts(request, call_next):
+    """A browser that kept yesterday's crew.js showed yesterday's page after
+    a rebuild (24 Sep). Pages and static files are revalidated on every
+    load: with the ETag that is one cheap round trip on localhost, and a new
+    bundle is always what the person sees. API routes keep their own
+    no-store."""
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/static/") or response.headers.get("content-type", "").startswith("text/html"):
+        response.headers.setdefault("Cache-Control", "no-cache, must-revalidate")
+    return response
+
+
 @app.get("/api/status")
 async def status() -> dict:
     simulation = STATION.source.metadata()
