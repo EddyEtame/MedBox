@@ -621,8 +621,7 @@ def closing(d: Doc, tests: int):
     d.bullets(["EPSI — Sujet de Workshop National B3, « Horizon 2080 », session septembre 2026 : contexte, quatre piliers, contraintes offline, scénarios de crise, livrables.",
                "Royal College of Physicians — National Early Warning Score (NEWS) 2, 2017 : barème repris tel quel dans MedBox.",
                "Dépôt MedBox (GitHub EddyEtame/MedBox) : README, docs/COMPRENDRE-MEDBOX.md, docs/USER_GUIDE.md, docs/dossier/.",
-               "Dépôt PsychoSpace (GitHub ANTHONYSITCH/Psychospace) ; dossier technique ARIA de l’équipe 1B (23 septembre 2026) et son document d’organisation, repris dans la partie B.",
-               "Ollama, Qwen2.5-1.5B-Instruct, Llama 3.2, faster-whisper, Piper, three.js : outils embarqués dans les prototypes."])
+               "Dépôt PsychoSpace (GitHub ANTHONYSITCH/Psychospace) ; dossier technique ARIA de l’équipe 1B (23 septembre 2026) et son document d’organisation, repris dans la partie B."])
 
 
 def build(group: str | None) -> Path:
