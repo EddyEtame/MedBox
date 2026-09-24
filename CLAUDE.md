@@ -159,6 +159,28 @@ zero is not a sign**, whatever the model says about it.
   cutting the stream into utterances transcribed locally by faster-whisper
   (language detected per utterance). Only an utterance with the wake word
   « MedBox » is acted on. No browser speech recognition, ever: that is Google.
+- **The crew is the team, each with a page and a port; the referent persona**
+  (Thursday 24 Sep, morning). `TEAM` in `server/sensors/synthetic.py` takes
+  the first six berths (profile version `crew-roster-v3` in both derivations);
+  `db.seed_week` writes a deterministic week per member once (source
+  `synthetic-week`); `db.week_stats`, `/api/crew/week`, `/api/me/{id}`,
+  `/crew`, `/me/{id}`. `medbox.py` starts the main server and one personal
+  server per member (`server/personal.py`: same app, root redirects to the
+  owner's page, no second lifespan), ports chosen free from port+6, exported
+  as `MEDBOX_PERSONAL_PORTS` and shown in `/api/status`. Messages
+  (`db.add_message`/`messages`/`mark_read`, `/api/messages`,
+  `POST /api/messages/{id}/read`, WS frame `message`): one isolation decision
+  → one message to `crew`, one to the person, once (`_messaged`), pages ping
+  with WebAudio and speak on « Lire ». `server/spoken.py` speaks as the
+  ship's medical referent (condition phrases, the decision, the question, no
+  numbers; second person on personal pages); the "not a doctor" wording is
+  gone from prompt, manifest, clips and banner at Eddy's request. Drugs and
+  doses stay blocked; a named condition passes. Consent: heard in French
+  then English on the server, a short answer with an accepting word opens
+  the gate; after consent the sound is on, the language is asked once,
+  wake word answers « Oui ? Que puis-je faire pour vous ? », unrecognised
+  speech goes to the question path and is spoken (`spoken`, `lang`, an
+  English Piper voice `en_US-lessac-medium`).
 - **The assistant speaks and answers typed questions** (Thursday 24 Sep,
   02:00). `server/tts.py`: Piper `fr_FR-siwis-medium` under `models/piper`,
   rendered on the server in a worker thread, `POST /api/voice/say` → WAV,

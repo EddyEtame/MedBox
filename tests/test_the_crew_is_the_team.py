@@ -136,6 +136,10 @@ def test_an_isolation_decision_becomes_two_messages_once(monkeypatch):
     assert mine["spoken"].startswith("Davidson, vous présentez de la fièvre et un manque d’oxygène.")
     read = asyncio.run(station.read_message(mine["id"]))
     assert read["read_at"] is not None
+    # The station singleton writes to the real database: leave no trace.
+    with station.STATION.db.conn:
+        station.STATION.db.conn.execute("DELETE FROM messages WHERE id IN (?, ?)", (after[0]["id"], after[1]["id"]))
+    station.STATION._messaged.discard(("P-03", "proposed"))
 
 
 def test_a_personal_server_opens_on_its_owner_and_runs_no_second_lifespan():

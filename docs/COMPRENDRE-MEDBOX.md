@@ -195,6 +195,35 @@ texte au modèle sans forme de réponse imposée. Concrètement :
 Mesuré : sept à douze secondes par réponse, sous le même préambule que les
 évaluations, donc sans vider le cache.
 
+## 6 bis. L'équipage, chacun chez soi, et les messages
+
+Depuis le 24 septembre, **les six premiers membres d'équipage sont l'équipe**
+(Eddy, Brad, Davidson, Anthony, Frederic, Merove), avec leur ligne de base et
+une semaine de constantes dans la base (simulée autour de la ligne de base,
+enregistrée comme telle, jamais comme une mesure).
+
+- **Le tableau d'équipage** (`/crew`) : la semaine de chacun (moyennes, minimums,
+  maximums, jour par jour), l'état du jour, combien vont bien, combien sont à
+  surveiller ou isolés, trois activités à faire ensemble chaque jour, et les
+  messages du référent.
+- **Une page par personne, un serveur par personne** : la station écoute sur
+  son port principal et sur un port par membre de l'équipe (8771 à 8776). Sur
+  son port, chacun arrive sur sa page : ses constantes du jour face à sa ligne
+  de base, sa semaine, ses messages, deux activités pour lui. Le référent le
+  salue par son nom, lui dit où il en est, lit son évaluation à la deuxième
+  personne et répond à ses questions, tapées ou dites.
+- **Les messages** : quand le référent décide un isolement, il l'écrit à
+  l'équipage et à la personne. Les deux pages sonnent (un signal fort, généré
+  par le navigateur), affichent le message, et le lisent à voix haute sur
+  « Lire ». Une décision, deux messages, une seule fois.
+
+**Le référent parle comme le médecin du bord.** Il ne dit plus « je ne pose
+pas de diagnostic » : il dit ce que la personne présente (« un syndrome
+respiratoire fébrile »), ce qu'il décide (isolement, zone), et ce qu'il demande.
+Ce qui n'a pas changé : la priorité et l'isolement sont calculés sans modèle,
+le modèle ne formule que sous une grammaire fermée, et il ne prescrit aucun
+médicament. L'autorité est dans la voix, la sûreté dans l'architecture.
+
 ## 7. Ce qu'il apprend
 
 Les commandes vocales ou tapées (« montre-moi le plus malade », « scelle la

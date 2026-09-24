@@ -13,7 +13,10 @@ respiratoire à bord » sélectionné, rien lancé. Terminal réduit à côté, 
 
 ## Minute 0 – 1 · L'équipe, en anglais (obligatoire), puis le problème
 
-Chaque membre se présente, une phrase, en anglais. Puis, en français :
+Chaque membre se présente, une phrase, en anglais. **Nous sommes l'équipage** :
+Eddy (commandant), Brad, Davidson, Anthony, Frederic, Merove sont les six
+premiers membres à bord, avec leurs constantes et leur semaine dans la base.
+Puis, en français :
 
 > Quarante personnes, six mois sans contact avec la Terre, et pas de médecin.
 > Le jour où six d'entre elles tombent malades en même temps, qui décide qui
@@ -44,6 +47,15 @@ Cliquer **« Lancer »**. Pendant trente secondes, commenter ce que la salle voi
 
 > Six sur quarante. La station ne met personne en quarantaine toute seule : elle
 > propose, une personne décide.
+
+Au même moment, **le tableau d'équipage** (`/crew`, sur un deuxième écran ou
+un onglet) **sonne** : le référent y a écrit sa décision pour Eddy et Brad.
+Cliquer **« Lire »** : il la dit à voix haute. Sur **la page personnelle de
+Brad** (son propre port, http://<vaisseau>:8772), le même message lui est
+adressé à la deuxième personne : « Brad, vous présentez de la fièvre et une
+respiration rapide. Je vous place en isolement. Restez dans vos quartiers. »
+
+> Chacun à bord a sa page et son serveur. Le référent sait à qui il parle.
 
 Cliquer un candidat, **« Confirmer l'isolement »** : la zone A se scelle,
 « Place d'isolement attribuée ». Laisser les cinq autres en attente.
@@ -94,6 +106,13 @@ confusion nouvelle ». Le score passe MOYEN à l'instant et l'étiquette dit
 ---
 
 ## Les trois réponses à avoir
+
+**« Il se prend pour un médecin ? »**
+À bord, oui : c'est le référent médical du vaisseau, et il parle comme tel.
+Mais ce qu'il affirme tient à des mesures et à un score publié : la priorité
+et l'isolement sont calculés sans modèle, le modèle ne formule que sous une
+grammaire fermée, et il ne prescrit aucun médicament. L'autorité est dans
+la voix ; la sûreté est dans l'architecture.
 
 **« Pourquoi pas un simple chat avec un modèle ? »**
 Parce qu'une station de triage n'est pas une fenêtre de discussion. Quand
