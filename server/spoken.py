@@ -118,3 +118,57 @@ def spoken_station_answer(
     if not name:
         return STATION_ALONE
     return f"L’assistant est arrêté. {name} : score {total}, priorité {urgency_fr}, {isolation}."
+
+
+def _reason_conditions(reason: str) -> list[str]:
+    """The isolation rule's reason, "fever 38.0 C with respiration 24/min", said plainly."""
+    low = str(reason or "").lower()
+    said = []
+    if "fever" in low or "fièvre" in low or "temperature" in low:
+        said.append("de la fièvre")
+    if "spo2" in low or "desaturation" in low or "oxygen" in low or "saturation" in low:
+        said.append("un manque d’oxygène")
+    if "respiration" in low or "breath" in low:
+        said.append("une respiration rapide")
+    return said or ["des mesures hors de votre plage habituelle"]
+
+
+def spoken_isolation_message(name: str, role: str, change: dict) -> tuple[str, str, str]:
+    """(text for the panels, spoken to the crew, spoken to the person).
+
+    The referent has decided an isolation. The crew dashboard gets it in the
+    third person and must acknowledge; the person gets it in the second
+    person, as an instruction, because that is what a ship's doctor does.
+    """
+    conditions = _join_fr(_reason_conditions(change.get("reason", "")))
+    zone = change.get("zone")
+    confirmed = bool(change.get("confirmed"))
+    if confirmed and zone:
+        where_text, where_crew, where_me = (f"Zone {zone} attribuée.", f"zone {zone}", f", zone {zone}")
+    elif confirmed:
+        where_text, where_crew, where_me = ("En attente d’une place.", "en attente d’une place", " dès qu’une place se libère")
+    else:
+        where_text, where_crew, where_me = ("Zone à attribuer.", "zone à attribuer", "")
+    text = (f"Isolement décidé pour {name} ({role}) : {conditions}, exposition confirmée. "
+            f"{where_text} Accusez réception.")
+    crew = f"{name} présente {conditions}. J’ai décidé son isolement, {where_crew}. Accusez réception."
+    me = (f"{name}, vous présentez {conditions}. Je vous place en isolement{where_me}. "
+          "Restez dans vos quartiers ; je vous suis de près.")
+    return text, crew, me
+
+
+def spoken_personal_intro(name: str, week_ok: bool, urgency: str | None, isolation: dict | None) -> str:
+    """What the referent says to a person when they open their own page."""
+    week = ("Cette semaine, vos constantes sont restées dans votre plage habituelle."
+            if week_ok else "Cette semaine, j’ai vu des écarts dans vos constantes.")
+    if isolation and isolation.get("confirmed"):
+        today = "Aujourd’hui, vous êtes en isolement ; je vous suis de près."
+    elif isolation:
+        today = "Aujourd’hui, j’ai décidé votre isolement ; restez dans vos quartiers."
+    elif urgency in ("high", "medium"):
+        today = "Aujourd’hui, je vois un écart et je vous surveille de près."
+    elif urgency == "low":
+        today = "Aujourd’hui, un léger écart ; rien d’inquiétant, je surveille."
+    else:
+        today = "Aujourd’hui, tout est nominal."
+    return f"Bonjour {name}. Je suis MedBox, le référent médical du bord. {week} {today} Posez-moi vos questions."

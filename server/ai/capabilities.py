@@ -63,6 +63,42 @@ CAPABILITIES = [
         ),
     },
     {
+        "id": "crew_dashboard",
+        "title": "Montrer la semaine de tout l’équipage et ce qu’on fait ensemble",
+        "does": (
+            "Le tableau d’équipage (/crew) montre, pour chacun, sa semaine (moyennes, "
+            "minimums, maximums, jour par jour), son état du jour, et ce que le référent "
+            "a décidé. Il propose chaque jour trois activités à faire ensemble pour "
+            "rester en forme et garder le moral, et il reçoit les messages du référent."
+        ),
+        "needs_ai": False,
+        "how": "Ouvrir /crew sur le port principal.",
+    },
+    {
+        "id": "personal_space",
+        "title": "Parler à chaque membre sur sa propre page, sur son propre port",
+        "does": (
+            "Chaque membre de l’équipe a un serveur personnel (un port par personne). "
+            "Sa page montre ses constantes du jour face à sa ligne de base, sa semaine, "
+            "ses messages, deux activités pour lui ; le référent le salue par son nom, "
+            "lui dit où il en est, lit son évaluation à la deuxième personne et répond à "
+            "ses questions, tapées ou dites."
+        ),
+        "needs_ai": False,
+        "how": "Ouvrir http://<vaisseau>:<port personnel>/ ou /me/<identifiant> sur le port principal.",
+    },
+    {
+        "id": "messages",
+        "title": "Prévenir, par un message qui sonne et qui parle",
+        "does": (
+            "Quand le référent décide un isolement, il l’écrit à l’équipage et à la "
+            "personne. Le tableau d’équipage et la page personnelle sonnent, affichent "
+            "le message, et le lisent à voix haute quand on ouvre « Lire »."
+        ),
+        "needs_ai": False,
+        "how": "Automatique dès qu’une décision est prise ; « Lire » sur le message.",
+    },
+    {
         "id": "explain_score",
         "title": "Expliquer le calcul du score d’une personne",
         "does": (

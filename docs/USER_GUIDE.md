@@ -133,6 +133,24 @@ Une voix française embarquée (Piper, hors ligne) lit le résumé d’une éval
 
 *Activer la voix (bouton haut-parleur). Si la voix embarquée manque, seules les phrases pré-enregistrées sont dites.*
 
+#### Montrer la semaine de tout l’équipage et ce qu’on fait ensemble
+
+Le tableau d’équipage (/crew) montre, pour chacun, sa semaine (moyennes, minimums, maximums, jour par jour), son état du jour, et ce que le référent a décidé. Il propose chaque jour trois activités à faire ensemble pour rester en forme et garder le moral, et il reçoit les messages du référent.
+
+*Ouvrir /crew sur le port principal.*
+
+#### Parler à chaque membre sur sa propre page, sur son propre port
+
+Chaque membre de l’équipe a un serveur personnel (un port par personne). Sa page montre ses constantes du jour face à sa ligne de base, sa semaine, ses messages, deux activités pour lui ; le référent le salue par son nom, lui dit où il en est, lit son évaluation à la deuxième personne et répond à ses questions, tapées ou dites.
+
+*Ouvrir http://<vaisseau>:<port personnel>/ ou /me/<identifiant> sur le port principal.*
+
+#### Prévenir, par un message qui sonne et qui parle
+
+Quand le référent décide un isolement, il l’écrit à l’équipage et à la personne. Le tableau d’équipage et la page personnelle sonnent, affichent le message, et le lisent à voix haute quand on ouvre « Lire ».
+
+*Automatique dès qu’une décision est prise ; « Lire » sur le message.*
+
 #### Expliquer le calcul du score d’une personne
 
 Après sélection d’un membre, chaque constante indique pourquoi elle a reçu ses points. MedBox distingue aussi les paramètres réellement mesurés de ceux qui sont absents ou supposés.
@@ -195,7 +213,7 @@ MedBox mesure cinq paramètres et en fait observer deux. L’assistant peut donc
 
 *Inclus dans chaque évaluation de l’assistant.*
 
-9 des 12 capacités documentées ne dépendent pas du modèle. L’IA reste une couche d’explication au-dessus d’un système déterministe.
+12 des 15 capacités documentées ne dépendent pas du modèle. L’IA reste une couche d’explication au-dessus d’un système déterministe.
 
 ## 11. Limites absolues de l’assistant
 

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mon espace · MedBox</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="me">
+<header>
+  <div class="brand">
+    <div class="logo" aria-hidden="true">+</div>
+    <div><h1 id="meName">…</h1><div class="sub" id="meRole">espace personnel</div></div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="k">Aujourd’hui</span><span class="v" id="meToday">&ndash;</span></div>
+    <div class="stat"><span class="k">Semaine</span><span class="v" id="meWeek">&ndash;</span></div>
+  </div>
+  <div class="ctl">
+    <button id="listenBtn" class="btn primary" title="Le référent vous salue et vous dit où vous en êtes">Écouter le référent</button>
+    <button id="voiceBtn" class="btn" title="Sons et voix du référent" aria-pressed="false">Son coupé</button>
+    <a class="btn" href="/crew" title="Tableau d’équipage">Équipage</a>
+  </div>
+</header>
+<main class="crew">
+  <section class="panel messages">
+    <div class="panel-h"><h2>Mes messages</h2><span class="badge" id="unread" hidden>0</span></div>
+    <ul class="msg-list" id="msgList"><li class="hint">Aucun message.</li></ul>
+    <div class="panel-h"><h2>Le référent</h2></div>
+    <p class="intro" id="introText">…</p>
+    <button id="aiBtn" class="btn wide">Mon évaluation</button>
+    <div class="ai" id="aiOut"></div>
+    <form id="askForm" class="ask" autocomplete="off">
+      <input id="askInput" type="text" maxlength="220" placeholder="Posez votre question au référent" aria-label="Question au référent">
+      <button class="btn" type="submit">Demander</button>
+    </form>
+    <p class="cmd-out" id="askOut" aria-live="polite"></p>
+  </section>
+  <section class="panel">
+    <div class="panel-h"><h2>Mes constantes aujourd’hui</h2></div>
+    <table class="week" id="today"><tbody></tbody></table>
+    <div class="panel-h"><h2>Ma semaine</h2></div>
+    <div class="table-wrap"><table class="week" id="week"><thead><tr><th>Jour</th><th>Temp.</th><th>SpO₂</th><th>Pouls</th><th>Resp.</th><th>Tension</th></tr></thead><tbody></tbody></table></div>
+    <div class="panel-h"><h2>Pour moi, aujourd’hui</h2></div>
+    <ul class="activities" id="activities"></ul>
+  </section>
+</main>
+<footer>Données simulées · Cette page est la vôtre ; le référent vous parle ici.</footer>
+<script src="/static/voice.js"></script>
+<script src="/static/mic.js"></script>
+<script src="/static/assessment.js"></script>
+<script src="/static/me.js"></script>
+</body>
+</html>

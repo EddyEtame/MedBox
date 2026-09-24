@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Équipage · MedBox</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo" aria-hidden="true">+</div>
+    <div><h1>Équipage</h1><div class="sub" id="shipName">ESA Horizon</div></div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="k">Équipage</span><span class="v" id="crewTotal">&ndash;</span></div>
+    <div class="stat"><span class="k">En forme</span><span class="v" id="crewFit">&ndash;</span></div>
+    <div class="stat"><span class="k">À surveiller</span><span class="v warn" id="crewImpaired">&ndash;</span></div>
+    <div class="stat"><span class="k">Isolés</span><span class="v crit" id="crewIsolated">&ndash;</span></div>
+  </div>
+  <div class="ctl">
+    <button id="voiceBtn" class="btn" title="Sons et voix du référent" aria-pressed="false">Son coupé</button>
+    <a class="btn" href="/board" title="Tableau de surveillance">Tableau</a>
+    <a class="btn" href="/ship" title="Vue 3D du vaisseau">Vaisseau</a>
+  </div>
+</header>
+<main class="crew">
+  <section class="panel messages">
+    <div class="panel-h"><h2>Messages du référent</h2><span class="badge" id="unread" hidden>0</span></div>
+    <p class="hint">Chaque décision d’isolement arrive ici, sonne, et se lit à voix haute avec « Lire ».</p>
+    <ul class="msg-list" id="msgList"><li class="hint">Aucun message pour l’instant.</li></ul>
+  </section>
+  <section class="panel">
+    <div class="panel-h"><h2>Comment va l’équipage</h2></div>
+    <p class="hint" id="crewSummary">Chargement…</p>
+    <div class="panel-h"><h2>Ensemble, aujourd’hui</h2></div>
+    <ul class="activities" id="activities"></ul>
+  </section>
+  <section class="panel members">
+    <div class="panel-h"><h2>La semaine de chacun</h2></div>
+    <p class="hint">Moyennes des sept derniers jours, état du jour, et la porte de chaque membre.</p>
+    <div class="table-wrap">
+      <table class="week" id="members">
+        <thead><tr><th>Membre</th><th>Aujourd’hui</th><th>Temp.</th><th>SpO₂</th><th>Pouls</th><th>Resp.</th><th>Tension</th><th>Page</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<footer>Données simulées · Le référent décide, l’équipage accuse réception.</footer>
+<script src="/static/voice.js"></script>
+<script src="/static/crew.js"></script>
+</body>
+</html>

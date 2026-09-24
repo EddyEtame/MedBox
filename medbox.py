@@ -45,6 +45,8 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--check", action="store_true", help="verify install and exit")
     parser.add_argument("--reload", action="store_true", help="auto-reload while developing")
+    parser.add_argument("--personal", type=int, default=6,
+                        help="how many personal servers to start after the main one (0: none)")
     args = parser.parse_args()
 
     try:
@@ -87,14 +89,61 @@ def main() -> int:
             print(f"  Start it on a free port:  {python_command('medbox.py')} --port {spare}", file=sys.stderr)
         print("  To change it for good, set `port` under [server] in config.toml.\n", file=sys.stderr)
         return 1
-    print(f"\n  MedBox  ->  http://{host}:{port}\n")
-    uvicorn.run(
-        "server.app:app",
-        host=host,
-        port=port,
-        reload=args.reload,
-        log_level="info",
-    )
+    print(f"\n  MedBox  ->  http://{host}:{port}")
+    if args.reload or args.personal <= 0:
+        print()
+        uvicorn.run("server.app:app", host=host, port=port, reload=args.reload, log_level="info")
+        return 0
+    return serve_all(host, port, args.personal)
+
+
+def serve_all(host: str, port: int, personal: int) -> int:
+    """The main station, then one personal server per team member.
+
+    Same process, same station, same database: each personal port serves the
+    whole application behind its owner's page (server/personal.py), so a
+    tablet on port 8771 is Eddy's, 8772 is Brad's, and the dashboard on the
+    main port sees them all. The ports are chosen free, starting at port + 6.
+    """
+    import asyncio
+    import os
+
+    import uvicorn
+
+    from server.sensors.synthetic import TEAM
+
+    ids = [f"P-{i + 1:02d}" for i in range(min(personal, len(TEAM)))]
+    chosen: list[tuple[str, int]] = []
+    candidate = port + 6
+    for pid in ids:
+        while not port_is_free(host, candidate):
+            candidate += 1
+        chosen.append((pid, candidate))
+        candidate += 1
+    os.environ["MEDBOX_PERSONAL_PORTS"] = ",".join(f"{pid}:{p}" for pid, p in chosen)
+
+    from server.app import app as station_app
+    from server.personal import personal_app
+
+    servers = [uvicorn.Server(uvicorn.Config(station_app, host=host, port=port, log_level="info"))]
+    for pid, p in chosen:
+        name = TEAM[int(pid[2:]) - 1][0]
+        print(f"  {name:<9} ->  http://{host}:{p}")
+        servers.append(uvicorn.Server(uvicorn.Config(personal_app(pid), host=host, port=p, log_level="warning")))
+    print()
+
+    async def run() -> None:
+        tasks = [asyncio.create_task(s.serve()) for s in servers]
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        # One stopping (Ctrl+C lands on one of them) stops them all.
+        for s in servers:
+            s.should_exit = True
+        await asyncio.gather(*pending, return_exceptions=True)
+
+    try:
+        asyncio.run(run())
+    except KeyboardInterrupt:
+        pass
     return 0
 
 

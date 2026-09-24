@@ -31,7 +31,7 @@ BASELINE = {"temperature": 36.8, "spo2": 98.0, "pulse": 72.0, "respiration": 15.
 
 # Conservative healthy demo ranges inside the NEWS2 zero-score ranges. These
 # are not universal population reference intervals.
-BASELINE_PROFILE_VERSION = "healthy-adult-reference-v2"
+BASELINE_PROFILE_VERSION = "crew-roster-v3"  # v3: the first six are the team
 HEALTHY_BASELINE_RANGES = {
     "temperature": (36.5, 37.1),
     "spo2": (97.0, 99.0),
@@ -144,6 +144,20 @@ SURNAMES = [
 ROLES = [
     "Ingénieur de vol", "Botaniste", "Secouriste", "Systèmes", "Navigation",
     "Technicien réacteur", "Hydroponie", "Communications", "Géologue", "Pilote",
+]
+
+# The people on this ship, by name: the team presenting it. They take the
+# first six berths (P-01 to P-06), which is also who the demo scenario
+# afflicts first, so what the jury sees is the team falling ill and the
+# station taking care of them. Eddy, 24 Sep: "we are going to be the people
+# on this ship".
+TEAM = [
+    ("Eddy", "Commandant de bord"),
+    ("Brad", "Ingénieur de vol"),
+    ("Davidson", "Systèmes"),
+    ("Anthony", "Navigation"),
+    ("Frederic", "Communications"),
+    ("Merove", "Secouriste"),
 ]
 
 
@@ -320,6 +334,10 @@ class ScenarioSource:
             # same names and roles across simulator versions.
             role = self.rng.choice(ROLES)
             patient_seed = self.rng.randrange(1, 10_000)
+            if i < len(TEAM):
+                # Drawn, then replaced: the generator's stream is untouched,
+                # so the other thirty-four keep their names, roles and seeds.
+                name, role = TEAM[i]
             self.patients[pid] = SimPatient(
                 id=pid,
                 name=name,

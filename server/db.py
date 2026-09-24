@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 
-BASELINE_PROFILE_VERSION = "healthy-adult-reference-v2"  # v2: the cuff, 114-132 mmHg
+BASELINE_PROFILE_VERSION = "crew-roster-v3"  # v2: the cuff, 114-132 mmHg; v3: the team on board
 BASELINE_RANGES = {
     # Conservative resting ranges: every generated profile remains in the
     # NEWS2 zero-score interval. These are synthetic reference anchors, not
@@ -168,6 +168,18 @@ CREATE TABLE IF NOT EXISTS operator_observations (
     at            REAL NOT NULL,
     actor         TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS messages (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    at          REAL NOT NULL,
+    recipient   TEXT NOT NULL,
+    patient_id  TEXT,
+    kind        TEXT NOT NULL,
+    text        TEXT NOT NULL,
+    spoken      TEXT NOT NULL,
+    read_at     REAL
+);
+CREATE INDEX IF NOT EXISTS idx_messages_recipient_at ON messages(recipient, at);
 """
 
 # Columns added after the first databases were created. SQLite cannot add a
@@ -441,6 +453,114 @@ class Database:
                 "at": r["at"], "actor": r["actor"],
             }
             for r in rows
+        }
+
+    # ---- a week of history, and what it says ------------------------------
+    def seed_week(self, baselines: dict[str, dict], now: float, days: int = 7, per_day: int = 4) -> int:
+        """Readings for the past week around each member's baseline, once.
+
+        The dashboards show a week; a station started from an empty base
+        would show one minute. Deterministic jitter from the member id and
+        the slot, so two launches give the same week; recorded with its own
+        source and provenance, so nothing can mistake it for a measurement.
+        Members who already have history older than an hour are left alone.
+        """
+        jitter = {"temperature": 0.25, "spo2": 0.8, "pulse": 5.0, "respiration": 1.5, "systolic_bp": 6.0}
+        inserted = 0
+        with self.conn:
+            for pid, base in baselines.items():
+                seen = self.conn.execute(
+                    "SELECT 1 FROM readings WHERE patient_id=? AND at < ? LIMIT 1", (pid, now - 2 * 86400)
+                ).fetchone()
+                if seen:
+                    continue
+                for day in range(days, 0, -1):
+                    for slot in range(per_day):
+                        at = now - day * 86400 + (slot + 1) * (86400 / (per_day + 1))
+                        vitals: dict[str, float] = {}
+                        for key, spread in jitter.items():
+                            if base.get(key) is None:
+                                continue
+                            digest = hashlib.blake2b(f"week|{pid}|{day}|{slot}|{key}".encode(), digest_size=8).digest()
+                            unit = int.from_bytes(digest[:4], "big") / 2**32
+                            value = float(base[key]) + (unit * 2 - 1) * spread
+                            vitals[key] = round(value) if key == "systolic_bp" else round(value, 2 if key == "temperature" else 1)
+                        self.record_reading(pid, at, vitals, "synthetic-week", {
+                            "model": "weekly-seed-v1",
+                            "note_fr": "Semaine simulée autour de la ligne de base personnelle",
+                        })
+                        inserted += 1
+        return inserted
+
+    def week_stats(self, patient_id: str, now: float, days: int = 7) -> dict[str, Any]:
+        """Average, low and high of each vital over the past days, and per day."""
+        import datetime as _dt
+
+        since = now - days * 86400
+        rows = self.conn.execute(
+            "SELECT at, temperature, spo2, pulse, respiration, systolic_bp FROM readings"
+            " WHERE patient_id=? AND at >= ? ORDER BY at",
+            (patient_id, since),
+        ).fetchall()
+        vitals = ("temperature", "spo2", "pulse", "respiration", "systolic_bp")
+        out: dict[str, Any] = {"days": days, "count": len(rows), "vitals": {}, "daily": []}
+        for key in vitals:
+            values = [r[key] for r in rows if r[key] is not None]
+            out["vitals"][key] = (
+                {"avg": round(sum(values) / len(values), 1), "min": round(min(values), 1), "max": round(max(values), 1)}
+                if values else None
+            )
+        buckets: dict[str, list] = {}
+        for r in rows:
+            buckets.setdefault(_dt.date.fromtimestamp(r["at"]).isoformat(), []).append(r)
+        for day in sorted(buckets):
+            group = buckets[day]
+            entry: dict[str, Any] = {"day": day, "count": len(group)}
+            for key in vitals:
+                values = [r[key] for r in group if r[key] is not None]
+                entry[key] = round(sum(values) / len(values), 1) if values else None
+            out["daily"].append(entry)
+        return out
+
+    # ---- what the referent tells people, and whether they read it ---------
+    def add_message(self, recipient: str, kind: str, text: str, spoken: str,
+                    patient_id: str | None = None, at: float | None = None) -> dict[str, Any]:
+        with self.conn:
+            cur = self.conn.execute(
+                "INSERT INTO messages (at, recipient, patient_id, kind, text, spoken) VALUES (?,?,?,?,?,?)",
+                (float(at if at is not None else time.time()), _label(recipient, "recipient", maximum=32),
+                 patient_id, _label(kind, "kind", maximum=32), str(text)[:600], str(spoken)[:600]),
+            )
+        return self.message(int(cur.lastrowid))  # type: ignore[arg-type]
+
+    def message(self, message_id: int) -> dict[str, Any] | None:
+        row = self.conn.execute("SELECT * FROM messages WHERE id=?", (message_id,)).fetchone()
+        return self._message(row) if row else None
+
+    def messages(self, recipient: str | None = None, unread_only: bool = False, limit: int = 50) -> list[dict[str, Any]]:
+        sql = "SELECT * FROM messages"
+        clauses, params = [], []
+        if recipient:
+            clauses.append("recipient=?")
+            params.append(recipient)
+        if unread_only:
+            clauses.append("read_at IS NULL")
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY at DESC, id DESC LIMIT ?"
+        params.append(max(1, min(int(limit), 500)))
+        return [self._message(r) for r in self.conn.execute(sql, params).fetchall()]
+
+    def mark_read(self, message_id: int) -> dict[str, Any] | None:
+        with self.conn:
+            self.conn.execute("UPDATE messages SET read_at=COALESCE(read_at, ?) WHERE id=?", (time.time(), message_id))
+        return self.message(message_id)
+
+    @staticmethod
+    def _message(row) -> dict[str, Any]:
+        return {
+            "id": row["id"], "at": row["at"], "recipient": row["recipient"], "patient_id": row["patient_id"],
+            "kind": row["kind"], "text": row["text"], "spoken": row["spoken"], "read_at": row["read_at"],
         }
 
     def record_event(self, kind: str, detail: str, patient_id: str | None = None) -> None:

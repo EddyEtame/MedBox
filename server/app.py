@@ -12,6 +12,7 @@ import hashlib
 import json
 import logging
 import math
+import os
 import sqlite3
 import tempfile
 import time
@@ -37,7 +38,8 @@ from .quarantine import QuarantineRegistry
 from .protocols import ProtocolDataError, ProtocolEngine
 from .sensors.synthetic import BASELINE_PROFILE_VERSION, ScenarioSource
 from .speech import Announcer
-from .spoken import spoken_assessment, spoken_station_answer
+from .spoken import spoken_assessment, spoken_isolation_message, spoken_personal_intro, spoken_station_answer
+from .activities import for_crew, for_member
 from .tts import MAX_CHARS as VOICE_MAX_CHARS, SPEAKER, VOICE_NAME, speaker_for
 from .voice import consent_answer
 from .voice import TRANSCRIBER
@@ -109,6 +111,11 @@ class MedBox:
         self.source.set_baselines(
             {row["patient_id"]: row for row in self.db.baselines()}
         )
+        # A week of history around each baseline, once, so the crew dashboard
+        # and the personal pages have a week to show from the first launch.
+        self.db.seed_week({pid: dict(p.baseline) for pid, p in self.source.patients.items()}, time.time())
+        # Isolation decisions already told to the crew and to the person.
+        self._messaged: set[tuple[str, str]] = set()
         DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
         # What crew members say, kept apart from what the box measures. The
         # log is handed the recorder rather than importing the database, so
@@ -146,6 +153,7 @@ class MedBox:
         self.source.reset()
         self.symptoms.clear()
         self.announcer.reset()
+        self._messaged.clear()
         self.quarantine.assignments.clear()
         self.scenario = sc
         self.scenario_t0 = time.monotonic()
@@ -160,6 +168,7 @@ class MedBox:
         self.source.reset()
         self.symptoms.clear()
         self.announcer.reset()
+        self._messaged.clear()
         self.quarantine.assignments.clear()
 
     def _advance_scenario(self, now: float) -> None:
@@ -257,6 +266,19 @@ class MedBox:
             elapsed = time.perf_counter() - started
             await asyncio.sleep(max(0.0, interval - elapsed))
 
+    def _message_for(self, change: dict, patient) -> None:
+        """Tell the crew, and the person, once per decision: a message that
+        pings the dashboards and is read out loud on « Lire »."""
+        state = "confirmed" if change.get("confirmed") else "proposed"
+        key = (change["patient_id"], state)
+        if key in self._messaged:
+            return
+        self._messaged.add(key)
+        text, to_crew, to_me = spoken_isolation_message(patient.name, patient.role, change)
+        for recipient, spoken in (("crew", to_crew), (change["patient_id"], to_me)):
+            message = self.db.add_message(recipient, f"isolation_{state}", text, spoken, change["patient_id"])
+            BUS.publish({"type": "message", "message": message})
+
     def _frame(self) -> None:
         """One tick of the fast track. Synchronous: nothing here may wait."""
         now = time.time()
@@ -301,6 +323,7 @@ class MedBox:
                     reading.patient_id,
                 )
                 BUS.publish({"type": "quarantine", "change": change.to_dict()})
+                self._message_for(change.to_dict(), patient)
                 # Candidates too: "isolement proposé" is the line the whole
                 # confirm-by-a-person design exists for.
                 say.extend(self.announcer.on_quarantine(
@@ -530,6 +553,7 @@ async def status() -> dict:
         "scenario_catalog": scenarios.catalog(),
         "screens_connected": BUS.subscriber_count,
         "assessments_ready": sorted(STATION.assessments),
+        "personal_ports": PERSONAL_PORTS,
         "simulation": {
             "label": simulation["label_fr"],
             "clock": simulation["clock"],
@@ -1318,7 +1342,7 @@ async def evaluate_local_protocol(patient_id: str, body: dict) -> JSONResponse:
 
 
 @app.post("/api/assess/{patient_id}")
-async def ai_assess(patient_id: str, fresh: bool = False) -> JSONResponse:
+async def ai_assess(patient_id: str, fresh: bool = False, me: bool = False) -> JSONResponse:
     """Slow track. Returns 503 when the AI is down — the board is unaffected.
 
     The answer is usually already there. The station assesses the worst crew
@@ -1337,7 +1361,7 @@ async def ai_assess(patient_id: str, fresh: bool = False) -> JSONResponse:
             and held.get("news2_at_assessment") == triage.get("total")
             and time.time() - held.get("at", 0) < 180):
         body = {**held, "cached": True, "age_seconds": round(time.time() - held["at"], 1)}
-        return JSONResponse(content={**body, "spoken": _spoken_for(patient_id, name, body)})
+        return JSONResponse(content={**body, "spoken": _spoken_for(patient_id, name, body, me)})
     if held is not None and held.get("ok") and not CLIENT.available:
         # The demo's own beat: the assistant is killed on stage. What it
         # wrote before it died is still what it wrote, dated and labelled;
@@ -1346,7 +1370,7 @@ async def ai_assess(patient_id: str, fresh: bool = False) -> JSONResponse:
             **held, "cached": True, "age_seconds": round(time.time() - held["at"], 1),
             "held_reason": "assistant_down",
         }
-        return JSONResponse(content={**body, "spoken": _spoken_for(patient_id, name, body)})
+        return JSONResponse(content={**body, "spoken": _spoken_for(patient_id, name, body, me)})
     result = await STATION.assess_now(patient_id)
     if result is None:
         return JSONResponse(
@@ -1382,7 +1406,7 @@ async def ai_assess(patient_id: str, fresh: bool = False) -> JSONResponse:
     # `spoken` is the one breath the voice says about it: no numbers, the
     # pattern in plain words, not a diagnosis, the question.
     body = {**safe, "cached": False, "age_seconds": 0.0}
-    return JSONResponse(content={**body, "spoken": _spoken_for(patient_id, name, body)})
+    return JSONResponse(content={**body, "spoken": _spoken_for(patient_id, name, body, me)})
 
 
 def _spoken_for(patient_id: str, name: str | None, body: dict, second_person: bool = False) -> str:
@@ -1526,6 +1550,105 @@ async def assistant_ask(body: dict) -> dict:
     return out
 
 
+PERSONAL_PORTS: dict[str, int] = {}
+for _pair in (os.environ.get("MEDBOX_PERSONAL_PORTS") or "").split(","):
+    if ":" in _pair:
+        _pid, _port = _pair.split(":", 1)
+        try:
+            PERSONAL_PORTS[_pid.strip()] = int(_port)
+        except ValueError:
+            pass
+
+
+@app.get("/api/messages")
+async def list_messages(to: str | None = None, unread: int = 0) -> dict:
+    """What the referent has told the crew ("crew") or one member (their id)."""
+    return {"messages": STATION.db.messages(to, bool(unread))}
+
+
+@app.post("/api/messages/{message_id}/read")
+async def read_message(message_id: int) -> dict:
+    """Opened by a person: marked read, and returned with its spoken form so
+    the page can say it."""
+    message = STATION.db.mark_read(message_id)
+    if message is None:
+        raise HTTPException(404, "Message inconnu")
+    BUS.publish({"type": "message_read", "id": message_id})
+    return message
+
+
+def _member_summary(pid: str, now: float) -> dict:
+    patient = STATION.source.patients[pid]
+    entry = STATION.latest.get(pid) or {}
+    p = entry.get("patient") or {}
+    t = entry.get("triage") or {}
+    iso = STATION.quarantine.assignments.get(pid)
+    return {
+        "id": pid,
+        "name": patient.name,
+        "role": patient.role,
+        "port": PERSONAL_PORTS.get(pid),
+        "baseline": dict(patient.baseline),
+        "vitals": {k: p.get(k) for k in ("temperature", "spo2", "pulse", "respiration", "systolic_bp")},
+        "today": {"total": t.get("total"), "urgency": t.get("urgency"), "score_label": t.get("score_label"),
+                  "measured": t.get("measured")},
+        "week": STATION.db.week_stats(pid, now),
+        "isolation": iso.to_dict() if iso else None,
+    }
+
+
+def _week_ok(week: dict, baseline: dict) -> bool:
+    """Whether the week stayed within the usual range of this person."""
+    tol = {"temperature": 0.6, "spo2": 2.0, "pulse": 12.0, "respiration": 4.0, "systolic_bp": 15.0}
+    for key, span in tol.items():
+        stats, base = (week.get("vitals") or {}).get(key), baseline.get(key)
+        if not stats or base is None:
+            continue
+        if abs(stats["max"] - base) > span or abs(stats["min"] - base) > span:
+            return False
+    return True
+
+
+@app.get("/api/crew/week")
+async def crew_week() -> dict:
+    """Everyone's week, how the crew is doing today, and what to do together."""
+    now = time.time()
+    members = [_member_summary(pid, now) for pid in sorted(STATION.source.patients)]
+    isolated = sum(1 for m in members if m["isolation"] and m["isolation"].get("confirmed"))
+    proposed = sum(1 for m in members if m["isolation"] and not m["isolation"].get("confirmed"))
+    impaired = sum(1 for m in members if (m["today"]["urgency"] or "routine") != "routine")
+    return {
+        "at": now,
+        "ship": CONFIG.ship.name,
+        "summary": {"total": len(members), "fit": len(members) - impaired, "impaired": impaired,
+                    "isolated": isolated, "proposed": proposed},
+        "members": members,
+        "activities": for_crew(now, isolated=isolated + proposed),
+        "messages": STATION.db.messages("crew", limit=20),
+    }
+
+
+@app.get("/api/me/{patient_id}")
+async def me(patient_id: str) -> dict:
+    """One person's page: their week, their today, what the referent tells them."""
+    if patient_id not in STATION.source.patients:
+        raise HTTPException(404, f"Membre inconnu : {patient_id}")
+    now = time.time()
+    summary = _member_summary(patient_id, now)
+    week_ok = _week_ok(summary["week"], summary["baseline"])
+    urgency = summary["today"]["urgency"]
+    intro = spoken_personal_intro(summary["name"], week_ok, urgency, summary["isolation"])
+    return {
+        **summary,
+        "week_ok": week_ok,
+        "observations": STATION.observations.get(patient_id),
+        "reported": STATION.symptoms.for_patient(patient_id)[-5:],
+        "messages": STATION.db.messages(patient_id, limit=20),
+        "activities": for_member(urgency, bool(summary["isolation"]), now),
+        "intro": {"text": intro, "spoken": intro},
+    }
+
+
 @app.get("/api/voice/status")
 async def voice_status() -> dict:
     return {"available": SPEAKER.available(), "voice": VOICE_NAME, "error": SPEAKER.last_error}
@@ -1617,3 +1740,15 @@ async def ship() -> FileResponse:
 @app.get("/board")
 async def board_page() -> FileResponse:
     return _page("index.html")
+
+
+@app.get("/crew")
+async def crew_page() -> FileResponse:
+    return _page("crew.html")
+
+
+@app.get("/me/{patient_id}")
+async def me_page(patient_id: str) -> FileResponse:
+    if patient_id not in STATION.source.patients:
+        raise HTTPException(404, f"Membre inconnu : {patient_id}")
+    return _page("me.html")
