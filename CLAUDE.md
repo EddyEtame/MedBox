@@ -62,6 +62,25 @@ by hand in e704728 (keep the current base, port his features): if a
 teammate pushes again, do the same, and never take their automatic
 quarantine release (release is a person's decision here).
 
+Pushing works again since 24 Sep 10:44 (`main`, `wednesday-session`, tag
+`v0.9-soutenance` are on GitHub). Two traps: the local guard
+`.git/hooks/pre-push` (untracked) rejects any outgoing commit whose author,
+committer or message names an AI product; for a *new* branch it used to
+scan the whole history and tripped on Brad's own merge commit (his branch
+was named `codex/...`), so it now ignores commits already on `origin/*`
+(`git rev-list <sha> --not --remotes=origin`; the old copy is
+`pre-push.bak-2026-09-24`). And the stored GitHub credential must be the
+one with write access to `EddyEtame/MedBox`.
+
+### The dossier and the deck
+
+`docs/dossier/NOTE-POUR-LE-DOSSIER.md` (24 Sep) is the state of the project
+written for whoever edits the PDF and the deck: done / open / corrections /
+paragraphs to paste / demo script. Keep it current when a feature lands.
+The PDF and PPTX themselves never enter the repository. We *present* the
+project (Fri 25 Sep local, Wed 30 Sep national); the code is not submitted,
+so the bundle stays on Eddy's PC and the USB stick.
+
 ### One folder: `Desktop\MedBox`
 
 Since Thursday 24 Sep, 00:15, this is the only working copy. The Monday to
