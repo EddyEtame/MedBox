@@ -232,6 +232,32 @@ zero is not a sign**, whatever the model says about it.
   and `/static/*` carry `no-cache, must-revalidate` because the browser
   served a stale `crew.js` after a rebuild; the crew header counts
   decisions to confirm; titles are « page · MedBox »; panels rise in.
+- **The referent answers in seconds** (`6c22969`, evening of 24 Sep). Measured
+  on the defence laptop: the model reads ~35 tokens a second of prompt and
+  writes ~16, so every token it has not seen is time, and a question that
+  waited behind a background assessment ran out its ten seconds (Eddy: « he
+  couldn't find any answer when I asked him to present himself »). The
+  station now answers itself, at once, everything its registers hold
+  (`_station_shortcut` in `server/app.py`): the introduction, the crew and
+  who is isolated, a member's state, one vital with its number, a complaint
+  (written to the dossier, `_symptom_answer`), activity / rest / « que
+  dois-je faire ? » (`_advice_answer`), and a member named in the question
+  becomes its subject (`_named_member`, `_subject`). Open questions go to
+  the model with the essentials only (`_facts_for(brief=True)`: state,
+  isolation, the vitals out of range, what was declared), the fixed lines
+  first (`ANSWER_RULES_BRIEF`, `ANSWER_HEAD_SELF/OPERATOR`) so the cached
+  prefix survives, the warm-up primes exactly that prefix, a closing cue
+  (`ANSWER_CUE`), 10 s and one sentence stopped at the line break;
+  `salvage_answer` keeps the sentence out of a JSON habit; `_ungrounded`
+  also holds back any number the facts do not carry. A question drops the
+  background assessment (`yield_to_question`; `assess_or_join` for the
+  on-demand click), `num_batch` is 128 so the drop lands within seconds,
+  and the launcher sets `OLLAMA_NUM_PARALLEL=2` for two cache slots, not
+  two concurrent requests. Measured through the bundle: station answers
+  0.0 s; model 1.2–2.8 s in routine, 3.9–5 s during the scenario. RAM is
+  the other half: two Ollama servers (the tray app's and the bundle's, on
+  11434 and 11555) held 2.8 GB of duplicate runners with 0.8 GB free;
+  `tools/preflight.ps1` flags both. Rehearsal script: `docs/CAHIER-DE-SOUTENANCE.md`.
 - **Every dashboard listens** (`5c345d6`): the crew page and each personal
   page ship the hidden `micBtn`, load `mic.js`, and take the station's ears
   from the board frame like the ship page. A personal page calls
@@ -319,6 +345,8 @@ zero is not a sign**, whatever the model says about it.
 | introduction | 3.1 s; same system prompt as an assessment, so it evicts nothing |
 | intent classification | one enum token; 8 s ceiling |
 | board during an assessment | 9–10 frames a second |
+| a question the station answers itself (state, vital, isolation, complaint, advice, named member) | 0.0 s |
+| an open question, model free (24 Sep evening, lean facts, cached prefix) | 1.2–2.8 s; 3.9–5 s during the scenario; ceiling 10 s then the station's own sentence |
 | the portable bundle, launched cold from the SSD | station answering in < 25 s; assistant warmed at 40 s (6.7 s load + 33 s prefix); prefetched click 0.03 s; relaunched assistant back in 1 s |
 
 The cache rule: any request under a *different* system prompt evicts the
