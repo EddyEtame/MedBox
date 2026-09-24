@@ -96,8 +96,18 @@ $env:OLLAMA_KEEP_ALIVE = "2h"
 if (-not (Test-Path -LiteralPath $APP)) {
     Warn "Ollama n'est pas installe ($APP) : la station demarre sans assistant (la page le dit)."
 } else {
+    # Already running with two slots (its own log says so): leave it, with
+    # its model loaded and warm, instead of reloading everything.
+    $slots = ""
+    $serverLog = Join-Path $env:LOCALAPPDATA "Ollama\server.log"
+    if (Test-Path -LiteralPath $serverLog) {
+        $line = Select-String -Path $serverLog -Pattern 'OLLAMA_NUM_PARALLEL:(\d+)' | Select-Object -Last 1
+        if ($line) { $slots = $line.Matches[0].Groups[1].Value }
+    }
     $elevated = @(Get-Process -Name "ollama", "ollama app" -ErrorAction SilentlyContinue | Where-Object { -not $_.Path })
-    if ($elevated.Count -gt 0 -and (Test-Port $OLLAMA_PORT)) {
+    if ($slots -eq "2" -and (Test-Port $OLLAMA_PORT)) {
+        Good "Ollama en ecoute sur le port $OLLAMA_PORT, deja avec deux emplacements de cache"
+    } elseif ($elevated.Count -gt 0 -and (Test-Port $OLLAMA_PORT)) {
         Warn "Un ollama.exe tourne avec des droits eleves (PID $(($elevated | ForEach-Object { $_.Id }) -join ', ')) : je l'utilise tel quel."
     } else {
         $running = @(Get-Process -Name "ollama", "ollama app" -ErrorAction SilentlyContinue)

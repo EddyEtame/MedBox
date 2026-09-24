@@ -258,6 +258,18 @@ zero is not a sign**, whatever the model says about it.
   the other half: two Ollama servers (the tray app's and the bundle's, on
   11434 and 11555) held 2.8 GB of duplicate runners with 0.8 GB free;
   `tools/preflight.ps1` flags both. Rehearsal script: `docs/CAHIER-DE-SOUTENANCE.md`.
+- **The demo starts from the working copy, not the portable folder** (`68350e2`,
+  Eddy at 22:30 on 24 Sep: « I want everything on the MedBox folder... I just
+  want to be able to click on it on my PC and it opens up properly »).
+  `DEMARRER-LA-DEMO.cmd` at the root of the repo runs `tools/demarrer.ps1`:
+  the installed Ollama is (re)started with `OLLAMA_NUM_PARALLEL=2` inherited
+  from that window (kept as is when its own `server.log` already says 2, so
+  the model stays warm), `medbox.py` runs in that window with the six
+  personal pages, the browser opens when `/api/status` answers, closing the
+  window stops everything. Measured: station 11–15 s after the double-click,
+  assistant warm at 18 s when Ollama already held the model, 55–170 s cold.
+  Never leave a portable-folder instance running on his PC: it takes 8765
+  and 11555 and every other launch then says « already in use ».
 - **One double-click before the jury** (`6325e62`): `packaging/DEMARRER-LA-DEMO.cmd`
   is copied to the root of the portable folder by `build-portable.ps1`; it
   runs `tools\preflight.ps1` then `MedBox.exe`, and a blocking line keeps its
