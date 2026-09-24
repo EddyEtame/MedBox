@@ -1585,6 +1585,21 @@ async def read_message(message_id: int) -> dict:
     return message
 
 
+# A week does not change between two page loads: forty members' week stats
+# are forty queries, five seconds on a busy CPU (measured 24 Sep). Kept for a
+# minute per member; a new reading is at most a minute late on the dashboard.
+_WEEK_CACHE: dict[str, tuple[float, dict]] = {}
+
+
+def _week_for(pid: str, now: float) -> dict:
+    hit = _WEEK_CACHE.get(pid)
+    if hit and now - hit[0] < 60:
+        return hit[1]
+    week = STATION.db.week_stats(pid, now)
+    _WEEK_CACHE[pid] = (now, week)
+    return week
+
+
 def _member_summary(pid: str, now: float) -> dict:
     patient = STATION.source.patients[pid]
     entry = STATION.latest.get(pid) or {}
@@ -1600,7 +1615,7 @@ def _member_summary(pid: str, now: float) -> dict:
         "vitals": {k: p.get(k) for k in ("temperature", "spo2", "pulse", "respiration", "systolic_bp")},
         "today": {"total": t.get("total"), "urgency": t.get("urgency"), "score_label": t.get("score_label"),
                   "measured": t.get("measured")},
-        "week": STATION.db.week_stats(pid, now),
+        "week": _week_for(pid, now),
         "isolation": iso.to_dict() if iso else None,
     }
 

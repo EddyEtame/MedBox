@@ -299,6 +299,18 @@ CPU (2P+8E); 12 threads run at 3 tokens/s. The installer leaves an
 `assistant.ps1 stop` now names it and judges the kill by `/api/status`;
 `preflight.ps1` refuses to say « Pret » while one exists.
 
+**Seven servers in one process** (24 Sep morning): once, right after a
+restart, the main port accepted connections and never answered while the six
+personal ports (same app, same loop) answered in 0.1 s; a clean stop, wait
+for the port to free, and start again fixed it, and it did not recur through
+the rest of the morning or in the bundle's cold launch. Not understood. If it
+recurs: bind the sockets explicitly and pass them to `Server.serve()`, or
+serve the main port with `uvicorn.run` and the personal ones from the
+lifespan. Two Ollama warm-ups at once (repo station plus the bundle under
+test) saturate the CPU for a minute and make every page look broken: never
+test the bundle beside the running station on the day. `/api/crew/week` is
+forty week queries: cached a minute per member.
+
 **The portable bundle**: the embeddable Python with `import site` in its
 `._pth` still reads the user's roaming `site-packages` (`-s` and
 `PYTHONNOUSERSITE=1` in the launcher; the smoke test refuses a leaking
