@@ -177,3 +177,35 @@ def test_the_pages_exist_and_stay_guarded():
             assert same_line or early_return, f"{name}: {line.strip()}"
     me_js = (ROOT / "web" / "me.js").read_text(encoding="utf-8")
     assert "?me=1" in me_js and '"self": true' in me_js.replace("self: true", '"self": true')
+
+
+def test_every_page_can_reach_every_other_and_each_personal_space():
+    for name in ("ship.html", "index.html", "crew.html", "me.html"):
+        assert 'src="/static/nav.js"' in (ROOT / "web" / name).read_text(encoding="utf-8"), name
+    nav = (ROOT / "web" / "nav.js").read_text(encoding="utf-8")
+    assert "/api/status" in nav and "personal_pages" in nav and "Espaces personnels" in nav
+    body = asyncio.run(station.status())
+    pages = body["personal_pages"]
+    assert [p["name"] for p in pages] == [n for n, _ in TEAM]
+
+
+def test_a_member_names_their_assistant_and_it_becomes_their_wake_word(tmp_path):
+    db = Database(tmp_path / "pref.db")
+    db.upsert_patients([("P-01", "Eddy", "Commandant de bord")])
+    assert db.agent_name("P-01") == "MedBox"
+    assert db.set_agent_name("P-01", "  Nova  ") == "Nova"
+    assert db.set_agent_name("P-01", "") == "MedBox"
+    out = asyncio.run(station.set_agent("P-02", {"name": "Astra"}))
+    assert out["agent_name"] == "Astra"
+    me = asyncio.run(station.me("P-02"))
+    assert me["agent_name"] == "Astra" and "Je suis Astra, votre référent" in me["intro"]["spoken"]
+    with pytest.raises(HTTPException):
+        asyncio.run(station.set_agent("P-02", {"name": "x"}))
+    with pytest.raises(HTTPException):
+        asyncio.run(station.set_agent("P-02", {"name": "R2D2!"}))
+    asyncio.run(station.set_agent("P-02", {"name": ""}))
+    assert asyncio.run(station.me("P-02"))["agent_name"] == "MedBox"
+    mic = (ROOT / "web" / "mic.js").read_text(encoding="utf-8")
+    assert "setWakeName: setWakeName" in mic and "wakePattern()" in mic
+    me_js = (ROOT / "web" / "me.js").read_text(encoding="utf-8")
+    assert "MedBox.mic.setWakeName(" in me_js and "/agent" in me_js

@@ -20,6 +20,7 @@
     <button id="listenBtn" class="btn primary" title="Le référent vous salue et vous dit où vous en êtes">Écouter le référent</button>
     <button id="voiceBtn" class="btn" title="Sons et voix du référent" aria-pressed="false">Son coupé</button>
     <a class="btn" href="/crew" title="Tableau d’équipage">Équipage</a>
+    <a class="btn" href="/board" title="Tableau de surveillance">Tableau</a>
   </div>
 </header>
 <main class="crew">
@@ -43,9 +44,22 @@
     <div class="table-wrap"><table class="week" id="week"><thead><tr><th>Jour</th><th>Temp.</th><th>SpO₂</th><th>Pouls</th><th>Resp.</th><th>Tension</th></tr></thead><tbody></tbody></table></div>
     <div class="panel-h"><h2>Pour moi, aujourd’hui</h2></div>
     <ul class="activities" id="activities"></ul>
+    <div class="panel-h"><h2>Mon assistant</h2></div>
+    <p class="hint">Donnez-lui un nom : il répondra aussi à ce nom, en plus de « MedBox ».</p>
+    <form id="agentForm" class="ask" autocomplete="off">
+      <input id="agentInput" type="text" maxlength="24" placeholder="MedBox" aria-label="Nom de votre assistant">
+      <button class="btn" type="submit">Nommer</button>
+    </form>
+    <p class="cmd-out" id="agentOut" aria-live="polite"></p>
+  </section>
+  <section class="panel members">
+    <div class="panel-h"><h2>Mon vaisseau</h2></div>
+    <p class="hint">Le vaisseau, avec vous en surbrillance et la zone qui vous concerne.</p>
+    <div class="card-ship"><iframe id="myShip" title="Vaisseau" src="about:blank"></iframe></div>
   </section>
 </main>
 <footer>Données simulées · Cette page est la vôtre ; le référent vous parle ici.</footer>
+<script src="/static/nav.js"></script>
 <script src="/static/voice.js"></script>
 <script src="/static/mic.js"></script>
 <script src="/static/assessment.js"></script>

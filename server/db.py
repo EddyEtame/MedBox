@@ -183,6 +183,11 @@ CREATE TABLE IF NOT EXISTS operator_observations (
     actor         TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS preferences (
+    patient_id  TEXT PRIMARY KEY REFERENCES patients(id),
+    agent_name  TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS messages (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     at          REAL NOT NULL,
@@ -651,6 +656,24 @@ class Database:
                                events=[dict(e) for e in events[-20:]]))
             next_id = start["id"]
         return result
+
+    # ---- what a member calls their own assistant ------------------------
+    def set_agent_name(self, patient_id: str, name: str) -> str:
+        clean = " ".join(str(name or "").split())[:24]
+        with self.conn:
+            if clean:
+                self.conn.execute(
+                    "INSERT INTO preferences (patient_id, agent_name) VALUES (?, ?) "
+                    "ON CONFLICT(patient_id) DO UPDATE SET agent_name = excluded.agent_name",
+                    (patient_id, clean),
+                )
+            else:
+                self.conn.execute("DELETE FROM preferences WHERE patient_id=?", (patient_id,))
+        return self.agent_name(patient_id)
+
+    def agent_name(self, patient_id: str) -> str:
+        row = self.conn.execute("SELECT agent_name FROM preferences WHERE patient_id=?", (patient_id,)).fetchone()
+        return row["agent_name"] if row else "MedBox"
 
     def record_event(self, kind: str, detail: str, patient_id: str | None = None) -> None:
         self.conn.execute(

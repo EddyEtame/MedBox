@@ -74,6 +74,12 @@
       el("meName").textContent = me.name;
       el("meRole").textContent = me.role + (me.port ? " · port " + me.port : "");
       el("introText").textContent = me.intro.text;
+      el("agentInput").placeholder = me.agent_name || "MedBox";
+      if (me.agent_name && me.agent_name !== "MedBox") el("agentInput").value = me.agent_name;
+      if (MedBox.mic) MedBox.mic.setWakeName(me.agent_name || "");
+      var zone = me.isolation && me.isolation.zone ? me.isolation.zone : "";
+      var want = "/ship?embed=1&focus=" + encodeURIComponent(pid) + (zone ? "&glow=" + encodeURIComponent(zone) : "");
+      if (el("myShip").getAttribute("src") !== want) el("myShip").setAttribute("src", want);
       renderToday(me); renderWeek(me.week); renderMessages(me.messages || []); renderActivities(me.activities || []);
       (me.messages || []).forEach(function (m) { state.seen[m.id] = true; });
     }).catch(function () { el("introText").textContent = "La station ne répond pas."; });
@@ -92,6 +98,20 @@
       .catch(function () { out.innerHTML = MedBox.assessment.failure("Le référent ne répond pas ; vos mesures restent suivies."); });
   }
 
+  el("agentForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var name = el("agentInput").value.trim(), out = el("agentOut");
+    fetch("/api/me/" + encodeURIComponent(pid) + "/agent", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name }) })
+      .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+      .then(function (res) {
+        if (!res.ok) { out.textContent = res.body.detail || "Nom refusé."; return; }
+        out.textContent = "Votre assistant s’appelle " + res.body.agent_name + ". Dites son nom, puis votre demande.";
+        if (MedBox.mic) MedBox.mic.setWakeName(res.body.agent_name);
+        load();
+      })
+      .catch(function () { out.textContent = "Le nom n’a pas pu être enregistré."; });
+  });
   el("listenBtn").addEventListener("click", function () {
     if (state.me) speak(state.me.intro.spoken, "fr");
   });

@@ -483,13 +483,26 @@
     if (root.MedBox && MedBox.voice && MedBox.voice.say) MedBox.voice.say(stems);
   }
 
+  /* « MedBox » always wakes it; a member may also name their own assistant
+     (their personal page), and that name wakes it too. */
+  var wakeNames = [];
+  function wakePattern() {
+    var alternatives = ["med[\\s-]*box"].concat(wakeNames.map(function (n) {
+      return n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "[\\s-]*");
+    }));
+    return "(^|\\s)(?:" + alternatives.join("|") + ")(?=\\s|[,.!?:;]|$)";
+  }
+  function setWakeName(name) {
+    var clean = String(name || "").trim();
+    wakeNames = clean && clean.toLowerCase() !== "medbox" ? [clean] : [];
+  }
   function hasWakeWord(text) {
-    return /(^|\s)med[\s-]*box(?=\s|[,.!?:;]|$)/i.test(String(text || ""));
+    return new RegExp(wakePattern(), "i").test(String(text || ""));
   }
 
   function withoutWakeWord(text) {
     return String(text || "")
-      .replace(/(^|\s)med[\s-]*box(?=\s|[,.!?:;]|$)[\s,.!?:;-]*/i, " ")
+      .replace(new RegExp(wakePattern() + "[\\s,.!?:;-]*", "i"), " ")
       .trim();
   }
 
@@ -725,6 +738,8 @@
   root.MedBox = root.MedBox || {};
   root.MedBox.mic = {
     attach: attach,
+    setWakeName: setWakeName,
+    hasWakeWord: hasWakeWord,
     setAvailable: setAvailable,
     supported: supported,
     pause: pause,

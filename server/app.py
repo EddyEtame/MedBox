@@ -579,6 +579,11 @@ async def status() -> dict:
         "screens_connected": BUS.subscriber_count,
         "assessments_ready": sorted(STATION.assessments),
         "personal_ports": PERSONAL_PORTS,
+        "personal_pages": [
+            {"id": pid, "name": STATION.source.patients[pid].name, "port": PERSONAL_PORTS.get(pid)}
+            for pid in sorted(STATION.source.patients)
+            if pid in PERSONAL_PORTS or int(pid[2:]) <= 6
+        ],
         "simulation": {
             "label": simulation["label_fr"],
             "clock": simulation["clock"],
@@ -1728,9 +1733,11 @@ async def me(patient_id: str) -> dict:
     summary = _member_summary(patient_id, now)
     week_ok = _week_ok(summary["week"], summary["baseline"])
     urgency = summary["today"]["urgency"]
-    intro = spoken_personal_intro(summary["name"], week_ok, urgency, summary["isolation"])
+    agent = STATION.db.agent_name(patient_id)
+    intro = spoken_personal_intro(summary["name"], week_ok, urgency, summary["isolation"], agent)
     return {
         **summary,
+        "agent_name": agent,
         "week_ok": week_ok,
         "observations": STATION.observations.get(patient_id),
         "reported": STATION.symptoms.for_patient(patient_id)[-5:],
@@ -1738,6 +1745,18 @@ async def me(patient_id: str) -> dict:
         "activities": for_member(urgency, bool(summary["isolation"]), now),
         "intro": {"text": intro, "spoken": intro},
     }
+
+
+@app.post("/api/me/{patient_id}/agent")
+async def set_agent(patient_id: str, body: dict) -> dict:
+    """What this member calls their assistant: their own wake word. Letters,
+    spaces and hyphens, two to twenty-four characters; empty resets to MedBox."""
+    if patient_id not in STATION.source.patients:
+        raise HTTPException(404, f"Membre inconnu : {patient_id}")
+    name = " ".join(str(body.get("name") or "").split())
+    if name and (len(name) < 2 or len(name) > 24 or not all(ch.isalpha() or ch in " -" for ch in name)):
+        raise HTTPException(400, "Un nom de deux à vingt-quatre lettres, espaces ou tirets")
+    return {"agent_name": STATION.db.set_agent_name(patient_id, name)}
 
 
 @app.get("/api/voice/status")

@@ -157,8 +157,10 @@ def spoken_isolation_message(name: str, role: str, change: dict) -> tuple[str, s
     return text, crew, me
 
 
-def spoken_personal_intro(name: str, week_ok: bool, urgency: str | None, isolation: dict | None) -> str:
-    """What the referent says to a person when they open their own page."""
+def spoken_personal_intro(name: str, week_ok: bool, urgency: str | None, isolation: dict | None,
+                          agent: str = "MedBox") -> str:
+    """What the referent says to a person when they open their own page.
+    `agent` is what this person calls it: their own wake word."""
     week = ("Cette semaine, vos constantes sont restées dans votre plage habituelle."
             if week_ok else "Cette semaine, j’ai vu des écarts dans vos constantes.")
     if isolation and isolation.get("confirmed"):
@@ -171,4 +173,6 @@ def spoken_personal_intro(name: str, week_ok: bool, urgency: str | None, isolati
         today = "Aujourd’hui, un léger écart ; rien d’inquiétant, je surveille."
     else:
         today = "Aujourd’hui, tout est nominal."
-    return f"Bonjour {name}. Je suis MedBox, le référent médical du bord. {week} {today} Posez-moi vos questions."
+    who = ("Je suis MedBox, le référent médical du bord." if agent == "MedBox"
+           else f"Je suis {agent}, votre référent médical du bord.")
+    return f"Bonjour {name}. {who} {week} {today} Posez-moi vos questions."
