@@ -258,6 +258,19 @@ zero is not a sign**, whatever the model says about it.
   the other half: two Ollama servers (the tray app's and the bundle's, on
   11434 and 11555) held 2.8 GB of duplicate runners with 0.8 GB free;
   `tools/preflight.ps1` flags both. Rehearsal script: `docs/CAHIER-DE-SOUTENANCE.md`.
+- **The hull, rebuilt for the bar** (01:30, 25 Sep; Eddy: « ameliorate the 3D to
+  baffled bar, right now it's poor »). `web/hull.js`: painted plating (a
+  512 px canvas, map + bump), a sun that casts shadows (PCFSoft, 1024), a
+  cool rim light, ACES tone mapping, engine discs with additive halos and a
+  plume, radiators that glow with fever, greenhouse domes of glass over
+  foliage with pink grow light, beds with frame, mattress, blanket and
+  pillow, corridor light strips, a bridge with lit screens and a holo
+  table, isolation doors that turn amber when sealed, blinking running
+  lights, two star layers, a nebula, a banded planet with an atmosphere,
+  a sun glow. Every canvas texture is declared sRGB: left linear, the
+  renderer lifted the darks and the sky came out grey-blue. Measured on the
+  Iris Xe at 1366×768: 7–11 ms per render call. Headless captures at 1366
+  and 1920 in `.build/deliverables/shots/resp/hull4-*.png`.
 - **« Mon évaluation » is instant for the six** (00:40, 25 Sep): `_note_prefetch_targets`
   queues the members with a page (`_has_a_page`) after the worst, and a
   routine assessment stands fifteen minutes (`assessment_fresh_for`: 900 s
