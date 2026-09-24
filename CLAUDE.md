@@ -277,7 +277,14 @@ zero is not a sign**, whatever the model says about it.
   engine bells with the mouth aft, a glowing throat and three rings; ten
   people (bridge watch, a mess table, two medics, one in the stores),
   never the forty (the overlay carries every member as a light).
-  `LAY.bridge` has no `cx`: use `(x0 + x1) / 2`. Still 10–11 ms a frame.
+  `LAY.bridge` has no `cx`: use `(x0 + x1) / 2`. Then (02:10): quilted
+  plating with orange accent and dark panels, the name and registry
+  painted on both flanks and hazard chevrons at the stern (`decal`,
+  canvas text), a shuttle on a lit dorsal pad, the dish turns, the planet
+  closer. Draw calls were the cost (16 ms a frame with 500 meshes): the
+  forty cabins and sixty beds are eight `InstancedMesh` now
+  (`instancedBoxes`, `buildBeds`) and a floodlight was dropped: 6.9 ms a
+  frame at a real 1366×768 on the Iris Xe. Captures `hull7-*.png`.
 - **« Mon évaluation » is instant for the six** (00:40, 25 Sep): `_note_prefetch_targets`
   queues the members with a page (`_has_a_page`) after the worst, and a
   routine assessment stands fifteen minutes (`assessment_fresh_for`: 900 s

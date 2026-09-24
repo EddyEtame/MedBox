@@ -30,7 +30,7 @@
   var clipNear = null, clipDeck = null, shellMats = [], zoneTiles = [], zoneDoors = [], windows = null;
   var engineGlow = null, engineLight = null, engineDiscs = [], engineSprites = [], radiators = [];
   var navLamps = [], growLights = [], growSprites = [], stars = [], planetGroup = null, cutStrips = [];
-  var LAY = null, panelTex = null, plateTex = null, glowTex = null;
+  var LAY = null, panelTex = null, plateTex = null, glowTex = null, dish = null, padRing = null;
 
   /* ---------- painted surfaces: small canvases, made once ---------- */
 
@@ -58,8 +58,10 @@
       var h = 18 + Math.floor(rnd() * 30), x = 0;
       while (x < S) {
         var w = 24 + Math.floor(rnd() * 46);
-        var shade = 176 + Math.floor(rnd() * 26);
-        ctx.fillStyle = "rgb(" + shade + "," + (shade + 8) + "," + (shade + 14) + ")";
+        var shade = 168 + Math.floor(rnd() * 34), kind = rnd();
+        if (kind < 0.05) ctx.fillStyle = "#c9803a";                                  // an accent panel, ESA orange
+        else if (kind < 0.14) ctx.fillStyle = "rgb(" + (shade - 70) + "," + (shade - 60) + "," + (shade - 52) + ")";  // a dark panel
+        else ctx.fillStyle = "rgb(" + shade + "," + (shade + 8) + "," + (shade + 14) + ")";
         ctx.fillRect(x, y, w, h);
         ctx.strokeStyle = "rgba(20,30,36,0.55)";
         ctx.lineWidth = 1.2;
@@ -146,6 +148,45 @@
     }
     ctx.fillStyle = "rgba(255,240,220,0.08)";
     for (var i = 0; i < 40; i++) ctx.fillRect(rnd() * S, rnd() * S, rnd() * 60, 2);
+  }
+
+  // The name on the flank, the registry, a roundel: paint on the skin.
+  function paintName(ctx, S) {
+    ctx.clearRect(0, 0, S, S);
+    ctx.fillStyle = "#e9f2f6";
+    ctx.font = "bold 92px 'Segoe UI', Arial, sans-serif";
+    ctx.textBaseline = "middle";
+    ctx.fillText("ESA HORIZON", 22, S * 0.36);
+    ctx.fillStyle = "#7be8d3";
+    ctx.fillRect(22, S * 0.55, 470, 8);
+    ctx.fillStyle = "#b8c7cf";
+    ctx.font = "600 38px 'Consolas', 'Courier New', monospace";
+    ctx.fillText("GS-40 · 2080 · VAISSEAU-MONDE", 24, S * 0.74);
+    ctx.strokeStyle = "#7be8d3";
+    ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.arc(S - 70, S * 0.36, 34, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(S - 70, S * 0.36, 12, 0, Math.PI * 2); ctx.fillStyle = "#7be8d3"; ctx.fill();
+  }
+  // Hazard chevrons near the engines.
+  function paintChevrons(ctx, S) {
+    ctx.clearRect(0, 0, S, S);
+    ctx.fillStyle = "#1a1c1e";
+    ctx.fillRect(0, S * 0.3, S, S * 0.4);
+    ctx.fillStyle = "#f0c040";
+    for (var x = -S; x < S * 2; x += 56) {
+      ctx.beginPath();
+      ctx.moveTo(x, S * 0.7); ctx.lineTo(x + 28, S * 0.7); ctx.lineTo(x + 28 + S * 0.4, S * 0.3); ctx.lineTo(x + S * 0.4, S * 0.3);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+  function decal(tex, w, h, x, y, side) {
+    var m = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    m.clippingPlanes = [clipNear];
+    shellMats.push(m);
+    var plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m);
+    plane.position.set(x, y, side * (LAY.W / 2 + 0.025));
+    plane.rotation.y = side > 0 ? 0 : Math.PI;
+    return plane;
   }
 
   function mulberry(seed) {
@@ -405,10 +446,44 @@
     var mast = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.4, 8), mat(0xc4d0d6, { metalness: 0.8 }));
     mast.position.set(7.5, H / 2 + 1.2, 1.0);
     g.add(mast);
-    var dish = lit(new THREE.Mesh(new THREE.SphereGeometry(0.9, 24, 12, 0, Math.PI * 2, 0, Math.PI / 3), mat(0xd6e0e5, { metalness: 0.35, roughness: 0.55, side: THREE.DoubleSide })), true, false);
+    dish = lit(new THREE.Mesh(new THREE.SphereGeometry(0.9, 24, 12, 0, Math.PI * 2, 0, Math.PI / 3), mat(0xd6e0e5, { metalness: 0.35, roughness: 0.55, side: THREE.DoubleSide })), true, false);
     dish.position.set(-8.5, H / 2 + 0.6, -1.4);
     dish.rotation.x = -Math.PI / 3;
     g.add(dish);
+    // Markings on both flanks: the name forward, chevrons at the stern.
+    var nameTex = canvasTexture(512, paintName); nameTex.wrapS = nameTex.wrapT = THREE.ClampToEdgeWrapping;
+    var chevTex = canvasTexture(256, paintChevrons); chevTex.wrapS = chevTex.wrapT = THREE.ClampToEdgeWrapping;
+    [1, -1].forEach(function (side) {
+      g.add(decal(nameTex, 5.6, 1.4, 8.2, 0.95, side));
+      g.add(decal(chevTex, 1.6, 0.5, -12.6, 0.95, side));
+    });
+    // A shuttle on its dorsal pad, a ring of light around it: something
+    // the size of a person's world, next to the size of the ship's.
+    var padMat = upper(mat(0x27323a, { metalness: 0.7, roughness: 0.5 }));
+    var pad = lit(new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.06, 1.8), padMat), false, true);
+    pad.position.set(-6.8, H / 2 - 0.04, 1.7);
+    g.add(pad);
+    padRing = new THREE.Mesh(new THREE.TorusGeometry(1.15, 0.03, 6, 48), upper(glowing(0x7be8d3, 1.2)));
+    padRing.rotation.x = Math.PI / 2;
+    padRing.position.set(-6.8, H / 2 + 0.0, 1.7);
+    g.add(padRing);
+    var shuttleMat = upper(plated(0xd6dee3, 1, 1));
+    var shuttle = lit(new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.42, 0.8), shuttleMat), true, true);
+    shuttle.position.set(-6.8, H / 2 + 0.36, 1.7);
+    g.add(shuttle);
+    var shuttleNose = lit(new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 12), shuttleMat), true, false);
+    shuttleNose.scale.set(1.3, 0.55, 1.0);
+    shuttleNose.position.set(-5.95, H / 2 + 0.36, 1.7);
+    g.add(shuttleNose);
+    var cockpit = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.14, 0.5), upper(glowing(0xbfeee6, 1.4)));
+    cockpit.position.set(-6.1, H / 2 + 0.5, 1.7);
+    g.add(cockpit);
+    [0.55, -0.55].forEach(function (dz) {
+      var pod = lit(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.3, 12), upper(mat(0x46535c, { metalness: 0.7, roughness: 0.4 }))), true, false);
+      pod.rotation.z = Math.PI / 2;
+      pod.position.set(-7.0, H / 2 + 0.28, 1.7 + dz);
+      g.add(pod);
+    });
     // Windows: a row per deck along both flanks, lit from inside, warm.
     var paneGeo = new THREE.BoxGeometry(0.3, 0.17, 0.06);
     var paneMat = glowing(0xfff1cf, 1.4);
@@ -459,17 +534,28 @@
     var tableUp = upper(mat(0x9fb0b8, { roughness: 0.6, metalness: 0.4 }));
     var chairUp = upper(mat(0x2b3940));
 
-    function bedAt(x, y, z, rotY, up) {
-      var frame = lit(new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.1, 1.16), up ? frameUp : frameMat), true, true);
-      frame.position.set(x, y + 0.05, z); frame.rotation.y = rotY; g.add(frame);
-      var mattress = lit(new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.12, 1.1), up ? mattressUp : mattressMat), true, true);
-      mattress.position.set(x, y + 0.16, z); mattress.rotation.y = rotY; g.add(mattress);
-      var blanket = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.05, 0.62), up ? blanketUp : blanketMat);
-      var bx = -0.2, bz = 0;
-      blanket.position.set(x + Math.cos(rotY) * bx - Math.sin(rotY) * bz, y + 0.245, z + Math.sin(rotY) * bx + Math.cos(rotY) * bz); blanket.rotation.y = rotY; g.add(blanket);
-      var pillow = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.07, 0.26), up ? pillowUp : pillowMat);
-      var px = 0.38;
-      pillow.position.set(x + Math.cos(rotY) * px, y + 0.255, z + Math.sin(rotY) * px); pillow.rotation.y = rotY; g.add(pillow);
+    // Every repeated piece is one instanced mesh, one draw call: sixty
+    // beds and forty cabins as separate meshes cost the processor more
+    // than the pixels did (measured 25 Sep: 16 ms a frame, mostly draw
+    // calls, while the model also wants that processor).
+    var beds = { up: [], down: [] };
+    function bedAt(x, y, z, rotY, up) { (up ? beds.up : beds.down).push([x, y, z, rotY]); }
+    function instancedBoxes(w, h, d, material, list, cast) {
+      if (!list.length) return null;
+      var im = new THREE.InstancedMesh(new THREE.BoxGeometry(w, h, d), material, list.length);
+      var o = new THREE.Object3D();
+      for (var i = 0; i < list.length; i++) {
+        o.position.set(list[i][0], list[i][1], list[i][2]); o.rotation.set(0, list[i][3] || 0, 0); o.updateMatrix(); im.setMatrixAt(i, o.matrix);
+      }
+      im.castShadow = !!cast; im.receiveShadow = true;
+      g.add(im);
+      return im;
+    }
+    function buildBeds(list, frame, mattress, blanket, pillow) {
+      instancedBoxes(0.66, 0.1, 1.16, frame, list.map(function (b) { return [b[0], b[1] + 0.05, b[2], b[3]]; }), true);
+      instancedBoxes(0.6, 0.12, 1.1, mattress, list.map(function (b) { return [b[0], b[1] + 0.16, b[2], b[3]]; }), true);
+      instancedBoxes(0.58, 0.05, 0.62, blanket, list.map(function (b) { return [b[0] + Math.cos(b[3]) * -0.2, b[1] + 0.245, b[2] + Math.sin(b[3]) * -0.2, b[3]]; }), false);
+      instancedBoxes(0.46, 0.07, 0.26, pillow, list.map(function (b) { return [b[0] + Math.cos(b[3]) * 0.38, b[1] + 0.255, b[2] + Math.sin(b[3]) * 0.38, b[3]]; }), false);
     }
 
     // People. Not forty (the overlay carries every member as a light); a
@@ -506,24 +592,21 @@
     // Cabins on deck 1: a partition per cabin with a doorway, a bed against
     // the hull, a locker.
     var lockerMat = upper(mat(0x6f8391, { metalness: 0.6, roughness: 0.5 }));
+    var walls = [], parts = [], lintels = [], lockers = [], c0 = LAY.cabinBox(0), span0 = c0.x1 - c0.x0, depth0 = c0.z1 - c0.z0;
     for (var i = 0; i < LAY.CREW; i++) {
       var c = LAY.cabinBox(i);
-      var wall = lit(new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.5, c.z1 - c.z0), wallUp), true, true);
-      wall.position.set(c.x0, LAY.DECK1.floor + 0.75, (c.z0 + c.z1) / 2);
-      g.add(wall);
+      walls.push([c.x0, LAY.DECK1.floor + 0.75, (c.z0 + c.z1) / 2, 0]);
       bedAt(c.x, LAY.DECK1.floor, (c.z0 + c.z1) / 2 + (c.side > 0 ? 0.15 : -0.15), 0, true);
       var span = c.x1 - c.x0;
       var innerZ = c.side > 0 ? c.z0 : c.z1;
-      var partA = lit(new THREE.Mesh(new THREE.BoxGeometry(span * 0.55, 1.5, 0.05), wallUp), true, true);
-      partA.position.set(c.x0 + span * 0.275, LAY.DECK1.floor + 0.75, innerZ);
-      g.add(partA);
-      var lintel = new THREE.Mesh(new THREE.BoxGeometry(span * 0.45, 0.3, 0.05), wallUp);
-      lintel.position.set(c.x1 - span * 0.225, LAY.DECK1.floor + 1.35, innerZ);
-      g.add(lintel);
-      var locker = new THREE.Mesh(new THREE.BoxGeometry(0.28, 1.1, 0.34), lockerMat);
-      locker.position.set(c.x1 - 0.2, LAY.DECK1.floor + 0.55, c.side > 0 ? c.z1 - 0.22 : c.z0 + 0.22);
-      g.add(locker);
+      parts.push([c.x0 + span * 0.275, LAY.DECK1.floor + 0.75, innerZ, 0]);
+      lintels.push([c.x1 - span * 0.225, LAY.DECK1.floor + 1.35, innerZ, 0]);
+      lockers.push([c.x1 - 0.2, LAY.DECK1.floor + 0.55, c.side > 0 ? c.z1 - 0.22 : c.z0 + 0.22, 0]);
     }
+    instancedBoxes(0.05, 1.5, depth0, wallUp, walls, true);
+    instancedBoxes(span0 * 0.55, 1.5, 0.05, wallUp, parts, true);
+    instancedBoxes(span0 * 0.45, 0.3, 0.05, wallUp, lintels, false);
+    instancedBoxes(0.28, 1.1, 0.34, lockerMat, lockers, false);
     // Bridge: consoles in an arc with lit screens, a holo table, the
     // captain's chair.
     for (var k = -2; k <= 2; k++) {
@@ -624,6 +707,8 @@
       strap.position.copy(crate.position);
       g.add(strap);
     }
+    buildBeds(beds.up, frameUp, mattressUp, blanketUp, pillowUp);
+    buildBeds(beds.down, frameMat, mattressMat, blanketMat, pillowMat);
     return g;
   }
 
@@ -661,13 +746,13 @@
     planetGroup = new THREE.Group();
     var planetTex = canvasTexture(256, paintPlanet);
     planetTex.wrapS = planetTex.wrapT = THREE.ClampToEdgeWrapping;
-    var planet = new THREE.Mesh(new THREE.SphereGeometry(32, 48, 32), new THREE.MeshStandardMaterial({ map: planetTex, roughness: 1.0, metalness: 0.0 }));
+    var planet = new THREE.Mesh(new THREE.SphereGeometry(44, 48, 32), new THREE.MeshStandardMaterial({ map: planetTex, roughness: 1.0, metalness: 0.0 }));
     planetGroup.add(planet);
-    var atmo = new THREE.Mesh(new THREE.SphereGeometry(33.2, 48, 32), new THREE.MeshBasicMaterial({ color: 0xff8a4c, transparent: true, opacity: 0.09, blending: THREE.AdditiveBlending, side: THREE.BackSide, depthWrite: false }));
+    var atmo = new THREE.Mesh(new THREE.SphereGeometry(45.6, 48, 32), new THREE.MeshBasicMaterial({ color: 0xff8a4c, transparent: true, opacity: 0.09, blending: THREE.AdditiveBlending, side: THREE.BackSide, depthWrite: false }));
     planetGroup.add(atmo);
-    var limb = sprite(0xffa060, 80, 0.14);
+    var limb = sprite(0xffa060, 110, 0.16);
     planetGroup.add(limb);
-    planetGroup.position.set(-120, -70, -200);
+    planetGroup.position.set(-135, -85, -215);
     g.add(planetGroup);
     // The sun itself, a glow where the key light comes from.
     var sun = sprite(0xfff0d0, 60, 0.85);
@@ -804,6 +889,8 @@
       lamp.mesh.material.emissiveIntensity = on ? 3.0 : 0.25;
       lamp.halo.material.opacity = on ? 0.75 : 0.0;
     }
+    if (dish) dish.rotation.y = t * 0.12;
+    if (padRing) padRing.material.emissiveIntensity = 0.9 + 0.5 * Math.sin(t * 1.5);
     for (var s = 0; s < stars.length; s++) stars[s].rotation.y = t * 0.0035 * (s + 1);
     if (planetGroup) planetGroup.rotation.y = t * 0.004;
     renderer.render(scene, camera);
