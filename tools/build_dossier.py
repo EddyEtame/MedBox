@@ -168,10 +168,10 @@ def crew_pages(d: Doc, group_label: str, date_fr: str, tests: int, scenarios: in
     d.story.append(Paragraph("<b>1A · MedBox</b> — mallette médicale intelligente de bord<br/>"
                              "<b>1B · ARIA / PsychoSpace</b> — assistant de bord autonome pour le bien-être de l’équipage", ss["CoverLine"]))
     d.story.append(Spacer(1, 1.0 * cm))
-    d.box("MISSION", "Un vaisseau autonome, des décennies loin de la Terre, un équipage qui doit rester en bonne santé de corps "
-          "et d’esprit sans médecin ni psychologue à bord. Notre équipage de six a construit deux solutions locales, "
-          "explicables et résilientes pour le pilier HumanTech &amp; HealthTech : MedBox surveille, décide et parle pour le "
-          "corps ; ARIA observe, explique et accompagne pour l’esprit.")
+    d.box("MISSION", "Vous lisez le dossier d’un équipage de six qui a construit deux systèmes pour que quarante personnes "
+          "restent en vie et lucides à des années de tout secours. MedBox pour le corps : elle mesure, décide, explique et "
+          "parle. ARIA pour l’esprit : il observe, compare, accompagne. Tout à bord, rien dans le cloud, l’humain qui décide. "
+          "Les deux tournent aujourd’hui sur un portable sans réseau ; vous pouvez les faire tourner sur le vôtre.")
     d.story.append(Spacer(1, 0.5 * cm))
     for line in ("Workshop National B3 — Horizon 2080 — EPSI", "Pilier HumanTech &amp; HealthTech Spatiales",
                  f"Dossier technique — {group_label}", date_fr):
@@ -190,15 +190,15 @@ def crew_pages(d: Doc, group_label: str, date_fr: str, tests: int, scenarios: in
     d.story.append(Spacer(1, 8))
 
     d.h1("L’équipage et ses deux solutions")
-    d.p("Le cahier des charges demande à chaque équipage, selon sa taille, de deux à quatre projets justifiés, avec un "
-        "effet réel sur la vie humaine dans le vaisseau, et des pistes d’évolution. Nous sommes six : nous avons choisi "
-        "le pilier HumanTech &amp; HealthTech Spatiales et ses deux propositions, MedBox et PsychoSpace, parce qu’elles "
-        "répondent au même risque par deux faces : un équipage isolé se dégrade d’abord en silence, dans le corps ou "
-        "dans l’esprit, et la Terre ne peut plus l’aider à temps.")
-    d.box("CE QUE LE JURY VERRA", "Deux prototypes qui tournent sur un portable sans réseau. MedBox : une station qui "
-          f"mesure quarante membres, décide et explique les isolements, parle et écoute ({tests} tests, {scenarios} "
-          "scénarios, un dossier portable vérifié). ARIA : un assistant de bord qui suit le bien-être, détecte une "
-          "dérive progressive, consulte les procédures et propose une action.")
+    d.p("On nous demandait deux projets. Nous avons pris le risque le plus silencieux du voyage : un équipage isolé ne "
+        "s’effondre pas d’un coup, il se dégrade sans bruit, dans le corps ou dans l’esprit, et quand la Terre répond "
+        "enfin, il est trop tard. Nous sommes six. Nous avons choisi le pilier HumanTech &amp; HealthTech Spatiales et "
+        "ses deux propositions, MedBox et PsychoSpace, et nous les avons construites toutes les deux, en parallèle, "
+        "jusqu’à ce qu’elles tournent.")
+    d.box("CE QUE VOUS VERREZ", "Deux prototypes qui tournent sur un portable sans réseau, pas des maquettes. MedBox : une "
+          f"station qui mesure quarante membres, décide et explique les isolements, parle et écoute ({tests} tests verts, "
+          f"{scenarios} scénarios rejouables, un dossier portable vérifié fichier par fichier). ARIA : un assistant de bord "
+          "qui suit le bien-être, repère une dérive progressive, consulte les procédures et propose une action.")
     d.table([["", "1A · MedBox", "1B · ARIA / PsychoSpace"],
              ["Ce qu’elle surveille", "La santé physique : cinq constantes à 10 Hz pour quarante membres, ligne de base personnelle.",
               "Le bien-être : sommeil, humeur, fatigue, stress, isolement, déclarés par check-in puis capteurs."],
@@ -210,11 +210,10 @@ def crew_pages(d: Doc, group_label: str, date_fr: str, tests: int, scenarios: in
              ["Sans réseau", "Tout dans un dossier de 1,6 Go : modèle, voix, données, pages.", "Ollama local, SQLite, base documentaire embarquée."],
              ["Équipe", ", ".join(n for n, _ in TEAM_A), ", ".join(n for n, _ in TEAM_B)]],
             [3.4 * cm, 6.8 * cm, 6.8 * cm])
-    d.p("Les deux solutions partagent une logique de conception que le pilier impose : mesurer, apprendre une ligne de "
-        "base personnelle, observer l’historique, comparer les écarts, analyser le contexte avec une IA locale, puis "
-        "agir. Elles partagent aussi un principe : une seule donnée inhabituelle ne suffit jamais à conclure, et "
-        "l’humain garde la décision à fort impact. Elles ont été construites en parallèle par deux sous-équipes, avec "
-        "un point quotidien, et sont présentées ensemble parce qu’elles équipent le même vaisseau.")
+    d.p("Les deux suivent la même logique, celle du pilier : mesurer, apprendre la ligne de base de chacun, suivre "
+        "l’historique, comparer les écarts, analyser avec une IA locale, agir. Les deux tiennent le même principe : une "
+        "seule donnée inhabituelle ne suffit jamais à conclure, et la décision qui pèse reste à un humain. Deux "
+        "sous-équipes, un point chaque jour, et un seul vaisseau : c’est pour cela que vous les lisez ensemble.")
     d.page()
 
 
@@ -222,32 +221,35 @@ def crew_pages(d: Doc, group_label: str, date_fr: str, tests: int, scenarios: in
 def part_a(d: Doc, tests: int, scenarios: int):
     d.part_page("Partie A — MedBox", "Mallette médicale intelligente de bord · projet 1A · Eddy, Brad", "A")
     d.story.append(Spacer(1, 1.0 * cm))
-    d.box("MISSION", "Surveiller la santé de quarante membres d’équipage, décider et expliquer les isolements, parler à chacun "
-          "dans sa langue et rester entièrement autonome quand la Terre ne répond plus.")
+    d.box("MISSION", "Nous avons construit la station médicale d’un vaisseau qui n’a pas de médecin : elle surveille "
+          "quarante personnes, décide et explique les isolements, parle à chacun dans sa langue, et continue quand la "
+          "Terre ne répond plus.")
 
     d.h1("A.1 Présentation du projet")
-    d.p("MedBox est la station médicale d’un vaisseau de quarante personnes qui n’a pas de médecin. Dans la simulation, "
-        "le référent médical du bord est l’autorité médicale : il nomme ce que les mesures montrent, décide l’isolement, "
-        "le dit à la personne concernée, prévient l’équipage et lit ses messages à voix haute. Il ne prescrit aucun "
-        "médicament et n’invente jamais une maladie que les mesures ne montrent pas : chaque phrase passe par un schéma "
-        "et un validateur avant d’être lue.")
+    d.p("Imaginez quarante personnes, pas de médecin, et une contamination qui commence. MedBox est ce qui les garde en "
+        "vie. Dans la simulation, le référent médical du bord est l’autorité médicale : il nomme ce que les mesures "
+        "montrent, décide l’isolement, le dit à la personne concernée, prévient l’équipage et lit ses messages à voix "
+        "haute. Il ne prescrit aucun médicament et n’invente jamais une maladie que les mesures ne montrent pas : chaque "
+        "phrase qu’il prononce est passée par un schéma et un validateur avant d’être lue.")
     d.bullets(["Surveillance de quarante membres, dix mesures par seconde, score NEWS2 déterministe.",
                "Référent médical local (Ollama, modèle léger, réponses contraintes) qui parle et écoute, en français et en anglais.",
                "L’équipage, c’est l’équipe : six membres réels avec une semaine de mesures en base, un espace personnel chacun sur son propre port.",
                "Tableau de bord équipage, messages sonores, cartes avec le vaisseau 3D, vue par pièce et zone d’isolement qui s’illumine.",
                f"Livraison autonome : un dossier portable de 1,6 Go, {tests} tests, {scenarios} scénarios reproductibles."])
-    d.box("POSITIONNEMENT", "MedBox n’est pas un chatbot médical. C’est une station de bord : elle mesure en continu, calcule "
-          "une priorité par des règles explicites, décide et annonce les isolements, parle et écoute, tient le dossier de "
-          "chacun et le tableau de bord de l’équipage, sans aucun service distant.")
+    d.box("POSITIONNEMENT", "Ne cherchez pas un chatbot médical : il n’y en a pas. MedBox est une station de bord. Elle "
+          "mesure en continu, calcule une priorité par des règles que vous pouvez relire, décide et annonce les "
+          "isolements, parle et écoute, tient le dossier de chacun et le tableau de bord de l’équipage, sans aucun service "
+          "distant.")
 
     d.h1("A.2 Contexte et problématique")
-    d.p("Une contamination qui touche 15 % de l’équipage doit être vue, priorisée et contenue à bord, par des personnes "
-        "qui ne sont pas médecins, avec les ressources du vaisseau. La problématique retenue : comment donner à un "
-        "équipage sans médecin une station capable de surveiller chacun en continu, de décider vite et clairement qui "
-        "isoler, d’expliquer sa décision à la personne et au groupe, et de rester entièrement opérationnelle sans réseau ?")
-    d.box("CONTRAINTE MAJEURE", "Tout fonctionne localement : les mesures, le score, la décision, la voix, le modèle et les "
-          "données. Aucune fonction essentielle ne dépend d’un service distant. Le prototype est livré comme un dossier "
-          "autonome vérifié fichier par fichier.")
+    d.p("Six malades sur quarante, c’est le scénario du cahier des charges. Il faut les voir, les prioriser et les "
+        "contenir à bord, avec des gens qui ne sont pas médecins et les moyens du vaisseau. Notre question tient en une "
+        "ligne : comment donner à un équipage sans médecin une station qui surveille chacun en continu, décide vite et "
+        "clairement qui isoler, explique sa décision à la personne et au groupe, et reste entièrement opérationnelle sans "
+        "réseau ?")
+    d.box("CONTRAINTE MAJEURE", "Tout fonctionne à bord : les mesures, le score, la décision, la voix, le modèle et les "
+          "données. Pas une fonction ne dépend d’un service distant. Vous recevez la station comme un dossier autonome, "
+          "vérifié fichier par fichier, que vous lancez d’un double-clic.")
 
     d.h1("A.3 Objectifs")
     d.bullets(["<b>Surveiller</b> quarante membres en continu à partir de constantes (simulées aujourd’hui, capteurs demain) et d’une ligne de base personnelle.",
@@ -372,9 +374,9 @@ def part_a(d: Doc, tests: int, scenarios: int):
              ["Tests", "Verts", f"{tests} tests, dont des tests de bout en bout sur la station réelle."],
              ["Capteurs physiques", "Prévue / simulation", "Contrat série fixé ; matériel non disponible pendant le workshop."]],
             [4.2 * cm, 3 * cm, 9.8 * cm])
-    d.box("RÉSULTAT CLÉ", "Un équipage sans médecin dispose d’une station qui mesure, décide, explique et parle, "
+    d.box("RÉSULTAT CLÉ", "Un équipage sans médecin a désormais une station qui mesure, décide, explique et parle, "
           "entièrement à bord. Le modèle ne décide jamais du score, ne prescrit jamais, n’invente jamais un isolé ; "
-          "s’il tombe, la surveillance continue.")
+          "coupez-le pendant la démonstration, la surveillance continue et l’écran vous le dit.")
 
     d.h1("A.11 Limites et perspectives")
     d.bullets(["Toutes les mesures sont synthétiques et le disent ; aucun capteur réel, aucun étalonnage.",
@@ -608,20 +610,20 @@ def closing(d: Doc, tests: int):
     d.h1("Conclusion de l’équipage")
     d.p("Deux solutions, un même vaisseau, une même conviction : loin de la Terre, ce qui sauve un équipage, c’est ce qui "
         "reste à bord et ce que chacun peut comprendre. MedBox garde le corps : elle mesure, décide et explique les "
-        "isolements, parle et écoute. ARIA garde l’esprit : elle observe la dérive, la nomme avant la crise et propose "
-        "une action. Toutes deux séparent ce qui est calculé par des règles de ce qui est formulé par une IA locale, "
-        "et laissent la décision à fort impact aux humains.")
-    d.p("La suite est écrite : capteurs réels sur le contrat série de MedBox et la couche ESP32 d’ARIA, un moteur de "
-        "dérive commun sur la semaine de chacun, et l’interconnexion des deux systèmes pour qu’un isolement décidé par "
-        "MedBox devienne un suivi de bien-être pour ARIA, et qu’une dérive vue par ARIA appelle une mesure de MedBox.")
-    d.box("PHRASE DE SYNTHÈSE", "« Un vaisseau-monde n’a pas de médecin ni de psychologue à bord ; il a MedBox et ARIA : deux "
+        "isolements, parle et écoute. ARIA garde l’esprit : il observe la dérive, la nomme avant la crise et propose une "
+        "action. Les deux séparent ce qui est calculé par des règles de ce qui est formulé par une IA locale, et laissent "
+        "la décision qui pèse aux humains. Nous n’avons pas dessiné des écrans : nous avons livré deux systèmes qui "
+        "tournent, testés, sans réseau, et nous vous les montrons.")
+    d.p("La suite est déjà écrite : des capteurs réels sur le contrat série de MedBox et la couche ESP32 d’ARIA, un "
+        "moteur de dérive commun sur la semaine de chacun, et les deux systèmes reliés, pour qu’un isolement décidé par "
+        "MedBox devienne un suivi de bien-être pour ARIA et qu’une dérive vue par ARIA appelle une mesure de MedBox.")
+    d.box("PHRASE DE SYNTHÈSE", "« Un vaisseau-monde n’a pas de médecin ni de psychologue à bord. Il a MedBox et ARIA : deux "
           "systèmes locaux qui mesurent, expliquent et accompagnent, et qui continuent quand la Terre ne répond plus. »")
 
     d.h1("Références documentaires")
-    d.bullets(["EPSI — Sujet de Workshop National B3, « Horizon 2080 », session septembre 2026 : contexte, quatre piliers, contraintes offline, scénarios de crise, livrables.",
-               "Royal College of Physicians — National Early Warning Score (NEWS) 2, 2017 : barème repris tel quel dans MedBox.",
-               "Dépôt MedBox (GitHub EddyEtame/MedBox) : README, docs/COMPRENDRE-MEDBOX.md, docs/USER_GUIDE.md, docs/dossier/.",
-               "Dépôt PsychoSpace (GitHub ANTHONYSITCH/Psychospace) ; dossier technique ARIA de l’équipe 1B (23 septembre 2026) et son document d’organisation, repris dans la partie B."])
+    d.bullets(["EPSI — Sujet de Workshop National B3, « Horizon 2080 », septembre 2026.",
+               "Royal College of Physicians — National Early Warning Score (NEWS) 2, 2017, repris tel quel dans MedBox.",
+               "Dépôt MedBox (GitHub EddyEtame/MedBox) : README, docs/ ; dépôt PsychoSpace (GitHub ANTHONYSITCH/Psychospace) et dossier ARIA de l’équipe 1B du 23 septembre 2026, repris dans la partie B."])
 
 
 def build(group: str | None) -> Path:

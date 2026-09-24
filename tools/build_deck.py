@@ -1,10 +1,11 @@
-"""Build the crew's defence deck (PPTX): one team of six, two solutions.
+"""Build the crew's defence deck (PPTX): five minutes, straight to the point.
 
-Twelve slides, dark, one idea per slide: the crew and its two projects,
-MedBox (1A, Eddy and Brad), ARIA / PsychoSpace (1B, Davidson, Anthony,
-Frederic, Merove), what comes next, one sentence to close. Document
-tooling only (python-pptx); output goes to .build\\deliverables, ignored
-by Git. Page captures from .build\\deliverables\\shots are used when present.
+Ten slides, dark, one idea per slide, in our own voice: what we had to do,
+what we did, then MedBox (1A, Eddy and Brad), ARIA / PsychoSpace (1B,
+Davidson, Anthony, Frederic, Merove), what comes next, one sentence.
+Document tooling only (python-pptx); output goes to .build\\deliverables,
+ignored by Git. Page captures from .build\\deliverables\\shots are used
+when present.
 
     .venv\\Scripts\\python tools\\build_deck.py
 """
@@ -34,7 +35,7 @@ CRIT = RGBColor(0xFF, 0x5C, 0x6E)
 PLUM = RGBColor(0xC9, 0xA7, 0xF0)
 
 W, H = Inches(13.333), Inches(7.5)
-TOTAL = 12
+TOTAL = 10
 
 
 def count_tests() -> int:
@@ -111,12 +112,12 @@ class Deck:
         self.text(s, head, x + Inches(0.25), y + Inches(0.18), w - Inches(0.5), Inches(0.5), size=16, color=head_color, bold=True)
         self.text(s, body, x + Inches(0.25), y + Inches(0.75), w - Inches(0.5), h - Inches(0.9), size=size, color=INK)
 
-    def rows(self, s, items, y0=1.75, step=1.0, head_color=ACCENT, head_w=3.0):
+    def rows(self, s, items, y0=1.75, step=1.0, head_color=ACCENT, head_w=3.0, size=13):
         for i, (head, body) in enumerate(items):
             y = Inches(y0 + i * step)
             self.panel(s, Inches(0.6), y, Inches(12.1), Inches(step - 0.1))
             self.text(s, head, Inches(0.85), y + Inches(0.13), Inches(head_w), Inches(0.6), size=15, color=head_color, bold=True)
-            self.text(s, body, Inches(0.85 + head_w + 0.2), y + Inches(0.14), Inches(12.1 - head_w - 0.7), Inches(step - 0.2), size=13, color=INK)
+            self.text(s, body, Inches(0.85 + head_w + 0.2), y + Inches(0.14), Inches(12.1 - head_w - 0.7), Inches(step - 0.2), size=size, color=INK)
 
     def picture(self, s, name, x, y, w):
         f = SHOTS / name
@@ -142,68 +143,62 @@ def build() -> Path:
     s = d.slide("Workshop 2026 · B3 · Horizon 2080 · HumanTech & HealthTech spatiales", "Deux solutions pour le vaisseau-monde")
     d.text(s, "1A · MedBox — le référent médical du bord, pour le corps\n1B · ARIA / PsychoSpace — l’assistant de bord, pour l’esprit",
            Inches(0.6), Inches(1.8), Inches(12), Inches(1.3), size=20, color=ACCENT)
-    d.text(s, "Un équipage de six, deux sous-équipes, un même vaisseau, une même règle : tout à bord, tout explicable, l’humain décide.",
-           Inches(0.6), Inches(3.1), Inches(11.5), Inches(0.9), size=15, color=INK)
+    d.text(s, "Six personnes. Deux prototypes qui tournent. Cinq minutes.",
+           Inches(0.6), Inches(3.1), Inches(11.5), Inches(0.9), size=16, color=INK)
     if not d.picture(s, "ship.png", Inches(0.6), Inches(4.05), Inches(4.9)):
         d.panel(s, Inches(0.6), Inches(4.05), Inches(4.9), Inches(2.6))
     d.text(s, "MedBox : Eddy · Brad\nARIA / PsychoSpace : Davidson · Anthony · Frederic · Merove", Inches(6.5), Inches(5.6), Inches(6.3), Inches(0.9), size=14, color=MUTED, align=PP_ALIGN.RIGHT)
 
-    # 2 — the challenge
-    s = d.slide("Le défi", "Des décennies loin de la Terre, sans médecin ni psychologue")
-    d.card(s, Inches(0.6), Inches(1.9), Inches(3.9), Inches(3.9), "LE VAISSEAU-MONDE",
-           "Un équipage clos pendant des décennies. La liaison Terre devient inutilisable ou trop lente pour une aide immédiate.")
-    d.card(s, Inches(4.7), Inches(1.9), Inches(3.9), Inches(3.9), "LE RISQUE",
-           "Un équipage isolé se dégrade d’abord en silence : une contamination qui touche 15 % du bord, une dérive de sommeil et d’humeur qui s’installe.", WARN)
-    d.card(s, Inches(8.8), Inches(1.9), Inches(3.9), Inches(3.9), "LA RÈGLE DU PILIER",
-           "Mesurer, apprendre une ligne de base personnelle, suivre l’historique, comparer les écarts, analyser avec une IA locale, agir. Sans réseau.", CRIT)
-    d.text(s, "Le cahier des charges demande à un équipage de six deux projets justifiés, un prototype, le code, un dossier et ce support.",
-           Inches(0.6), Inches(6.1), Inches(12), Inches(0.6), size=13, color=MUTED)
+    # 2 — what we had to do
+    s = d.slide("La commande", "Ce que nous avions à faire")
+    d.rows(s, [("Deux projets", "Un équipage de six doit livrer deux solutions justifiées, avec un effet réel sur la vie à bord, et des pistes pour les années suivantes."),
+               ("Un vaisseau sans la Terre", "Des décennies de voyage, une liaison inutilisable : tout doit fonctionner à bord, sans réseau, et rester compréhensible par l’équipage."),
+               ("Le pilier HumanTech & HealthTech", "Mesurer, apprendre la ligne de base de chacun, suivre l’historique, comparer, analyser avec une IA locale, agir. Pour le corps et pour l’esprit."),
+               ("Les livrables", "Un prototype qui tourne, le code sur Git, un dossier technique, ce support. Et une démonstration qui tient en cinq minutes.")],
+           y0=1.8, step=1.15, head_w=3.3, size=14)
 
-    # 3 — the crew
-    s = d.slide("L’équipage", "Six personnes, deux sous-équipes, deux solutions")
-    d.card(s, Inches(0.6), Inches(1.85), Inches(5.95), Inches(3.2), "1A · MEDBOX — EDDY, BRAD",
-           "La santé physique de quarante membres.\n\nMesures en continu, score explicite, isolement décidé et annoncé, un référent médical qui parle et écoute, un dossier portable qui se lance sans réseau.")
-    d.card(s, Inches(6.75), Inches(1.85), Inches(5.95), Inches(3.2), "1B · ARIA / PSYCHOSPACE — DAVIDSON, ANTHONY, FREDERIC, MEROVE",
-           "Le bien-être de chaque astronaute.\n\nCheck-ins de sommeil, humeur, fatigue, stress, isolement ; baseline personnelle et détection de dérive ; procédures du vaisseau consultées localement ; une réponse structurée et expliquée.", PLUM)
-    d.panel(s, Inches(0.6), Inches(5.25), Inches(12.1), Inches(1.0))
-    d.text(s, "CE QU’ELLES PARTAGENT", Inches(0.85), Inches(5.35), Inches(3.0), Inches(0.4), size=12, color=WARN, bold=True, spacing=1)
-    d.text(s, "Une ligne de base par personne · des règles explicites avant tout modèle · une IA locale qui formule et ne décide pas · zéro octet vers le réseau · l’humain garde la main",
-           Inches(3.9), Inches(5.35), Inches(8.6), Inches(0.85), size=13, color=INK)
-    d.text(s, "Construites en parallèle, relues l’une par l’autre, présentées ensemble parce qu’elles équipent le même vaisseau.",
-           Inches(0.6), Inches(6.4), Inches(12), Inches(0.5), size=13, color=MUTED)
+    # 3 — what we did
+    s = d.slide("Le résultat", "Ce que nous avons fait")
+    d.card(s, Inches(0.6), Inches(1.85), Inches(5.95), Inches(3.35), "1A · MEDBOX — EDDY, BRAD",
+           "Une station médicale qui mesure quarante personnes dix fois par seconde, décide qui isoler, l’explique et le dit à voix haute, dans la langue de chacun.\n\nLivrée en un dossier de 1,6 Go qui se lance en quatre secondes, sans réseau.", size=14)
+    d.card(s, Inches(6.75), Inches(1.85), Inches(5.95), Inches(3.35), "1B · ARIA / PSYCHOSPACE — DAVIDSON, ANTHONY, FREDERIC, MEROVE",
+           "Un assistant de bord qui suit le bien-être de chaque astronaute, repère une dérive avant qu’elle ne devienne une crise, consulte les procédures du vaisseau et propose une action.\n\nLocal, explicable, l’humain garde la main.", PLUM, size=14)
+    d.panel(s, Inches(0.6), Inches(5.4), Inches(12.1), Inches(1.0))
+    d.text(s, "EN COMMUN", Inches(0.85), Inches(5.5), Inches(2.4), Inches(0.4), size=12, color=WARN, bold=True, spacing=1)
+    d.text(s, "Une ligne de base par personne · des règles explicites avant tout modèle · une IA locale qui formule et ne décide pas · zéro octet vers le réseau",
+           Inches(3.3), Inches(5.5), Inches(9.2), Inches(0.85), size=13, color=INK)
 
-    # 4 — MedBox: what it is
-    s = d.slide("1A · MedBox", "Le référent médical du bord")
-    d.card(s, Inches(0.6), Inches(1.9), Inches(3.9), Inches(3.9), "MESURER",
-           "Cinq constantes à 10 Hz pour quarante membres, comparées à la plage habituelle de chacun. Une seule valeur ne suffit jamais.")
-    d.card(s, Inches(4.7), Inches(1.9), Inches(3.9), Inches(3.9), "DÉCIDER",
-           "Score NEWS2 par des règles explicites. Le référent nomme ce que les mesures montrent, décide l’isolement, attribue une zone.", WARN)
-    d.card(s, Inches(8.8), Inches(1.9), Inches(3.9), Inches(3.9), "PARLER",
-           "Il le dit à la personne et à l’équipage, à l’écran et à voix haute, en français ou en anglais. Il écoute, s’éveille sur son nom, répond, fait la ronde.", CRIT)
-    d.text(s, "Quatre pages, sept serveurs, un dossier de 1,6 Go : modèle, voix, données et pages à bord.", Inches(0.6), Inches(6.1), Inches(12), Inches(0.6), size=13, color=MUTED)
+    # 4 — MedBox: what we built
+    s = d.slide("1A · MedBox", "Nous avons construit le référent médical du bord")
+    d.card(s, Inches(0.6), Inches(1.9), Inches(3.9), Inches(3.9), "IL MESURE",
+           "Quarante membres, cinq constantes, dix fois par seconde, comparées à la plage habituelle de chacun. Une seule valeur ne suffit jamais.")
+    d.card(s, Inches(4.7), Inches(1.9), Inches(3.9), Inches(3.9), "IL DÉCIDE",
+           "Un score NEWS2 par des règles que n’importe qui peut relire. Il nomme ce que les mesures montrent, décide l’isolement, attribue une zone et ses couchettes.", WARN)
+    d.card(s, Inches(8.8), Inches(1.9), Inches(3.9), Inches(3.9), "IL PARLE",
+           "À la personne et à l’équipage, à l’écran et à voix haute, en français ou en anglais. Il écoute jusqu’au bout de la phrase, s’éveille sur son nom, répond, fait la ronde du vaisseau.", CRIT)
+    d.text(s, "Quatre pages, sept serveurs, un espace personnel par membre, une vue 3D du vaisseau pièce par pièce.", Inches(0.6), Inches(6.1), Inches(12), Inches(0.6), size=13, color=MUTED)
 
     # 5 — MedBox: demo
-    s = d.slide("1A · MedBox", "Démonstration en cinq temps")
-    d.rows(s, [("1 · Lancement", "Double-clic : station, six espaces et modèle prêts en 4 s. Le référent se présente ; consentement à la voix ; langue."),
-               ("2 · Équipage", "La semaine de l’équipe, le membre en forme, les activités du jour."),
-               ("3 · Contamination", "Six membres se dégradent ; messages sonores ; « Lire » : carte, vaisseau 3D, pièce qui s’illumine, décision lue."),
+    s = d.slide("1A · MedBox", "La démonstration, en cinq temps")
+    d.rows(s, [("1 · Lancement", "Double-clic : station, six espaces et modèle prêts en quatre secondes. Le référent se présente ; consentement à la voix ; langue."),
+               ("2 · Équipage", "La semaine de l’équipe, le membre en forme et ses habitudes, les activités du jour."),
+               ("3 · Contamination", "Six membres se dégradent ; messages sonores ; « Lire » : carte, vaisseau 3D, la pièce qui s’illumine, la décision lue."),
                ("4 · Espace personnel", "Le référent reconnaît la personne, lit son évaluation à la deuxième personne, répond à sa question parlée."),
-               ("5 · Panne", "Le modèle est arrêté : la surveillance continue, l’écran le dit. Relancé : le référent revient.")],
+               ("5 · Panne", "Nous arrêtons le modèle : la surveillance continue, l’écran le dit. Nous le relançons : le référent revient.")],
            y0=1.75, step=1.0)
 
-    # 6 — MedBox: how and safety
-    s = d.slide("1A · MedBox", "Deux chemins, et ce que le référent ne peut pas faire")
-    d.card(s, Inches(0.6), Inches(1.85), Inches(5.95), Inches(2.2), "CHEMIN RAPIDE — SANS MODÈLE",
-           "Mesures → NEWS2, isolement, contacts → SQLite, WebSocket. N’importe jamais le module IA.", size=12)
-    d.card(s, Inches(6.75), Inches(1.85), Inches(5.95), Inches(2.2), "CHEMIN LENT — LE RÉFÉRENT",
-           "Faits écrits par la station → Ollama sous schéma JSON → validateur → écran et voix. Isolement et équipage : la station répond elle-même.", WARN, size=12)
-    d.rows(s, [("Ne décide pas du score", "Règles explicites ; le modèle formule."),
-               ("Ne prescrit pas", "Aucun médicament, aucune dose ne passe le validateur."),
-               ("N’invente pas", "Une condition n’est nommée que si les mesures la montrent ; un isolé n’existe que dans les registres."),
-               ("Ne décide pas seul", "Confirmation et levée d’isolement sont humaines ; consentement micro parlé et révocable.")],
-           y0=4.25, step=0.62, head_color=CRIT, head_w=3.2)
+    # 6 — MedBox: what it cannot do
+    s = d.slide("1A · MedBox", "Ce que le référent ne peut pas faire, par construction")
+    d.text(s, "Deux chemins qui ne se mélangent jamais : les mesures, le score et l’isolement d’un côté, sans modèle ; le langage de l’autre, sous schéma et validateur.",
+           Inches(0.6), Inches(1.7), Inches(12), Inches(0.8), size=14, color=INK)
+    d.rows(s, [("Décider du score", "Le score et la proposition d’isolement viennent de règles explicites. Le modèle formule, il ne calcule rien."),
+               ("Prescrire", "Aucun médicament, aucune dose ne passe le validateur. Jamais."),
+               ("Inventer", "Une condition n’est nommée que si les mesures la montrent ; un isolé n’existe que dans les registres de la station."),
+               ("Décider seul", "Confirmation et levée d’isolement sont humaines. Le consentement micro est parlé, révocable, et rien de l’audio n’est conservé."),
+               ("Tomber en silence", "Si le modèle s’arrête, la surveillance, les décisions et les pages continuent, et l’écran le dit.")],
+           y0=2.55, step=0.84, head_color=CRIT, head_w=3.0)
 
-    # 7 — MedBox: results
+    # 7 — MedBox: numbers
     s = d.slide("1A · MedBox", "Vérifié sur la machine de soutenance")
     cols = [("40", "membres suivis"), (str(scenarios), "scénarios rejouables"), (str(tests), "tests verts"),
             ("4 s", "lancement à froid"), ("7", "serveurs, un dossier"), ("0", "octet vers le réseau")]
@@ -213,52 +208,36 @@ def build() -> Path:
         d.panel(s, x, y, Inches(3.9), Inches(2.0))
         d.number(s, x, y + Inches(0.25), Inches(3.9), v, l, color=ACCENT if i != 5 else WARN)
 
-    # 8 — ARIA: what it is
-    s = d.slide("1B · ARIA / PsychoSpace", "L’assistant de bord qui voit la dérive avant la crise", PLUM)
-    d.card(s, Inches(0.6), Inches(1.9), Inches(3.9), Inches(3.9), "OBSERVER",
-           "Check-ins quotidiens : sommeil, humeur, fatigue, stress, isolement ; à terme des capteurs ESP32. Historique local par équipier.", PLUM)
-    d.card(s, Inches(4.7), Inches(1.9), Inches(3.9), Inches(3.9), "COMPARER",
+    # 8 — ARIA: what they built
+    s = d.slide("1B · ARIA / PsychoSpace", "Ils ont construit l’assistant qui voit la dérive avant la crise", PLUM)
+    d.card(s, Inches(0.6), Inches(1.9), Inches(3.9), Inches(3.9), "IL OBSERVE",
+           "Check-ins quotidiens : sommeil, humeur, fatigue, stress, isolement ; à terme des capteurs ESP32. Un historique local par équipier.", PLUM)
+    d.card(s, Inches(4.7), Inches(1.9), Inches(3.9), Inches(3.9), "IL COMPARE",
            "Une baseline personnelle, des écarts persistants, des signaux convergents. Des règles explicites, pas une décision opaque du modèle.", WARN)
-    d.card(s, Inches(8.8), Inches(1.9), Inches(3.9), Inches(3.9), "ACCOMPAGNER",
-           "ARIA explique l’observation, pose des questions, consulte les procédures du vaisseau (RAG local) et propose une action avec un niveau de priorité. Jamais de diagnostic.", CRIT)
-    d.text(s, "Python / FastAPI · SQLite · Ollama (Llama 3.2) · embeddings locaux · interface web · ESP32 prévu.", Inches(0.6), Inches(6.1), Inches(12), Inches(0.6), size=13, color=MUTED)
+    d.card(s, Inches(8.8), Inches(1.9), Inches(3.9), Inches(3.9), "IL ACCOMPAGNE",
+           "Il explique l’observation, pose des questions, consulte les procédures du vaisseau (RAG local) et propose une action avec un niveau de priorité. Jamais de diagnostic.", CRIT)
+    d.text(s, "Python / FastAPI · SQLite · Ollama (Llama 3.2) et embeddings locaux · interface web · ESP32 prévu.", Inches(0.6), Inches(6.1), Inches(12), Inches(0.6), size=13, color=MUTED)
 
-    # 9 — ARIA: how it works
-    s = d.slide("1B · ARIA / PsychoSpace", "Une chaîne courte et vérifiable", PLUM)
-    d.rows(s, [("1 · Check-in", "L’astronaute se connecte à son profil, déclare son état ou ouvre une conversation."),
-               ("2 · Historique", "Les données déclarées, et les données capteurs quand elles existent, sont validées et stockées localement."),
-               ("3 · Dérive", "Le moteur compare aux valeurs habituelles et cherche une tendance ou plusieurs signaux convergents."),
-               ("4 · Contexte", "Historique récent, indicateurs, procédures et documents pertinents sont réunis avant toute génération."),
-               ("5 · Réponse", "PRIORITÉ · OBSERVATION · CONTEXTE · ACTION PROPOSÉE · SUIVI · SOURCE — exploitable en quelques secondes.")],
-           y0=1.75, step=1.0, head_color=PLUM, head_w=2.6)
-
-    # 10 — ARIA: scenario and results
+    # 9 — ARIA: scenario and state
     s = d.slide("1B · ARIA / PsychoSpace", "Le scénario central, et ce qui tourne", PLUM)
     d.card(s, Inches(0.6), Inches(1.85), Inches(5.95), Inches(3.5), "LA DÉRIVE PROGRESSIVE",
-           "Sommeil proche de 7 h 30, humeur haute, fatigue faible. Puis, jour après jour : le sommeil baisse, la fatigue monte, l’activité diminue, un retrait social apparaît.\n\n« Ça va, je suis juste fatigué. » ARIA ne contredit pas : elle compare à l’historique, explique la dérive, demande si un événement l’explique, propose une action cohérente.", PLUM, size=12)
+           "Sommeil proche de 7 h 30, humeur haute, fatigue faible. Puis, jour après jour : le sommeil baisse, la fatigue monte, l’activité diminue, un retrait social apparaît.\n\n« Ça va, je suis juste fatigué. » ARIA ne contredit pas : il compare à l’historique, explique la dérive, demande si un événement l’explique, propose une action cohérente.", PLUM, size=12)
     d.card(s, Inches(6.75), Inches(1.85), Inches(5.95), Inches(3.5), "ÉTAT DU PROTOTYPE",
            "IA locale : fonctionnelle · Conversation : fonctionnelle · Suivi bien-être : fonctionnel · Aide médicale : en démonstration · RAG local : V2 · Vue équipage : prototype · Capteurs : simulés · Moteur de dérive avancé : architecture cible.\n\nRésultat clé : l’assistance reste locale, garde son contexte et exploite une base documentaire embarquée sans API cloud.", WARN, size=12)
-
     d.panel(s, Inches(0.6), Inches(5.55), Inches(12.1), Inches(0.9))
-    d.text(s, "Python / FastAPI · SQLite · Ollama (Llama 3.2) et embeddings locaux · interface web · ESP32 prévu        Dépôt : github.com/ANTHONYSITCH/Psychospace · dossier 1B du 23 septembre",
+    d.text(s, "Réponse structurée : PRIORITÉ · OBSERVATION · CONTEXTE · ACTION PROPOSÉE · SUIVI · SOURCE        Dépôt : github.com/ANTHONYSITCH/Psychospace",
            Inches(0.85), Inches(5.7), Inches(11.7), Inches(0.7), size=12, color=MUTED)
 
-    # 11 — next
-    s = d.slide("Perspectives", "Ce qui vient, pour les deux solutions")
-    d.rows(s, [("MedBox V1.0", "Coque du vaisseau en 3D, vue pièce par pièce, ronde horaire parlée, tracé des contacts, brief du matin."),
-               ("MedBox V1.2", "Moteur de dérive sur la semaine ; tête de mesure ESP32 ; mode basse consommation."),
-               ("ARIA V0.8 → V1", "Capteurs ESP32 réels ; RAG enrichi et versions des procédures ; mémoire personnalisée ; déploiement résilient."),
+    # 10 — next, and one sentence
+    s = d.slide("La suite", "Ce qui vient, et ce que nous retenons")
+    d.rows(s, [("MedBox", "Coque du vaisseau en 3D, ronde horaire parlée, brief du matin, tête de mesure ESP32, mode basse consommation."),
+               ("ARIA", "Capteurs ESP32 réels, RAG enrichi et versions des procédures, mémoire personnalisée, déploiement résilient."),
                ("Ensemble", "Un isolement décidé par MedBox devient un suivi de bien-être pour ARIA ; une dérive vue par ARIA appelle une mesure de MedBox.")],
-           y0=1.8, step=1.15, head_color=WARN, head_w=3.0)
-
-    # 12 — closing
-    s = d.slide("Bilan", "Ce que nous avons démontré")
-    d.panel(s, Inches(0.6), Inches(1.9), Inches(12.1), Inches(3.2), fill=PANEL, line=ACCENT)
-    d.text(s, "« Un vaisseau-monde n’a pas de médecin ni de psychologue à bord ; il a MedBox et ARIA : deux systèmes locaux qui mesurent, "
+           y0=1.75, step=0.95, head_color=WARN, head_w=2.4)
+    d.panel(s, Inches(0.6), Inches(4.75), Inches(12.1), Inches(1.9), fill=PANEL, line=ACCENT)
+    d.text(s, "« Un vaisseau-monde n’a pas de médecin ni de psychologue à bord. Il a MedBox et ARIA : deux systèmes locaux qui mesurent, "
               "expliquent et accompagnent, et qui continuent quand la Terre ne répond plus. »",
-           Inches(1.0), Inches(2.2), Inches(11.3), Inches(2.6), size=20, color=INK)
-    d.text(s, "Prototypes de simulation : mesures synthétiques, pas de dispositif médical validé. Tout le reste est réel, testé et livré.",
-           Inches(0.6), Inches(5.5), Inches(12), Inches(0.6), size=14, color=MUTED)
+           Inches(1.0), Inches(4.95), Inches(11.3), Inches(1.6), size=17, color=INK)
 
     path = OUT / "Workshop2026-B3-Pres-Equipage.pptx"
     d.save(path)
