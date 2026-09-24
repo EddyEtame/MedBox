@@ -38,7 +38,8 @@ from .protocols import ProtocolDataError, ProtocolEngine
 from .sensors.synthetic import BASELINE_PROFILE_VERSION, ScenarioSource
 from .speech import Announcer
 from .spoken import spoken_assessment, spoken_station_answer
-from .tts import MAX_CHARS as VOICE_MAX_CHARS, SPEAKER, VOICE_NAME
+from .tts import MAX_CHARS as VOICE_MAX_CHARS, SPEAKER, VOICE_NAME, speaker_for
+from .voice import consent_answer
 from .voice import TRANSCRIBER
 from .symptoms import SymptomLog
 from .triage import Urgency, assess
@@ -522,6 +523,7 @@ async def status() -> dict:
             "available": SPEAKER.available(),
             "voice": VOICE_NAME,
             "error": SPEAKER.last_error,
+            "languages": [code for code in ("fr", "en") if speaker_for(code).available()],
         },
         "scenario": STATION.scenario.name if STATION.scenario else None,
         "scenarios": scenarios.available(),
@@ -861,6 +863,23 @@ async def _transcribe_audio(request: Request) -> tuple[str, float, str | None] |
     tmp = Path(tempfile.gettempdir()) / f"medbox-{uuid.uuid4().hex}.audio"
     try:
         tmp.write_bytes(raw)
+        headers = getattr(request, "headers", None) or {}
+        purpose = (headers.get("X-MedBox-Purpose") or "").lower()
+        preferred = (headers.get("X-MedBox-Language") or "auto").lower()
+        if purpose == "consent":
+            # « J'accepte » must work as well as "I accept". A one-second clip
+            # is too short for the model to guess its language, so it is heard
+            # in French first, then in English, and the one that is an answer
+            # wins. Seen on 24 Sep: French consent refused, English accepted.
+            first = await TRANSCRIBER.listen(tmp, language="fr")
+            if first is not None and consent_answer(first[0]):
+                return first
+            second = await TRANSCRIBER.listen(tmp, language="en")
+            if second is not None and consent_answer(second[0]):
+                return second
+            return first or second
+        if preferred in ("fr", "en"):
+            return await TRANSCRIBER.listen(tmp, language=preferred)
         return await TRANSCRIBER.listen(tmp)
     finally:
         tmp.unlink(missing_ok=True)
@@ -1040,14 +1059,44 @@ async def assistant_command(body: dict) -> dict:
         if not math.isfinite(confidence) or not 0 <= confidence <= 1:
             raise HTTPException(400, "La confiance vocale doit être comprise entre 0 et 1")
 
+    lang = str(body.get("lang") or "fr").lower()[:2]
     command = classify_command(text)
     command, resolved_by, learned_now = await _resolve(command, text, patient_id)
+    if resolved_by == "none" and (patient_id is None or _looks_like_a_question(text)):
+        # Not a command the station knows, and not a statement filed under a
+        # selected member: a person is talking to the assistant. Answer them,
+        # out loud. Eddy, 24 Sep: "it detected speech but did not respond".
+        answer = await assistant_ask({"text": text, "patient_id": patient_id, "lang": lang})
+        STATION.learning.record(text, command.kind, resolved_by, patient_id)
+        return {
+            "action": "answer",
+            "reply": answer["answer"],
+            "spoken": answer.get("spoken") or answer["answer"],
+            "resolved_by": "ask",
+            "learned": False,
+            "understood_as": "question à l’assistant",
+            "held_reason": answer.get("held_reason"),
+            "blocked": answer.get("blocked", []),
+        }
     result = _execute(command, text, patient_id, confidence)
     STATION.learning.record(text, command.kind, resolved_by, patient_id)
     result["resolved_by"] = resolved_by
     result["learned"] = learned_now
     result["understood_as"] = INTENT_LABELS_FR.get(command.kind, command.kind)
+    result.setdefault("spoken", result.get("reply"))
     return result
+
+
+_QUESTION_STARTS = (
+    "que ", "qu’", "qu'", "quoi", "pourquoi", "comment", "est-ce", "est ce", "quel", "quelle",
+    "où ", "ou est", "combien", "peux-tu", "peux tu", "pouvez", "et si", "dis-moi", "dis moi",
+    "what", "why", "how", "can ", "could", "should", "is ", "are ", "do ", "does ", "tell me", "where",
+)
+
+
+def _looks_like_a_question(text: str) -> bool:
+    low = str(text or "").strip().lower()
+    return "?" in low or low.startswith(_QUESTION_STARTS)
 
 
 async def _resolve(command: Command, text: str, patient_id: str | None) -> tuple[Command, str, bool]:
@@ -1288,7 +1337,7 @@ async def ai_assess(patient_id: str, fresh: bool = False) -> JSONResponse:
             and held.get("news2_at_assessment") == triage.get("total")
             and time.time() - held.get("at", 0) < 180):
         body = {**held, "cached": True, "age_seconds": round(time.time() - held["at"], 1)}
-        return JSONResponse(content={**body, "spoken": spoken_assessment(name, body)})
+        return JSONResponse(content={**body, "spoken": _spoken_for(patient_id, name, body)})
     if held is not None and held.get("ok") and not CLIENT.available:
         # The demo's own beat: the assistant is killed on stage. What it
         # wrote before it died is still what it wrote, dated and labelled;
@@ -1297,7 +1346,7 @@ async def ai_assess(patient_id: str, fresh: bool = False) -> JSONResponse:
             **held, "cached": True, "age_seconds": round(time.time() - held["at"], 1),
             "held_reason": "assistant_down",
         }
-        return JSONResponse(content={**body, "spoken": spoken_assessment(name, body)})
+        return JSONResponse(content={**body, "spoken": _spoken_for(patient_id, name, body)})
     result = await STATION.assess_now(patient_id)
     if result is None:
         return JSONResponse(
@@ -1333,7 +1382,15 @@ async def ai_assess(patient_id: str, fresh: bool = False) -> JSONResponse:
     # `spoken` is the one breath the voice says about it: no numbers, the
     # pattern in plain words, not a diagnosis, the question.
     body = {**safe, "cached": False, "age_seconds": 0.0}
-    return JSONResponse(content={**body, "spoken": spoken_assessment(name, body)})
+    return JSONResponse(content={**body, "spoken": _spoken_for(patient_id, name, body)})
+
+
+def _spoken_for(patient_id: str, name: str | None, body: dict, second_person: bool = False) -> str:
+    """The voice's one breath about this member: condition, decision, question."""
+    iso = STATION.quarantine.assignments.get(patient_id)
+    entry = STATION.latest.get(patient_id) or {}
+    urgency = (entry.get("triage") or {}).get("urgency")
+    return spoken_assessment(name, body, iso.to_dict() if iso else None, urgency, second_person)
 
 
 @app.get("/api/assistant/help")
@@ -1389,8 +1446,9 @@ def _facts_for(patient_id: str | None) -> tuple[str, str, str]:
         "Faits de la station : MedBox mesure cinq constantes (température, SpO2, pouls, "
         "respiration, tension systolique) et reçoit deux observations saisies (conscience "
         "ACVPU, oxygène d’appoint). Le score est NEWS2 (Royal College of Physicians 2017), "
-        "calculé sans modèle. L’isolement est proposé par la station et confirmé par une "
-        "personne. L’assistant ne diagnostique pas, ne prescrit pas et ne décide pas.",
+        "calculé sans modèle. L’assistant est le référent médical du bord : il évalue, "
+        "décide des isolements, que l’équipage accuse réception, et répond aux questions ; "
+        "il ne prescrit aucun médicament.",
         f"Ce que la station sait faire : {caps}.",
     ]
     station_answer = "L’assistant est arrêté. " + lines[0]
@@ -1445,7 +1503,12 @@ async def assistant_ask(body: dict) -> dict:
     patient_id = str(body.get("patient_id") or "").strip() or None
     if patient_id is not None and patient_id not in STATION.latest:
         raise HTTPException(404, f"Membre inconnu : {patient_id}")
+    lang = str(body.get("lang") or "fr").lower()[:2]
     facts, station_answer, station_spoken = _facts_for(patient_id)
+    if body.get("self"):
+        facts += "\nL’interlocuteur est ce membre en personne : adressez-vous à lui directement, à la deuxième personne."
+    if lang == "en":
+        facts += "\nAnswer in English: the person asked for English."
     if not CLIENT.available:
         return {"ok": True, "answer": station_answer, "spoken": station_spoken, "grounded_in": "manual",
                 "blocked": [], "stand_in": False, "held_reason": "assistant_down"}
@@ -1457,6 +1520,7 @@ async def assistant_ask(body: dict) -> dict:
     out = enforce_answer(raw)
     # Two validated sentences read as they are; the voice module says the units.
     out["spoken"] = out["answer"]
+    out["lang"] = lang
     out["stand_in"] = CLIENT.stand_in
     out["held_reason"] = None
     return out
@@ -1479,10 +1543,11 @@ async def voice_say(body: dict) -> Response:
     text = str(body.get("text") or "").strip()
     if not text or len(text) > VOICE_MAX_CHARS:
         raise HTTPException(400, "Un texte court est requis")
-    if not SPEAKER.available():
-        raise HTTPException(503, "Aucune voix embarquée : les phrases pré-enregistrées restent disponibles.")
+    speaker = speaker_for(str(body.get("lang") or "fr"))
+    if not speaker.available():
+        raise HTTPException(503, "Aucune voix embarquée pour cette langue : les phrases pré-enregistrées restent disponibles.")
     try:
-        audio = await SPEAKER.say(text)
+        audio = await speaker.say(text)
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(503, f"La voix n’a pas pu lire ce texte : {exc}") from exc
     return Response(content=audio, media_type="audio/wav", headers={"Cache-Control": "no-store"})

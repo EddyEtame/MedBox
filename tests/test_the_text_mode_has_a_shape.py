@@ -42,12 +42,18 @@ def test_the_shape_has_no_room_for_a_diagnosis_or_an_urgency():
 @pytest.mark.parametrize("text", [
     "Prenez 500 mg de paracétamol toutes les six heures.",
     "Administrez de l’oxygène par voie nasale.",
-    "C’est probablement une pneumonie débutante.",
 ])
-def test_a_prescription_or_a_disease_in_the_answer_is_replaced_and_said(text):
+def test_a_prescription_in_the_answer_is_replaced_and_said(text):
     out = enforce_answer({"answer": text, "grounded_in": "manual"})
     assert out["answer"] == NO_ANSWER and out["grounded_in"] == "nothing"
     assert out["blocked"] == [SUPPRESSED_ANSWER]
+
+
+def test_the_referent_may_name_a_condition_but_never_a_drug():
+    """Since 24 Sep the assistant is the ship's medical referent: it says what
+    a person has. The drug line stays closed."""
+    said = enforce_answer({"answer": "Vous présentez un syndrome respiratoire fébrile, compatible avec l’exposition à bord.", "grounded_in": "measurements"})
+    assert said["blocked"] == [] and "syndrome respiratoire" in said["answer"]
 
 
 def test_a_plain_answer_passes_and_a_long_one_is_cut_on_a_word():
@@ -67,7 +73,7 @@ def test_garbage_and_an_unknown_source_get_the_station_sentence():
 
 def test_the_facts_are_written_by_the_station():
     facts, own, spoken = station._facts_for(None)
-    assert "NEWS2" in facts and "ne diagnostique pas" in facts
+    assert "NEWS2" in facts and "référent médical du bord" in facts
     assert "Ce que la station sait faire" in facts
     assert own.startswith("L’assistant est arrêté.")
     assert spoken.startswith("L’assistant est arrêté.") and len(spoken.split()) <= 25
@@ -116,6 +122,20 @@ def test_an_empty_or_endless_question_is_refused():
     with pytest.raises(HTTPException) as unknown:
         asyncio.run(station.assistant_ask({"text": "Pourquoi ?", "patient_id": "P-999"}))
     assert unknown.value.status_code == 404
+
+
+def test_a_question_and_its_answer_carry_the_language_asked_for(monkeypatch):
+    monkeypatch.setattr(station.CLIENT, "available", True)
+    seen = {}
+
+    async def echo(question, facts):
+        seen["facts"] = facts
+        return {"answer": "Your score comes from the breathing rate.", "grounded_in": "measurements"}
+
+    monkeypatch.setattr(station.CLIENT, "answer", echo)
+    out = asyncio.run(station.assistant_ask({"text": "Why this score?", "lang": "en", "self": True}))
+    assert out["lang"] == "en" and out["spoken"] == out["answer"]
+    assert "Answer in English" in seen["facts"] and "en personne" in seen["facts"]
 
 
 def test_the_manifest_tells_the_operator_both_new_things():

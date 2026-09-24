@@ -114,9 +114,9 @@
         "des règles fixes. Il valide le circuit technique, mais ne réfléchit pas et ne doit " +
         "jamais être présenté comme l’assistant.</div>";
     } else {
-      html += '<div class="ai-provenance"><b>Généré par ' + esc(b.model || "l’assistant") +
-        ".</b> Ni mesuré, ni calculé, ni diagnostique. La priorité affichée ci-dessus " +
-        "provient de NEWS2 et rien ici ne peut la modifier." +
+      html += '<div class="ai-provenance"><b>Évaluation du référent médical de bord</b> (' +
+        esc(b.model || "l’assistant") + "), fondée sur les mesures et sur le score NEWS2 " +
+        "affiché ci-dessus, que rien ici ne modifie." +
         (b.held_reason === "assistant_down"
           ? " <b>Réponse conservée :</b> écrite il y a " + esc(String(Math.round(b.age_seconds || 0))) +
             " s. L’assistant est arrêté ; les mesures et la priorité continuent sans lui."
@@ -211,7 +211,6 @@
     if (b.hypotheses && b.hypotheses.length) {
       parts.push("Profil observé : " + b.hypotheses.map(function (h) { return String(h.name).toLowerCase(); }).join(", ") + ".");
     }
-    parts.push("Ce n’est pas un diagnostic.");
     if (b.questions_for_patient && b.questions_for_patient.length) {
       parts.push("Question à poser : " + b.questions_for_patient[0]);
     }

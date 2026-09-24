@@ -31,6 +31,7 @@ log = logging.getLogger("medbox.tts")
 
 VOICE_NAME = "fr_FR-siwis-medium"
 VOICE_DIR = ROOT / "models" / "piper"
+VOICES = {"fr": "fr_FR-siwis-medium", "en": "en_US-lessac-medium"}
 MAX_CHARS = 400
 CACHE_SIZE = 64
 
@@ -50,10 +51,20 @@ SPOKEN = (
 )
 
 
-def normalise(text: str) -> str:
-    """One line of plain French the voice can say, from what the screen shows."""
+SPOKEN_EN = (
+    (re.compile(r"\bMedBox\b"), "Med Box"),
+    (re.compile(r"\bSpO2\b", re.I), "oxygen saturation"),
+    (re.compile(r"\s*°\s*C\b"), " degrees"),
+    (re.compile(r"\s*%"), " percent"),
+    (re.compile(r"\s*/\s*min\b"), " per minute"),
+    (re.compile(r"\s*mmHg\b"), " millimetres of mercury"),
+)
+
+
+def normalise(text: str, lang: str = "fr") -> str:
+    """One line of plain speech the voice can say, from what the screen shows."""
     out = " ".join(str(text or "").split())
-    for pattern, spoken in SPOKEN:
+    for pattern, spoken in (SPOKEN_EN if lang == "en" else SPOKEN):
         out = pattern.sub(spoken, out)
     return out.strip()[:MAX_CHARS]
 
@@ -61,8 +72,9 @@ def normalise(text: str) -> str:
 class Speaker:
     """One Piper voice, loaded on first use, rendering one sentence at a time."""
 
-    def __init__(self, model_path: Path | None = None) -> None:
-        self.model_path = Path(model_path) if model_path else VOICE_DIR / f"{VOICE_NAME}.onnx"
+    def __init__(self, model_path: Path | None = None, lang: str = "fr") -> None:
+        self.lang = lang
+        self.model_path = Path(model_path) if model_path else VOICE_DIR / f"{VOICES.get(lang, VOICE_NAME)}.onnx"
         self.last_error: str | None = None
         self._voice = None
         self._lock = threading.Lock()
@@ -80,7 +92,7 @@ class Speaker:
 
     def render(self, text: str) -> bytes:
         """WAV bytes for `text`. Raises RuntimeError when there is no voice."""
-        spoken = normalise(text)
+        spoken = normalise(text, self.lang)
         if not spoken:
             raise ValueError("nothing to say")
         if not self.available():
@@ -113,4 +125,10 @@ class Speaker:
         return await asyncio.to_thread(self.render, text)
 
 
-SPEAKER = Speaker()
+SPEAKER = Speaker(lang="fr")
+SPEAKERS = {"fr": SPEAKER, "en": Speaker(lang="en")}
+
+
+def speaker_for(lang: str) -> Speaker:
+    """The voice for a language code; French for anything it does not have."""
+    return SPEAKERS.get(str(lang or "fr").lower()[:2], SPEAKER)

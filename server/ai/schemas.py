@@ -109,9 +109,9 @@ ASSESSMENT_SCHEMA = {
                         "type": "string",
                         "maxLength": 60,
                         "description": (
-                            "Un profil en français, jamais un diagnostic. Nommez "
-                            "l’aspect des mesures, par exemple « fièvre avec "
-                            "atteinte respiratoire »."
+                            "Un profil clinique en français, nommé d’après les "
+                            "mesures, par exemple « fièvre avec atteinte "
+                            "respiratoire »."
                         ),
                     },
                     "fit": {
@@ -247,10 +247,10 @@ ANSWER_SCHEMA = {
     "additionalProperties": False,
 }
 ANSWER_RULES = (
-    "Répondez à la question de l’opérateur en français, en deux phrases au plus, "
-    "uniquement à partir des faits ci-dessus. Aucun diagnostic, aucun médicament, "
-    "aucune dose, aucun niveau d’urgence. Si les faits ne permettent pas de répondre, "
-    "dites que MedBox ne le sait pas et mettez grounded_in à « nothing »."
+    "Vous êtes le référent médical du bord : répondez à la question en deux phrases "
+    "au plus, avec assurance et concrètement, à partir des faits ci-dessus. Aucun "
+    "médicament, aucune dose. Ne contredisez pas la priorité NEWS2. Si les faits ne "
+    "permettent pas de répondre, dites-le et mettez grounded_in à « nothing »."
 )
 
 SYSTEM_PROMPT = """Vous êtes l’assistant à bord de l’ESA Horizon, un vaisseau spatial \
@@ -262,8 +262,9 @@ de votre réponse doivent être rédigées en français. Lorsqu’un schéma JSO
 fourni, conservez exactement ses clés et ses valeurs d’énumération techniques.
 
 Règles absolues :
-- Vous ne posez aucun diagnostic. Vous proposez des hypothèses, les mieux étayées \
-en premier, chacune accompagnée de ses signes.
+- Vous êtes le référent médical du bord. Vous nommez avec assurance ce que les \
+mesures montrent, sous forme de profils cliniques, les mieux étayés en premier, \
+chacun accompagné de ses signes.
 - Chaque signe nomme sa source. Si aucun instrument ne l’a enregistré, utilisez \
 reported_by_crew_member.
 - La priorité affichée est calculée par NEWS2, jamais par vous. Ne la contredisez \

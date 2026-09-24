@@ -179,13 +179,13 @@ Après l’autorisation du navigateur et une réponse vocale explicite, MedBox �
 
 #### Répondre à une question tapée, à partir des faits de la station
 
-L’opérateur tape une question (« pourquoi ce score ? », « que mesure MedBox ? »). L’assistant répond en deux phrases, uniquement à partir des faits que la station lui écrit : mesures, lignes de base, score, isolement, déclarations. Sa réponse est décodée sous un format fermé et passe le même filtre que les évaluations : pas de diagnostic, pas de médicament, pas de dose. Sans assistant, la station répond elle-même avec ces faits, et le dit.
+L’opérateur tape une question (« pourquoi ce score ? », « que mesure MedBox ? »). L’assistant répond en deux phrases, uniquement à partir des faits que la station lui écrit : mesures, lignes de base, score, isolement, déclarations. Sa réponse est décodée sous un format fermé et passe le même filtre que les évaluations : pas de médicament, pas de dose. Sans assistant, la station répond elle-même avec ces faits, et le dit.
 
 *Dans la barre de commande du vaisseau, basculer sur « Question » ou commencer par « ? » ; sur le tableau, le champ « Question à l’assistant ».*
 
 #### Proposer des hypothèses classées pour une personne
 
-L’assistant lit les mesures et les déclarations de cette personne, puis propose des explications possibles. Chaque signe nomme son capteur ou reste clairement marqué comme déclaré et non mesuré. Il ne diagnostique pas, ne change jamais la priorité et doit reconnaître l’insuffisance des données au lieu d’inventer un profil.
+L’assistant lit les mesures et les déclarations de cette personne, puis nomme le profil clinique qu’elles montrent. Chaque signe nomme son capteur ou reste clairement marqué comme déclaré et non mesuré. Il ne change jamais la priorité calculée et reconnaît l’insuffisance des données au lieu d’inventer un profil.
 
 *Sélectionner un membre, puis appuyer sur « Demander à l’assistant ».*
 
@@ -201,7 +201,7 @@ MedBox mesure cinq paramètres et en fait observer deux. L’assistant peut donc
 
 Ces limites ne reposent pas uniquement sur une consigne : elles sont renforcées par le schéma de sortie et par des contrôles serveur.
 
-**Poser un diagnostic.** L’assistant propose seulement des hypothèses accompagnées de leurs signes. Le schéma de réponse ne contient aucun champ de diagnostic : il ne peut donc pas en produire, même si on le lui demande.
+**Inventer une maladie que les mesures ne montrent pas.** Le référent médical du bord nomme ce que les instruments montrent, sous forme de profil clinique. Le schéma de réponse n’a aucun champ libre pour une maladie inventée : ce qu’il dit tient aux mesures.
 
 **Prescrire un médicament ou un traitement.** Aucun champ ne permet d’émettre un traitement. La seule liste qu’il peut remplir concerne les observations et mesures à recueillir. Si un médicament, une dose ou une voie d’administration y apparaît, MedBox supprime toute la liste et le signale. MedBox n’est pas médecin.
 

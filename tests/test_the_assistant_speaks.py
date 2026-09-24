@@ -51,7 +51,7 @@ def test_a_missing_voice_is_reported_not_raised_further_up(tmp_path):
 def test_the_route_answers_503_without_a_voice_and_400_for_nonsense(monkeypatch, tmp_path):
     from server import app as station
 
-    monkeypatch.setattr(station, "SPEAKER", tts.Speaker(tmp_path / "nowhere.onnx"))
+    monkeypatch.setattr(station, "speaker_for", lambda lang: tts.Speaker(tmp_path / "nowhere.onnx"))
     with pytest.raises(HTTPException) as missing:
         asyncio.run(station.voice_say({"text": "bonjour"}))
     assert missing.value.status_code == 503
@@ -65,7 +65,7 @@ def test_status_says_whether_there_is_a_mouth():
     from server import app as station
 
     body = asyncio.run(station.status())
-    assert set(body["mouth"]) == {"available", "voice", "error"}
+    assert set(body["mouth"]) == {"available", "voice", "error", "languages"}
     assert body["mouth"]["voice"] == tts.VOICE_NAME
 
 
@@ -81,9 +81,10 @@ def test_a_sentence_renders_to_real_audio_and_is_cached():
 
 def test_the_voice_never_reads_numbers_off_the_screen():
     """Heard on 24 Sep: the voice read "Température 39.19 °C, SpO2 92.2 %,
-    pouls 113.4 /min". The spoken form names the pattern, says it is not a
-    diagnosis, asks the question, and carries no number."""
-    from server.spoken import NOT_A_DIAGNOSIS, spoken_assessment, spoken_station_answer
+    pouls 113.4 /min", and hypothesis names that sounded like a machine. The
+    spoken form names the condition the way the ship's medical referent
+    would, states the decision, asks the question, and carries no number."""
+    from server.spoken import spoken_assessment, spoken_station_answer
 
     body = {
         "ok": True,
@@ -93,14 +94,22 @@ def test_the_voice_never_reads_numbers_off_the_screen():
         "questions_for_patient": ["Depuis quand avez-vous de la fièvre ?"],
         "information_to_gather": ["Reprendre la saturation dans dix minutes"],
     }
-    said = spoken_assessment("Ines Novak", body)
-    assert said.startswith("Pour Ines Novak, le profil observé est : fièvre avec atteinte respiratoire et fièvre avec désaturation.")
-    assert NOT_A_DIAGNOSIS in said
+    said = spoken_assessment("Ines Novak", body, {"zone": None, "confirmed": False}, "high")
+    assert said.startswith("Ines Novak présente un syndrome respiratoire fébrile et de la fièvre avec un manque d’oxygène.")
+    assert "J’ai décidé son isolement ; l’équipage doit en accuser réception." in said
     assert said.endswith("Question à lui poser : Depuis quand avez-vous de la fièvre ?")
     assert not any(ch.isdigit() for ch in said.split("Question")[0])
     assert len(said.split()) <= 60
+    # To the person, on their own page: second person, and the decision as
+    # an instruction, because the assistant is the ship's medical referent.
+    mine = spoken_assessment("Eddy", body, {"zone": "A", "confirmed": True}, "high", second_person=True)
+    assert mine.startswith("Eddy, vous présentez un syndrome respiratoire fébrile")
+    assert "Je vous place en isolement, zone A. Restez dans vos quartiers." in mine
+    assert mine.endswith("Depuis quand avez-vous de la fièvre ?")
+    calm = spoken_assessment("Brad", {"ok": True, "hypotheses": [], "insufficient_data": True}, None, "routine", second_person=True)
+    assert calm == "Brad, vos mesures sont dans votre plage habituelle. Rien d’inquiétant pour le moment."
     held = spoken_assessment("Ines Novak", {**body, "held_reason": "assistant_down"})
-    assert held.startswith("L’assistant est arrêté ; voici ce qu’il avait préparé.")
+    assert held.startswith("L’assistant est arrêté ; voici sa dernière évaluation.")
     assert spoken_assessment("X", {"ok": False}) == ""
     alone = spoken_station_answer()
     assert alone.startswith("L’assistant est arrêté.") and not any(ch.isdigit() for ch in alone)
@@ -112,7 +121,9 @@ def test_the_voice_introduces_itself_when_someone_switches_it_on():
     from server.speech import PHRASES
 
     assert PHRASES["intro"].startswith("Bonjour, je suis MedBox")
-    assert "décide" in PHRASES["intro_rule"]
+    assert "décisions médicales" in PHRASES["intro_rule"]
+    for stem in ("consent_ok", "lang_fr", "wake_ack"):
+        assert (ROOT / "web" / "speech" / f"{stem}.wav").is_file(), f"{stem}.wav must be rendered"
     voice = (ROOT / "web" / "voice.js").read_text(encoding="utf-8")
     assert 'say(["intro", "intro_rule"])' in voice
     for view in ("ship.js", "app.js"):
@@ -138,13 +149,13 @@ def test_an_assessment_response_carries_its_spoken_form(monkeypatch):
     response = asyncio.run(station.ai_assess("P-TEST"))
     body = __import__("json").loads(response.body)
     assert body["cached"] is True
-    assert body["spoken"].startswith("Pour Test Crew, le profil observé est : fièvre.")
+    assert body["spoken"].startswith("Test Crew présente de la fièvre.")
     assert "38" not in body["spoken"]
 
 
 def test_the_browser_asks_the_station_first_and_stays_guarded():
     voice = (ROOT / "web" / "voice.js").read_text(encoding="utf-8")
-    assert "/api/voice/say" in voice and "localFrenchSpeech(String(text), serial)" in voice
+    assert "/api/voice/say" in voice and "localFrenchSpeech(String(text), serial, lang)" in voice
     assert "serverVoice = false" in voice, "a 503 must be remembered, not retried on every sentence"
     for view in ("ship.js", "app.js"):
         js = (ROOT / "web" / view).read_text(encoding="utf-8")

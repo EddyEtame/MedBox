@@ -38,8 +38,8 @@ CAPABILITIES = [
             "L’assistant répond en deux phrases, uniquement à partir des faits que la station "
             "lui écrit : mesures, lignes de base, score, isolement, déclarations. Sa réponse est "
             "décodée sous un format fermé et passe le même filtre que les évaluations : pas de "
-            "diagnostic, pas de médicament, pas de dose. Sans assistant, la station répond "
-            "elle-même avec ces faits, et le dit."
+            "médicament, pas de dose. Sans assistant, la station répond elle-même avec ces "
+            "faits, et le dit."
         ),
         "needs_ai": True,
         "how": (
@@ -161,10 +161,10 @@ CAPABILITIES = [
         "title": "Proposer des hypothèses classées pour une personne",
         "does": (
             "L’assistant lit les mesures et les déclarations de cette personne, "
-            "puis propose des explications possibles. Chaque signe nomme son "
-            "capteur ou reste clairement marqué comme déclaré et non mesuré. Il "
-            "ne diagnostique pas, ne change jamais la priorité et doit reconnaître "
-            "l’insuffisance des données au lieu d’inventer un profil."
+            "puis nomme le profil clinique qu’elles montrent. Chaque signe nomme son "
+            "capteur ou reste clairement marqué comme déclaré et non mesuré. Il ne "
+            "change jamais la priorité calculée et reconnaît l’insuffisance des "
+            "données au lieu d’inventer un profil."
         ),
         "needs_ai": True,
         "how": "Sélectionner un membre, puis appuyer sur « Demander à l’assistant ».",
@@ -186,11 +186,11 @@ CAPABILITIES = [
 REFUSALS = [
     {
         "id": "diagnosis",
-        "never": "Poser un diagnostic",
+        "never": "Inventer une maladie que les mesures ne montrent pas",
         "why": (
-            "L’assistant propose seulement des hypothèses accompagnées de leurs "
-            "signes. Le schéma de réponse ne contient aucun champ de diagnostic : "
-            "il ne peut donc pas en produire, même si on le lui demande."
+            "Le référent médical du bord nomme ce que les instruments montrent, "
+            "sous forme de profil clinique. Le schéma de réponse n’a aucun champ "
+            "libre pour une maladie inventée : ce qu’il dit tient aux mesures."
         ),
     },
     {
@@ -310,10 +310,10 @@ def manifest(ai_available: bool = False, stand_in: bool = False) -> dict:
 INTRODUCTION_CORE = (
     "Je surveille les cinq constantes mesurées, les compare aux lignes de base "
     "personnelles et signale les écarts dans le tableau, le vaisseau 3D et les "
-    "dossiers locaux. Je peux proposer des hypothèses et des questions, mais jamais "
-    "diagnostiquer, prescrire, modifier une priorité ou isoler quelqu’un : ces "
-    "décisions restent humaines. Les comptes rendus et les cartes de protocole "
-    "restent locaux et ne sont pas interprétés par le modèle."
+    "dossiers locaux. Je suis le référent médical du bord : j’évalue chaque membre, "
+    "je décide des isolements, que l’équipage accuse réception, et je réponds à vos "
+    "questions. Je ne prescris aucun médicament : les cartes de protocole imprimées "
+    "restent la référence, et elles ne sont pas interprétées par le modèle."
 )
 
 INTRODUCTION_CONSENT = (

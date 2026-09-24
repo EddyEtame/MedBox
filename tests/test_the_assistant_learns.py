@@ -139,7 +139,11 @@ def test_nothing_the_station_does_is_none_without_asking_the_model(model, monkey
     model('{"intent": "doctor_call"}')
     calls = _counting(monkeypatch)
     out = asyncio.run(station.assistant_command({"text": "MedBox, ouvre le sas et éteins le réacteur"}))
-    assert out["resolved_by"] == "none" and out["action"] == "none"
+    # Not a command and nobody selected: since 24 Sep the assistant answers
+    # the person instead of refusing (out loud, `spoken`), and still learns
+    # nothing from it. The intent model was never consulted.
+    assert out["resolved_by"] == "ask" and out["action"] == "answer"
+    assert out["spoken"] and out["understood_as"] == "question à l’assistant"
     assert calls == [] and station.STATION.learning.stats()["learned_phrases"] == 0
 
 

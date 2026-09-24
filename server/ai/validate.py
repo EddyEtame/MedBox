@@ -109,8 +109,8 @@ PATTERN_FR = {
     "systolic_bp": "hypotension",
 }
 SUPPRESSED_DIAGNOSIS = (
-    "L’assistant a nommé une maladie ({name}). MedBox n’affiche aucun "
-    "diagnostic : le profil est nommé d’après les instruments."
+    "L’assistant a nommé une maladie ({name}) ; le profil est renommé d’après "
+    "les instruments qui le soutiennent."
 )
 SUPPRESSED_NORMAL_PATTERN = (
     "L’assistant a nommé une hypothèse « {name} » d’après {word} alors que cet "
@@ -370,10 +370,10 @@ def enforce(result: dict, urgency: str = "", params: list | None = None) -> dict
 
 
 SUPPRESSED_ANSWER = (
-    "L’assistant a répondu avec un diagnostic, un médicament ou une dose. "
-    "MedBox n’affiche pas cette réponse."
+    "L’assistant a répondu avec un médicament ou une dose. MedBox n’affiche pas "
+    "cette réponse : les cartes de protocole imprimées restent la référence."
 )
-NO_ANSWER = "MedBox ne sait pas répondre à cela à partir de ce qu’elle mesure."
+NO_ANSWER = "Je ne peux pas répondre à cela à partir de ce que je mesure."
 
 
 def enforce_answer(result) -> dict:
@@ -401,7 +401,10 @@ def enforce_answer(result) -> dict:
     if len(answer) > MAX_ANSWER_CHARS:
         cut = answer[:MAX_ANSWER_CHARS]
         answer = (cut.rsplit(" ", 1)[0] if " " in cut else cut).rstrip(" ,;:-") + "…"
-    if answer and (_looks_like_a_prescription(answer) or _names_a_disease(answer) or DOSE.search(answer)):
+    # A drug or a dose never reaches anyone. A condition named in an answer
+    # does: since 24 Sep the assistant is the ship's medical referent and says
+    # what a person has; the drug line is the one that stays closed.
+    if answer and (_looks_like_a_prescription(answer) or DOSE.search(answer)):
         blocked.append(SUPPRESSED_ANSWER)
         answer = ""
     if not answer:

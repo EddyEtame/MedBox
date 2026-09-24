@@ -61,9 +61,9 @@
     ERROR: ["ERREUR", "error"]
   };
 
-  var CONSENT_TEXT = "Je suis MedBox, assistant local hors ligne de surveillance. " +
-    "Je ne remplace pas un médecin : diagnostics, médicaments et isolement demandent " +
-    "une validation médicale. Avec votre accord, le microphone reste actif durant " +
+  var CONSENT_TEXT = "Je suis MedBox, le référent médical du bord, hors ligne. " +
+    "J’évalue l’équipage, je décide des isolements et je réponds à vos questions ; " +
+    "je ne prescris aucun médicament. Avec votre accord, le microphone reste actif durant " +
     "cette session pour détecter « MedBox ». L’audio et la réponse de consentement " +
     "ne sont pas conservés ; seuls votre décision et l’heure sont journalisées " +
     "localement. Après « MedBox », une demande peut être inscrite comme propos " +
@@ -447,24 +447,40 @@
       .replace(/[’']/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
   }
 
+  /* Mirrors server/voice.py consent_answer(): a refusal anywhere wins;
+     otherwise one accepting word is enough. « J'accepte » heard by a small
+     model in one second is never a clean whole-sentence match, and on 24 Sep
+     it kept the gate closed while "I accept" opened it. */
   function consentDecision(text) {
-    var value = normalize(text);
-    var negative = /(^| )(non|no|je refuse|i refuse|je n accepte pas|i do not accept|i don t accept)( |$)/;
-    if (negative.test(value)) return "reject";
-    // Consent must be the whole answer, not one tempting word buried in a
-    // sentence such as "je n'ai pas dit oui". Allow the natural pairings but
-    // nothing else; uncertainty keeps the gate closed.
-    var positive = {
-      "j accepte": true,
-      "oui": true,
-      "oui j accepte": true,
-      "j accepte oui": true,
-      "i accept": true,
-      "yes": true,
-      "yes i accept": true,
-      "i accept yes": true
-    };
-    return positive[value] === true ? "accept" : "unknown";
+    var value = " " + normalize(text) + " ";
+    var negatives = [" non ", " no ", " je refuse ", " i refuse ", " n accepte pas ", " do not accept ", " don t accept ", " pas d accord "];
+    var positives = [" j accepte ", " jaccepte ", " accepte ", " d accord ", " oui ", " ok ", " okay ",
+      " i accept ", " accept ", " yes ", " yeah ", " agreed ", " go ahead "];
+    for (var i = 0; i < negatives.length; i++) if (value.indexOf(negatives[i]) >= 0) return "reject";
+    // A short answer with an accepting word; a long sentence that happens to
+    // contain "oui" is not an answer.
+    if (value.trim().split(/\s+/).length <= 4) {
+      for (var j = 0; j < positives.length; j++) if (value.indexOf(positives[j]) >= 0) return "accept";
+    }
+    return "unknown";
+  }
+
+  /* The language the person asked for, once, after consent. */
+  var lang = "fr";
+  var askingLang = false;
+  // Kept for the session only: this file stores nothing, by design.
+  function setLang(code) { lang = code === "en" ? "en" : "fr"; }
+  function languageChoice(text) {
+    var value = " " + normalize(text) + " ";
+    if (/ (anglais|english|angla) /.test(value)) return "en";
+    if (/ (francais|french|france|le francais) /.test(value)) return "fr";
+    return null;
+  }
+  function speak(text, code) {
+    if (root.MedBox && MedBox.voice && MedBox.voice.speakText) MedBox.voice.speakText(text, code || lang);
+  }
+  function sayClip(stems) {
+    if (root.MedBox && MedBox.voice && MedBox.voice.say) MedBox.voice.say(stems);
   }
 
   function hasWakeWord(text) {
@@ -483,7 +499,8 @@
       cache: "no-store",
       headers: {
         "Content-Type": blob.type || "audio/webm",
-        "X-MedBox-Purpose": consented ? "wake" : "consent"
+        "X-MedBox-Purpose": consented ? "wake" : "consent",
+        "X-MedBox-Language": consented ? lang : "auto"
       },
       body: blob
     }).then(function (response) {
@@ -501,7 +518,7 @@
       method: "POST",
       cache: "no-store",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: text, patient_id: patientId, confidence: confidence })
+      body: JSON.stringify({ text: text, patient_id: patientId, confidence: confidence, lang: lang })
     }).then(function (response) {
       return response.json().then(function (body) { return { ok: response.ok, body: body }; });
     }).then(function (result) {
@@ -518,9 +535,9 @@
       transition("LISTENING", reply);
       if (onReported) onReported(result.body.reported || []);
       root.dispatchEvent(new CustomEvent("medbox-command", { detail: result.body }));
-      if (root.MedBox && MedBox.voice && MedBox.voice.speakText) {
-        MedBox.voice.speakText(reply);
-      }
+      // Said, not only written: the spoken form when the server composed
+      // one, in the language the person asked for.
+      speak(result.body.spoken || result.body.reply || reply, result.body.lang || lang);
       if (result.body.action === "pause") setTimeout(pause, 250);
     });
   }
@@ -541,7 +558,12 @@
           if (generation !== armGeneration) return;
           consented = true;
           paused = false;
-          transition("LISTENING", "Consentement reçu. Dites « MedBox », puis votre demande.");
+          // The consent click was the gesture that unlocks audio: from here
+          // the assistant answers out loud, and first asks which language.
+          if (root.MedBox && MedBox.voice && MedBox.voice.setOn) MedBox.voice.setOn(true, false);
+          askingLang = true;
+          transition("LISTENING", "Consentement reçu. Préférez-vous le français ou l’anglais ? French or English?");
+          sayClip(["consent_ok"]);
           setButtons();
         }).catch(function () {
           if (generation !== armGeneration) return;
@@ -564,13 +586,32 @@
       return Promise.resolve();
     }
 
+    if (askingLang) {
+      var choice = languageChoice(text);
+      if (choice) {
+        askingLang = false;
+        setLang(choice);
+        if (choice === "en") {
+          transition("LISTENING", "English it is. Say « MedBox », then your request.");
+          speak("Alright, I will answer in English. Say Med Box, then your request.", "en");
+        } else {
+          transition("LISTENING", "Très bien, en français. Dites « MedBox », puis votre demande.");
+          sayClip(["lang_fr"]);
+        }
+        return Promise.resolve();
+      }
+      // Not a language: keep the default, take it as the first request.
+      askingLang = false;
+    }
+
     var now = Date.now();
     if (wakeUntil && now > wakeUntil) wakeUntil = 0;
     if (hasWakeWord(text)) {
       var command = withoutWakeWord(text);
       if (!command) {
         wakeUntil = now + WAKE_WINDOW_MS;
-        transition("WAKE", "Je vous écoute. Formulez votre demande maintenant.");
+        transition("WAKE", lang === "en" ? "Yes? How can I help you?" : "Oui ? Que puis-je faire pour vous ?");
+        if (lang === "en") speak("Yes? How can I help you?", "en"); else sayClip(["wake_ack"]);
         return Promise.resolve();
       }
       return recordCommand(command, heard.confidence, generation);

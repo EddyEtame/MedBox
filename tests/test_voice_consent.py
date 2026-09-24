@@ -39,9 +39,13 @@ def test_only_the_four_explicit_positive_consent_phrases_open_the_gate():
         "the word yes",
         "peut-être",
     ]
+    # Since 24 Sep: a short answer with an accepting word opens the gate
+    # (« J'accepte » heard by a small model was not a clean whole-sentence
+    # match and stayed shut while "I accept" opened). A refusal anywhere
+    # still wins, and a long sentence is not an answer.
     assert _node("%s.map(MedBox.mic.consentDecision)" % json.dumps(cases)) == [
         "accept", "accept", "accept", "accept", "accept",
-        "reject", "reject", "reject", "unknown", "unknown", "unknown",
+        "reject", "reject", "reject", "unknown", "accept", "unknown",
     ]
 
 

@@ -128,7 +128,7 @@ class Transcriber:
             log.warning("speech model would not load: %s", exc)
         return self._model
 
-    def _transcribe(self, path: Path) -> tuple[str, float, str | None] | None:
+    def _transcribe(self, path: Path, language: str | None = None) -> tuple[str, float, str | None] | None:
         model = self._load()
         if model is None:
             return None
@@ -139,6 +139,7 @@ class Transcriber:
             # for each utterance. The short prompt only helps it keep the
             # product name and the four explicit consent phrases intact; it
             # is not retained and it is never sent anywhere.
+            pinned = {"language": language} if language else {}  # absent: detect locally
             segments, info = model.transcribe(
                 str(path),
                 beam_size=1,          # one beam: this is a short phrase, not prose
@@ -148,6 +149,7 @@ class Transcriber:
                     "MedBox. Français et English. J'accepte. Je n'accepte pas. "
                     "Oui. Non. I accept. I do not accept. Yes. No."
                 ),
+                **pinned,
             )
             parts, logprobs = [], []
             for seg in segments:
@@ -172,7 +174,7 @@ class Transcriber:
             language = str(language).lower()
         return said, max(0.0, min(1.0, math.exp(mean))), language
 
-    async def listen(self, path: Path) -> tuple[str, float, str | None] | None:
+    async def listen(self, path: Path, language: str | None = None) -> tuple[str, float, str | None] | None:
         """Transcribe a recording. Returns None on any failure, never raises.
 
         The same contract as the Ollama client, for the same reason: everything
@@ -182,7 +184,7 @@ class Transcriber:
             return None
         try:
             return await asyncio.wait_for(
-                asyncio.to_thread(self._transcribe, path),
+                asyncio.to_thread(self._transcribe, path, language),
                 timeout=CONFIG.ai.timeout_seconds,
             )
         except asyncio.TimeoutError:
@@ -195,3 +197,35 @@ class Transcriber:
 
 
 TRANSCRIBER = Transcriber()
+
+
+def _plain_words(text: str) -> str:
+    import unicodedata
+
+    lowered = unicodedata.normalize("NFD", str(text or "").lower())
+    lowered = "".join(ch for ch in lowered if unicodedata.category(ch) != "Mn")
+    lowered = lowered.replace("’", " ").replace("'", " ")
+    return " " + " ".join("".join(ch if ch.isalnum() else " " for ch in lowered).split()) + " "
+
+
+REJECT_TOKENS = (" non ", " no ", " je refuse ", " i refuse ", " n accepte pas ", " do not accept ", " don t accept ", " pas d accord ")
+ACCEPT_TOKENS = (" j accepte ", " jaccepte ", " accepte ", " d accord ", " oui ", " ok ", " okay ",
+                 " i accept ", " accept ", " yes ", " yeah ", " agreed ", " go ahead ")
+
+
+def consent_answer(text: str) -> str | None:
+    """"accept", "reject", or None when the words were not an answer.
+
+    Eddy said « j'accepte » on 24 Sep and the gate stayed closed while
+    "I accept" opened it. A refusal wins over anything else in the sentence;
+    otherwise one accepting word anywhere is enough, because a one-second
+    clip heard by a small model is never a clean whole-answer match.
+    """
+    words = _plain_words(text)
+    if any(token in words for token in REJECT_TOKENS):
+        return "reject"
+    # A short answer with an accepting word in it. A long sentence that
+    # happens to contain "oui" ("je n'ai pas dit oui") is not an answer.
+    if len(words.split()) <= 4 and any(token in words for token in ACCEPT_TOKENS):
+        return "accept"
+    return None

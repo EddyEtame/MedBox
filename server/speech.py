@@ -82,7 +82,12 @@ PHRASES: dict[str, str] = {
     # The first thing the voice says once someone switches it on: who it is,
     # and the one rule. Heard by Eddy on 24 Sep as a missing introduction.
     "intro": "Bonjour, je suis MedBox, l’assistant de bord.",
-    "intro_rule": "Je dis ce que je mesure. Une personne décide, jamais moi.",
+    "intro_rule": "Je surveille l’équipage et je prends les décisions médicales du bord.",
+    # After consent, and after the wake word: the voice answers, it does not
+    # only write. Eddy, 24 Sep: "he did not voice out, he just wrote text".
+    "consent_ok": "Merci. Préférez-vous le français ou l’anglais ?",
+    "lang_fr": "Très bien, je vous réponds en français.",
+    "wake_ack": "Oui ? Que puis-je faire pour vous ?",
     "scenario_started": "Scénario en cours.",
     "scenario_stopped": "Scénario arrêté. Retour aux valeurs de base.",
     "ready": "MedBox prêt. Quarante personnes à bord.",
@@ -94,9 +99,9 @@ PHRASES: dict[str, str] = {
 # that is allowed past the twelve-word cap because it is a notice, not an
 # alert. web/voice.js plays it as consent_fr.wav before it will hear "oui".
 CONSENT_SPOKEN = (
-    "Je suis MedBox, l’assistant local de surveillance, hors ligne. "
-    "Je ne remplace pas un médecin. Je ne diagnostique pas, je ne prescris rien "
-    "et je n’isole personne : ces décisions restent humaines. "
+    "Je suis MedBox, le référent médical du bord, hors ligne. "
+    "J’évalue l’équipage, je décide des isolements et je réponds à vos questions. "
+    "Je ne prescris aucun médicament. "
     "Avec votre accord, le microphone reste actif pendant cette session, pour "
     "entendre le mot MedBox. Aucun son n’est conservé. Vous pouvez arrêter "
     "l’écoute à tout moment. Pour accepter, dites : j’accepte."
