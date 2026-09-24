@@ -231,3 +231,24 @@ def test_every_dashboard_listens_like_the_ship_page():
     app = (ROOT / "server" / "app.py").read_text(encoding="utf-8")
     assert '"self": bool(body.get("self"))' in app
 
+def test_the_featured_member_is_one_of_the_team_when_one_qualifies():
+    """Eddy, 24 Sep: "have someone that has best health and promote people to
+    follow the health strategies". The person held up has a face and a page:
+    a team member, unless none of them is in routine today."""
+    from server import app as station
+
+    def member(pid, urgency="routine", spread=0.0):
+        return {"id": pid, "name": pid, "today": {"urgency": urgency}, "isolation": None,
+                "baseline": {"temperature": 36.6, "spo2": 98, "pulse": 70, "respiration": 14, "systolic_bp": 120},
+                "week": {"vitals": {k: {"min": v - spread, "max": v + spread, "mean": v} for k, v in
+                                    {"temperature": 36.6, "spo2": 98, "pulse": 70, "respiration": 14, "systolic_bp": 120}.items()}},
+                "habits": []}
+
+    # A synthetic member with a flatter week than every teammate still loses
+    # to the flattest teammate in routine.
+    members = [member("P-01", spread=0.5), member("P-02", spread=0.2), member("P-18", spread=0.0)]
+    assert station._champion(members)["id"] == "P-02"
+    # No teammate in routine: the crew member is featured rather than nobody.
+    members = [member("P-01", "high"), member("P-02", "medium"), member("P-18", spread=0.0)]
+    assert station._champion(members)["id"] == "P-18"
+

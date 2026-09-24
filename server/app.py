@@ -1695,10 +1695,27 @@ async def crew_week() -> dict:
     }
 
 
+def _has_a_space(member: dict) -> bool:
+    """A member with a personal page and port: the team. Same rule as the
+    status route's personal_pages."""
+    pid = str(member.get("id") or "")
+    try:
+        return pid in PERSONAL_PORTS or int(pid[2:]) <= 6
+    except ValueError:
+        return False
+
+
 def _champion(members: list[dict]) -> dict | None:
     """The member whose week stayed closest to their own baseline, today in
     routine: the example the referent holds up to the crew, with the habits
-    behind it. Deterministic, from the same numbers the table shows."""
+    behind it. Deterministic, from the same numbers the table shows. The
+    team, who have a face and a page, come first; the rest of the crew only
+    if none of them qualifies today."""
+    team = [m for m in members if _has_a_space(m)]
+    return _best_of(team) or _best_of(members)
+
+
+def _best_of(members: list[dict]) -> dict | None:
     span = {"temperature": 0.6, "spo2": 2.0, "pulse": 12.0, "respiration": 4.0, "systolic_bp": 15.0}
     best, best_score = None, None
     for m in members:
