@@ -202,6 +202,17 @@ zero is not a sign**, whatever the model says about it.
   assessment on all three pages, two scenarios rewritten as deltas
   (`false-alarm`, `slow-burn`), `tools/build_dev2_dossier.py`. His timer
   release is not taken (xfail in `tests/test_dev2.py`).
+- **Afternoon of 24 Sep, the hater pass** (`47b996a`, `d7f5869`, `fe8c0b6`):
+  the text mode never invents who is isolated (`_crew_facts` in the prompt,
+  `_station_shortcut` answers isolation/crew questions in milliseconds,
+  an answer the model itself calls ungrounded is replaced, fallbacks name
+  their reason: `DOWN`/`LATE`/`UNGROUNDED`); the listening dock folds to a
+  pill once it listens (`setFolded`/`autoFold` in `mic.js`); the embedded
+  ship went black when it focused a member (`flyTo` on a node without a
+  position → NaN camera) and now waits for the node's first frame; pages
+  and `/static/*` carry `no-cache, must-revalidate` because the browser
+  served a stale `crew.js` after a rebuild; the crew header counts
+  decisions to confirm; titles are « page · MedBox »; panels rise in.
 - **Every dashboard listens** (`5c345d6`): the crew page and each personal
   page ship the hidden `micBtn`, load `mic.js`, and take the station's ears
   from the board frame like the ship page. A personal page calls

@@ -150,7 +150,9 @@
       var s = d.summary;
       el("crewSummary").textContent = s.impaired === 0
         ? "Tout l’équipage est dans sa plage habituelle. Rien à signaler."
-        : s.impaired + " membre(s) à surveiller, " + s.isolated + " en isolement" + (s.proposed ? ", " + s.proposed + " décision(s) à accuser" : "") + ".";
+        : s.impaired + (s.impaired > 1 ? " membres" : " membre") + " à surveiller, " +
+          (s.isolated ? s.isolated + " en isolement" : "aucun isolement confirmé") +
+          (s.proposed ? ", " + s.proposed + (s.proposed > 1 ? " décisions" : " décision") + " à accuser" : "") + ".";
       state.members = {};
       d.members.forEach(function (m) { state.members[m.id] = m; });
       state.zones = d.zones || {};
