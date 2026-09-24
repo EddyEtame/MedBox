@@ -382,3 +382,26 @@ body.embed .zone-rail { top: 12px; }
 .nav-menu .nav-h{font-family:var(--mono,monospace);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
   color:var(--ink3,#6c8b99);padding:8px 10px 4px}
 .nav-menu .hint{opacity:.6;font-size:11px;margin-left:6px}
+
+/* The room view (24 Sep): a panel for the zone or the medbay in view. */
+.zone-row{cursor:pointer}
+.zone-row:hover .zone-name{color:var(--accent)}
+.hud.room{right:14px;top:14px;width:300px;max-width:calc(100vw - 28px);padding:12px 14px;border-radius:12px;
+  background:rgba(5,15,23,.9);border:1px solid rgba(123,232,211,.3);backdrop-filter:blur(14px);z-index:6;animation:roomIn .35s ease both}
+@keyframes roomIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.room-h{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
+.room-h b{font-size:17px;letter-spacing:.04em}
+.room-h span{color:var(--muted);font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+.room-members{list-style:none;margin:0 0 10px;padding:0;max-height:38vh;overflow:auto}
+.room-members li{padding:7px 9px;margin:4px 0;border-left:3px solid var(--line);background:rgba(255,255,255,.03);border-radius:0 8px 8px 0;font-size:12.5px;line-height:1.35}
+.room-members li b{display:block;font-size:13.5px}
+.room-members li i{display:block;font-style:normal;color:var(--muted);font-size:11.5px}
+.room-members li span{display:block;color:var(--ink);opacity:.85}
+.room-members li.u-low{border-left-color:#7fc6d6}.room-members li.u-medium{border-left-color:#f0c459}.room-members li.u-high{border-left-color:#ff5c6e}
+.room-members li.hint{color:var(--muted);border-left-color:transparent}
+.room-actions{display:flex;gap:6px;flex-wrap:wrap}
+body.has-panel .hud.room{right:346px}
+body.embed .hud.room{right:12px;top:12px;width:260px;animation:none}
+body.embed .hud.room .room-actions{display:none}
+@media (max-width:900px){.hud.room{top:auto;bottom:86px;right:10px;left:10px;width:auto}}
+@media (prefers-reduced-motion:reduce){.hud.room{animation:none}}

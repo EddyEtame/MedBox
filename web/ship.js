@@ -295,7 +295,44 @@
   var hubData = buildHub();
   var hubBuf = buffer(hubData);
 
-  var ZONES = 3;
+  var ZONES = 3, BERTHS = 4;
+  var BERTH_R = RING_R - 0.55, BERTH_Y = -DECK_Y * 0.55;
+  function zoneSpan() { return Math.PI * 2 / ZONES; }
+  function berthAngle(zone, slot) { return zone * zoneSpan() + (slot + 0.5) / BERTHS * zoneSpan(); }
+  /* The room: four berths on the deck of each zone, each a small frame with
+     a bed line, so an isolated member lands somewhere real. */
+  function buildBerths(zone) {
+    var v = [], half = zoneSpan() / BERTHS * 0.36, depth = 0.34;
+    for (var s = 0; s < BERTHS; s++) {
+      var a = berthAngle(zone, s), a0 = a - half, a1 = a + half;
+      var r0 = BERTH_R - depth, r1 = BERTH_R + depth;
+      [[a0, r0, a1, r0], [a0, r1, a1, r1], [a0, r0, a0, r1], [a1, r0, a1, r1], [a0, BERTH_R, a1, BERTH_R]].forEach(function (seg, i) {
+        var g = i === 4 ? 0.75 : 0.42;
+        v.push(Math.cos(seg[0]) * seg[1], BERTH_Y, Math.sin(seg[0]) * seg[1], g,
+               Math.cos(seg[2]) * seg[3], BERTH_Y, Math.sin(seg[2]) * seg[3], g);
+      });
+    }
+    return new Float32Array(v);
+  }
+  /* A faint frame around every zone, sealed or not: the room has walls
+     before it has a reason to shut them. */
+  function buildZoneFrame(zone) {
+    var v = [], span = zoneSpan(), a0 = zone * span, TOP = DECK_Y * 1.18, BOT = -DECK_Y * 1.18;
+    [a0, a0 + span].forEach(function (t) {
+      var cx = Math.cos(t), cz = Math.sin(t);
+      v.push(cx * (RING_R - 0.85), BOT, cz * (RING_R - 0.85), 0.5, cx * (RING_R - 0.85), TOP, cz * (RING_R - 0.85), 0.5);
+      v.push(cx * RING_R, BOT, cz * RING_R, 0.5, cx * RING_R, TOP, cz * RING_R, 0.5);
+      v.push(cx * (RING_R - 0.85), TOP, cz * (RING_R - 0.85), 0.5, cx * RING_R, TOP, cz * RING_R, 0.5);
+      v.push(cx * (RING_R - 0.85), BOT, cz * (RING_R - 0.85), 0.5, cx * RING_R, BOT, cz * RING_R, 0.5);
+    });
+    return new Float32Array(v);
+  }
+  var berthBufs = [], berthCounts = [], frameBufs = [], frameCounts = [];
+  for (var bz = 0; bz < ZONES; bz++) {
+    var bd = buildBerths(bz), fd = buildZoneFrame(bz);
+    berthBufs.push(buffer(bd)); berthCounts.push(bd.length / 4);
+    frameBufs.push(buffer(fd)); frameCounts.push(fd.length / 4);
+  }
   var sealBufs = [], sealCounts = [];
   for (var z = 0; z < ZONES; z++) {
     var d = buildSealArc(z, ZONES);
@@ -314,6 +351,8 @@
 
   var state = {
     board: [], byId: {}, quarantine: null, selected: null,
+    // The view: the whole ship, one zone's room, or the medbay.
+    view: "ship", viewZone: null, zoneNames: [], berthOf: {},
     heat: 0, breathHz: 0.25, aiUp: false, standIn: false, sealed: {},
     // The assessment currently on screen, as the server stamped it. Kept so
     // the panel can tell when the readings it describes are no longer the
@@ -347,7 +386,9 @@
   var cam = {
     yaw: 0.72, pitch: 0.46, dist: 14.0,
     tYaw: 0.72, tPitch: 0.46, tDist: 14.0,
-    target: [0, 0, 0], tTarget: [0, 0, 0], flying: 0, userZoom: 0
+    target: [0, 0, 0], tTarget: [0, 0, 0], flying: 0, userZoom: 0,
+    // A zone index the camera rides with: the ring spins, the room moves.
+    follow: null
   };
 
   /* ------------------------------------------------------------ data feed */
@@ -423,7 +464,7 @@
         var idx = parseInt(p.id.replace(/\D/g, ""), 10) || (i + 1);
         var ang = (idx - 1) / CREW * Math.PI * 2;
         nodes[p.id] = {
-          ang: ang, home: ang, deck: (idx % 2 ? 1 : -1) * 0.34,
+          ang: ang, home: ang, tang: ang, deck: (idx % 2 ? 1 : -1) * 0.34, tdeck: (idx % 2 ? 1 : -1) * 0.34,
           r: RING_R, tr: RING_R, col: URGENCY.routine.slice(),
           tcol: URGENCY.routine.slice(), size: 0.15, tsize: 0.15,
           glow: GLOW.routine, tglow: GLOW.routine
@@ -436,6 +477,8 @@
       // that crew member scores 7 or more and needs a team now.
       var sev = Math.max(0, Math.min(1, r.triage.total / 7));
       n.tr = RING_R - (RING_R - DOCK_R) * sev;
+      n.tang = n.home;
+      n.tdeck = n.deck;
       n.tcol = URGENCY[r.triage.urgency] || URGENCY.routine;
       n.tglow = GLOW[r.triage.urgency] || GLOW.routine;
       n.tsize = 0.13 + sev * 0.13;
@@ -446,12 +489,30 @@
     state.breathHz = meanResp / 60;
 
     state.sealed = {};
+    state.berthOf = {};
     if (state.quarantine) {
       var zk = Object.keys(state.quarantine.zones);
+      state.zoneNames = zk.slice(0, ZONES);
       zk.forEach(function (z, i) {
         if (i < ZONES) state.sealed[i] = state.quarantine.zones[z].sealed;
       });
+      // An isolated member lives in a berth of their zone, not on the way to
+      // the hub: the room view shows who is in the room.
+      var slots = {};
+      (state.quarantine.assignments || []).forEach(function (a) {
+        var zi = zk.indexOf(a.zone);
+        if (zi < 0 || zi >= ZONES || !nodes[a.patient_id]) return;
+        var slot = slots[zi] = (slots[zi] || 0);
+        slots[zi] += 1;
+        if (slot >= BERTHS) return;
+        var n = nodes[a.patient_id];
+        n.tang = berthAngle(zi, slot);
+        n.tr = BERTH_R;
+        n.tdeck = BERTH_Y;
+        state.berthOf[a.patient_id] = { zone: zi, slot: slot, confirmed: !!a.confirmed };
+      });
     }
+    renderRoom();
 
     el("gFit").textContent = fit;
     el("gImp").textContent = imp;
@@ -539,6 +600,9 @@
     if (state.focus && !state.focused && state.byId[state.focus]) {
       state.focused = true;
       selectCrew(state.focus);
+      // The card is about a decision: show the room the person is sent to.
+      var gz = state.glowZone ? state.zoneNames.indexOf(state.glowZone) : -1;
+      if (gz >= 0) viewZone(gz);
     }
     lastPainted = Date.now();
   }
@@ -550,6 +614,9 @@
     // lines with the window, and a fixed top left the rail on the chips.
     var rail = el("zoneRail") && el("zoneRail").parentElement, top = document.querySelector(".hud.top");
     if (rail && top) rail.style.top = Math.round(top.getBoundingClientRect().bottom + 8) + "px";
+    // The room panel sits under the header too, on the right.
+    var room = el("roomPanel");
+    if (room && top && !document.body.classList.contains("embed")) room.style.top = Math.round(top.getBoundingClientRect().bottom + 8) + "px";
   }
 
   function resize() {
@@ -603,7 +670,12 @@
     cam.pitch += (cam.tPitch - cam.pitch) * Math.min(1, dt * 4.5);
     // Re-frame on resize and rotation, unless the operator has taken the
     // zoom themselves or we are flying to a crew member.
-    if (!cam.userZoom && !cam.flying) {
+    if (cam.follow !== null && cam.follow !== undefined) {
+      // Ride the ring: the room turns with the ship, so does the camera.
+      var fa = cam.follow * zoneSpan() + zoneSpan() / 2 + spin;
+      cam.tTarget = [Math.cos(fa) * (RING_R - 0.35), BERTH_Y * 0.5, Math.sin(fa) * (RING_R - 0.35)];
+      cam.tYaw = fa + 0.95;
+    } else if (!cam.userZoom && !cam.flying) {
       var asp = W / H;
       cam.tPitch = fitPitch(asp);
       cam.tDist = fitDist(asp, cam.tPitch);
@@ -657,6 +729,13 @@
     drawLines(hubBuf, hubData.length / 4, state.heat * 0.5, breath, 0,
               [0.40, 0.66, 0.74], [0.95, 0.66, 0.46]);
 
+    // every zone has a frame and four berths; the one in view is brighter
+    for (var rz = 0; rz < ZONES; rz++) {
+      var inView = state.view === "zone" && state.viewZone === rz;
+      var roomCold = inView ? [0.62, 0.92, 0.86] : [0.31, 0.60, 0.66];
+      drawLines(frameBufs[rz], frameCounts[rz], 0.0, breath, spin, roomCold, roomCold);
+      drawLines(berthBufs[rz], berthCounts[rz], 0.0, breath, spin, roomCold, roomCold);
+    }
     // sealed quarantine arcs, in their own amber so they read as bulkheads
     // shut rather than as more of the ring running hot
     for (var z = 0; z < ZONES; z++) {
@@ -688,6 +767,10 @@
     for (var k = 0; k < ids.length; k++) {
       var n = nodes[ids[k]];
       n.r += (n.tr - n.r) * Math.min(1, dt * 1.6);       // glide, never snap
+      var dAng = n.tang - n.ang;
+      dAng = Math.atan2(Math.sin(dAng), Math.cos(dAng));  // the short way round
+      n.ang += dAng * Math.min(1, dt * 1.2);
+      n.deck += (n.tdeck - n.deck) * Math.min(1, dt * 1.6);
       n.size += (n.tsize - n.size) * Math.min(1, dt * 4);
       n.glow += (n.tglow - n.glow) * Math.min(1, dt * 3);
       for (var c = 0; c < 3; c++) n.col[c] += (n.tcol[c] - n.col[c]) * Math.min(1, dt * 3);
@@ -768,6 +851,7 @@
     cam.tYaw -= dx * 0.006;
     cam.tPitch = Math.max(-1.35, Math.min(1.35, cam.tPitch + dy * 0.005));
     cam.flying = 0;
+    cam.follow = null;
   });
   canvas.addEventListener("pointerup", function (e) {
     dragging = false;
@@ -802,11 +886,147 @@
   function resetCam() {
     cam.flying = 0;
     cam.userZoom = 0;
+    cam.follow = null;
     cam.tTarget = [0, 0, 0];
     var asp = W / H;
     cam.tPitch = fitPitch(asp);
     cam.tDist = fitDist(asp, cam.tPitch);
   }
+
+  /* ------------------------------------------------------ the room view */
+  var URGENCY_FR = { routine: "routine", low: "faible", medium: "moyenne", high: "haute" };
+  function zoneName(i) { return state.zoneNames[i] || String.fromCharCode(65 + i); }
+  function zoneIndex(name) {
+    var i = state.zoneNames.indexOf(String(name || "").toUpperCase());
+    if (i < 0) { var c = String(name || "").toUpperCase().charCodeAt(0) - 65; i = c >= 0 && c < ZONES ? c : -1; }
+    return i;
+  }
+  function membersIn(zone) {
+    return Object.keys(state.berthOf).filter(function (id) { return state.berthOf[id].zone === zone; })
+      .sort(function (a, b) { return state.berthOf[a].slot - state.berthOf[b].slot; });
+  }
+  function viewZone(i) {
+    if (i < 0 || i >= ZONES) return;
+    state.view = "zone"; state.viewZone = i;
+    cam.flying = 1; cam.userZoom = 0; cam.follow = i;
+    cam.tDist = 5.4; cam.tPitch = 0.30;
+    document.body.classList.add("has-room");
+    renderRoom();
+  }
+  function viewMedbay() {
+    state.view = "medbay"; state.viewZone = null;
+    cam.flying = 1; cam.userZoom = 0; cam.follow = null;
+    cam.tTarget = [0, 0, 0]; cam.tDist = 4.6; cam.tPitch = 0.55;
+    document.body.classList.add("has-room");
+    renderRoom();
+  }
+  function viewShip() {
+    state.view = "ship"; state.viewZone = null;
+    document.body.classList.remove("has-room");
+    resetCam();
+    renderRoom();
+  }
+  function healthLine(id) {
+    var row = state.byId[id];
+    if (!row) return "";
+    var p = row.patient, t = row.triage;
+    return "NEWS2 " + t.total + " · " + (URGENCY_FR[t.urgency] || t.urgency) + " · " +
+      num(p.temperature, 1) + " °C · SpO₂ " + num(p.spo2, 0) + " % · pouls " + num(p.pulse, 0) + " · resp. " + num(p.respiration, 0);
+  }
+  function renderRoom() {
+    var panel = el("roomPanel");
+    if (!panel) return;
+    if (state.view === "ship") { panel.hidden = true; return; }
+    panel.hidden = false;
+    var q = state.quarantine || { zones: {} };
+    if (state.view === "medbay") {
+      var docked = state.board.filter(function (r) { return r.triage.total >= 7; });
+      el("roomTitle").textContent = "Infirmerie";
+      el("roomState").textContent = docked.length ? docked.length + " en soins" : "personne en soins";
+      el("roomMembers").innerHTML = docked.length ? docked.map(function (r) {
+        return '<li class="u-' + r.triage.urgency + '"><b>' + esc(r.patient.name) + "</b><span>" + esc(healthLine(r.patient.id)) + "</span></li>";
+      }).join("") : '<li class="hint">Les membres dont le score atteint 7 arrivent ici.</li>';
+      return;
+    }
+    var zi = state.viewZone, zn = zoneName(zi), zone = q.zones[zn] || { capacity: BERTHS, occupied: 0, sealed: false };
+    el("roomTitle").textContent = "Zone " + zn;
+    el("roomState").textContent = (zone.occupied || 0) + "/" + (zone.capacity || BERTHS) + " · " + (zone.sealed ? "scellée" : "ouverte");
+    var ids = membersIn(zi);
+    el("roomMembers").innerHTML = ids.length ? ids.map(function (id) {
+      var row = state.byId[id], b = state.berthOf[id];
+      return '<li class="u-' + (row ? row.triage.urgency : "routine") + '"><b>' + esc(row ? row.patient.name : id) + "</b>" +
+        '<i>' + (b.confirmed ? "isolement confirmé" : "isolement décidé, à confirmer") + " · couchette " + (b.slot + 1) + "</i>" +
+        "<span>" + esc(healthLine(id)) + "</span></li>";
+    }).join("") : '<li class="hint">Personne dans cette zone. ' + (zone.capacity || BERTHS) + " couchettes libres.</li>";
+  }
+  function frenchCount(n, one, many) { return n === 0 ? "aucune " + one : n === 1 ? "une " + one : n + " " + many; }
+  function zoneBrief(i) {
+    var q = state.quarantine || { zones: {} }, zn = zoneName(i), zone = q.zones[zn] || { capacity: BERTHS, occupied: 0, sealed: false };
+    var ids = membersIn(i), free = Math.max(0, (zone.capacity || BERTHS) - (zone.occupied || 0));
+    var head = "Zone " + zn + " : " + frenchCount(free, "place libre", "places libres") + " sur " + (zone.capacity || BERTHS) + ", " + (zone.sealed ? "scellée" : "ouverte") + ".";
+    if (!ids.length) return head + " Personne n’y est isolé.";
+    var who = ids.map(function (id) {
+      var row = state.byId[id];
+      return row ? row.patient.name + ", priorité " + (URGENCY_FR[row.triage.urgency] || row.triage.urgency) : id;
+    });
+    return head + " " + (who.length === 1 ? who[0] + " y est isolé." : who.slice(0, -1).join(", ") + " et " + who[who.length - 1] + " y sont isolés.");
+  }
+  function shipBrief() {
+    var fit = 0, imp = 0;
+    state.board.forEach(function (r) { if (r.triage.urgency === "routine") fit++; else imp++; });
+    var q = state.quarantine || { assignments: [], candidates: 0 };
+    var confirmed = (q.assignments || []).filter(function (a) { return a.confirmed; }).length;
+    return "À bord : " + fit + " membres stables, " + imp + " à surveiller, " + frenchCount(confirmed, "personne en isolement confirmé", "personnes en isolement confirmé") +
+      (q.candidates ? ", " + q.candidates + " décisions à confirmer." : ".");
+  }
+  function medbayBrief() {
+    var docked = state.board.filter(function (r) { return r.triage.total >= 7; });
+    return docked.length ? "Infirmerie : " + docked.map(function (r) { return r.patient.name; }).join(", ") + " en soins." : "Infirmerie : personne en soins.";
+  }
+  function speakThen(text, next) {
+    say(text);
+    var voice = window.MedBox && MedBox.voice;
+    if (voice && voice.isOn && voice.isOn()) {
+      voice.speakText(text);
+      var waited = 0;
+      var poll = setInterval(function () {
+        waited += 250;
+        var speaking = voice.isSpeaking && voice.isSpeaking();
+        if ((!speaking && waited >= 1200) || waited >= 12000) { clearInterval(poll); setTimeout(next, 500); }
+      }, 250);
+    } else {
+      setTimeout(next, Math.max(2200, text.length * 45));
+    }
+  }
+  var touring = false;
+  /* La ronde: the referent walks the ship out loud, camera in hand. */
+  function tour() {
+    if (touring) return;
+    touring = true;
+    viewShip();
+    var stops = [function (next) { speakThen(shipBrief(), next); }];
+    for (var i = 0; i < ZONES; i++) {
+      (function (zi) { stops.push(function (next) { viewZone(zi); speakThen(zoneBrief(zi), next); }); })(i);
+    }
+    stops.push(function (next) { viewMedbay(); speakThen(medbayBrief(), next); });
+    stops.push(function (next) { viewShip(); speakThen("Fin de la ronde. Surveillance continue.", next); });
+    var at = 0;
+    function step() { if (at >= stops.length) { touring = false; return; } stops[at++](step); }
+    step();
+  }
+  /* Local view commands, typed or spoken: handled here, never sent to the
+     station. Returns what was said, or false. */
+  function localCommand(text) {
+    var t = String(text || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    var zm = t.match(/\b(zone|salle|chambre|piece)\s*([abc])\b/) || t.match(/\b(montre|affiche|voir|vue|va|allons|ouvre)\b.*\b([abc])\b/);
+    if (zm) { var zi = zoneIndex(zm[2]); if (zi >= 0) { viewZone(zi); var b = zoneBrief(zi); say(b); return b; } }
+    if (/\b(infirmerie|medbay|hub|soins)\b/.test(t)) { viewMedbay(); var mb = medbayBrief(); say(mb); return mb; }
+    if (/\b(vaisseau|ship|vue d.ensemble|retour|overview|anneau)\b/.test(t)) { viewShip(); var sb = shipBrief(); say(sb); return sb; }
+    if (/\b(ronde|brief|briefing|tour|visite|inspection)\b/.test(t)) { tour(); return "Je commence la ronde."; }
+    return false;
+  }
+  window.MedBox = window.MedBox || {};
+  window.MedBox.ship = { viewZone: viewZone, viewMedbay: viewMedbay, viewShip: viewShip, tour: tour, local: localCommand, zoneBrief: zoneBrief };
 
   /* ---------------------------------------------------------------- panel */
   function esc(s) {
@@ -1071,6 +1291,7 @@
     var ids = ordered();
 
     if (word === "aide" || word === "help") { openGuide(); say("Aide ouverte."); return; }
+    if (localCommand(text)) return;
 
     if (word === "prioritaire" || word === "pire" || word === "worst") {
       if (!ids.length) return say("Aucun membre n’est encore affiché.", true);
@@ -1296,6 +1517,23 @@
     if (params.get("embed")) document.body.classList.add("embed");
   })();
   el("guideClose").addEventListener("click", closeGuide);
+  el("roomBack").addEventListener("click", viewShip);
+  el("roomNext").addEventListener("click", function () {
+    if (state.view === "zone") { var nz = (state.viewZone + 1) % ZONES; viewZone(nz); }
+    else viewZone(0);
+  });
+  el("roomBrief").addEventListener("click", function () {
+    var text = state.view === "medbay" ? medbayBrief() : zoneBrief(state.viewZone);
+    say(text);
+    if (MedBox.voice) MedBox.voice.speakText(text);
+  });
+  el("tourBtn").addEventListener("click", tour);
+  el("zoneRail").addEventListener("click", function (e) {
+    var row = e.target.closest(".zone-row");
+    if (!row) return;
+    var rows = Array.prototype.slice.call(el("zoneRail").querySelectorAll(".zone-row"));
+    viewZone(rows.indexOf(row));
+  });
   el("introBtn").addEventListener("click", introduce);
   el("closeBtn").addEventListener("click", closePanel);
   el("aiOut").addEventListener("click", function (e) {
@@ -1323,7 +1561,7 @@
     if (e.key === "/" && !typing) { e.preventDefault(); el("cmdInput").focus(); return; }
     if (e.key !== "Escape") return;
     if (typing) { e.target.blur(); return; }
-    if (!el("guide").hidden) closeGuide(); else closePanel();
+    if (!el("guide").hidden) closeGuide(); else if (state.view !== "ship") viewShip(); else closePanel();
   });
   window.addEventListener("resize", resize);
 

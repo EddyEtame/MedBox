@@ -323,3 +323,23 @@ def test_the_referent_thinks_out_loud_while_an_answer_is_on_its_way():
         assert src.count("MedBox.thinking.start(") == n, name
         assert src.count("thinking.stop()") >= n, name
 
+def test_the_ship_has_rooms_the_referent_can_show():
+    """Eddy, 24 Sep: "a room view and a ship view; the AI can show rooms for
+    quarantine while giving briefs; see health". Berths in every zone, a
+    camera that rides the ring into a zone, a room panel with each member's
+    health, spoken zone briefs, a « ronde », and local view commands typed
+    or spoken. The card's embedded ship opens on the room."""
+    ship = (ROOT / "web" / "ship.js").read_text(encoding="utf-8")
+    for needle in ("function buildBerths(", "function buildZoneFrame(", "function viewZone(", "function viewMedbay(",
+                   "function viewShip(", "function renderRoom(", "function zoneBrief(", "function shipBrief(",
+                   "function tour(", "function localCommand(", "cam.follow", "state.berthOf[a.patient_id]",
+                   "window.MedBox.ship = {", "if (gz >= 0) viewZone(gz);", "if (localCommand(text)) return;"):
+        assert needle in ship, needle
+    html = (ROOT / "web" / "ship.html").read_text(encoding="utf-8")
+    for needle in ('id="roomPanel"', 'id="roomMembers"', 'id="roomBrief"', 'id="roomNext"', 'id="roomBack"', 'id="tourBtn"'):
+        assert needle in html, needle
+    css = (ROOT / "web" / "ship.css").read_text(encoding="utf-8")
+    assert ".hud.room{" in css and "body.embed .hud.room" in css
+    mic = (ROOT / "web" / "mic.js").read_text(encoding="utf-8")
+    assert "MedBox.ship.local(text)" in mic
+

@@ -592,6 +592,16 @@
     if (generation !== armGeneration) return Promise.resolve();
     var patientId = getPatient ? getPatient() : null;
     wakeUntil = 0;
+    // The ship page answers its own view commands (« zone A », « ronde »,
+    // « vaisseau ») on the spot, out loud, without the station.
+    if (root.MedBox && MedBox.ship && typeof MedBox.ship.local === "function") {
+      var local = MedBox.ship.local(text);
+      if (local) {
+        transition("LISTENING", local);
+        speak(local, lang);
+        return Promise.resolve();
+      }
+    }
     return fetch("/api/assistant/command", {
       method: "POST",
       cache: "no-store",

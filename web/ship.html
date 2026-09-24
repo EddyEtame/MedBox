@@ -46,6 +46,7 @@
     <button id="replayBtn" class="btn" title="Réinitialiser puis relancer le même scénario, à l’identique">Rejouer</button>
     <button id="stopBtn" class="btn">Réinitialiser</button>
     <button id="voiceBtn" class="btn" title="Alertes vocales" aria-pressed="false">Son coupé</button>
+    <button id="tourBtn" class="btn" title="Le référent fait le tour du vaisseau à voix haute : état, chaque zone, infirmerie">Ronde</button>
     <button id="helpBtn" class="btn" title="Fonctions et limites">Aide</button>
     <a class="btn ghost" href="/board" title="Tableau de secours">Tableau</a>
   </div>
@@ -62,6 +63,16 @@
 <aside class="hud zone-rail" aria-label="Zones d’isolement">
   <div class="rail-title"><span>Zones d’isolement</span><b id="candidateCount">0 à confirmer</b></div>
   <div id="zoneRail"></div>
+</aside>
+
+<aside class="hud room" id="roomPanel" hidden aria-label="Vue de la pièce">
+  <div class="room-h"><b id="roomTitle">Zone A</b><span id="roomState"></span></div>
+  <ul id="roomMembers" class="room-members"></ul>
+  <div class="room-actions">
+    <button id="roomBrief" class="btn small" title="Le référent décrit cette pièce à voix haute">Brief</button>
+    <button id="roomNext" class="btn small" title="Zone suivante">Suivante</button>
+    <button id="roomBack" class="btn small primary" title="Retour à la vue du vaisseau (Échap)">Vaisseau</button>
+  </div>
 </aside>
 
 <section class="hud scenario-timeline" aria-label="Progression du scénario">
