@@ -22,6 +22,10 @@ def test_builder_and_packaging_notices_exist():
     assert (ROOT / "packaging" / "README.md").is_file()
     assert (ROOT / "packaging" / "THIRD-PARTY-NOTICES.txt").is_file()
     assert (ROOT / "packaging" / "LISEZ-MOI.txt").is_file()
+    # One double-click for the presenter (24 Sep): the check, then the launch.
+    button = (ROOT / "packaging" / "DEMARRER-LA-DEMO.cmd").read_text(encoding="ascii")
+    assert "preflight.ps1" in button and "MedBox.exe" in button and "if errorlevel 1" in button
+    assert "DEMARRER-LA-DEMO.cmd" in (ROOT / "tools" / "build-portable.ps1").read_text(encoding="ascii")
     lock = json.loads((ROOT / "packaging" / "assets.lock.json").read_text())
     assert lock["python"]["sha256"] == "33b448f95fecb7c6f802157dbd5e6b40a2ad9bfc8b95ca634a06ba4073ad1ac0"
 

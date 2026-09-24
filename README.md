@@ -39,13 +39,14 @@ ARIA / PsychoSpace, est dans [ANTHONYSITCH/Psychospace](https://github.com/ANTHO
 ### Le dossier portable (la façon de la soutenance)
 
 Un dossier `MedBox-Portable` de 1,6 Go contient tout : Python, Ollama et le
-modèle, les modèles de voix, les pages, les outils. Double-cliquez `MedBox.exe`.
+modèle, les modèles de voix, les pages, les outils. Double-cliquez
+`DEMARRER-LA-DEMO.cmd` : il contrôle la machine puis lance `MedBox.exe`.
 La station est prête en quatre secondes, le modèle chaud en moins d’une minute,
 six espaces personnels ouverts. Aucun accès réseau. Comment le construire et le
 vérifier : [`packaging/README.md`](packaging/README.md) et
 [`packaging/LISEZ-MOI.txt`](packaging/LISEZ-MOI.txt).
 
-Avant une démonstration : `tools\preflight.ps1` (ports libres, modèle, voix).
+Avant une démonstration, `DEMARRER-LA-DEMO.cmd` fait le contrôle (mémoire, ports, modèle, voix) et lance ; `tools\preflight.ps1` est le contrôle seul.
 Pour le moment de panne : `tools\assistant.ps1 stop`, puis `start`.
 
 ### Depuis les sources

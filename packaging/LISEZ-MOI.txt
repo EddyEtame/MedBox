@@ -1,8 +1,10 @@
 MEDBOX - STATION LOCALE HORS LIGNE
 
 1. Copiez tout ce dossier sur le PC de presentation ou sur une cle USB NTFS.
-2. Ouvrez le dossier puis double-cliquez sur MedBox.exe.
-3. Gardez la fenetre noire ouverte pendant toute la demonstration.
+2. Ouvrez le dossier puis double-cliquez sur DEMARRER-LA-DEMO.cmd : il verifie
+   la machine (memoire, ports, modele, voix) puis lance MedBox.exe. Si une ligne
+   ECHEC apparait, corrigez-la et relancez. (MedBox.exe seul lance sans verifier.)
+3. Gardez la fenetre noire de MedBox ouverte pendant toute la demonstration.
 4. Le navigateur s'ouvre sur l'adresse locale de MedBox.
 5. Au premier usage du microphone, le navigateur demande une autorisation.
    Aucun son n'est conserve par MedBox.

@@ -477,6 +477,8 @@ function Copy-Documentation([string]$BundleRoot) {
     Copy-CleanTree (Join-Path $RepoRoot "docs") $documentation
     Copy-Item -LiteralPath (Join-Path $RepoRoot "README.md") -Destination (Join-Path $documentation "README.md") -Force
     Copy-Item -LiteralPath (Join-Path $RepoRoot "packaging\LISEZ-MOI.txt") -Destination (Join-Path $BundleRoot "LISEZ-MOI.txt") -Force
+    # One double-click for the presenter: the machine check, then MedBox.exe.
+    Copy-Item -LiteralPath (Join-Path $RepoRoot "packaging\DEMARRER-LA-DEMO.cmd") -Destination (Join-Path $BundleRoot "DEMARRER-LA-DEMO.cmd") -Force
     foreach ($path in $ExtraDocument) {
         $full = [IO.Path]::GetFullPath($path)
         if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { throw "Extra document missing: $full" }
