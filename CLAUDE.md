@@ -258,6 +258,13 @@ zero is not a sign**, whatever the model says about it.
   the other half: two Ollama servers (the tray app's and the bundle's, on
   11434 and 11555) held 2.8 GB of duplicate runners with 0.8 GB free;
   `tools/preflight.ps1` flags both. Rehearsal script: `docs/CAHIER-DE-SOUTENANCE.md`.
+- **One double-click before the jury** (`6325e62`): `packaging/DEMARRER-LA-DEMO.cmd`
+  is copied to the root of the portable folder by `build-portable.ps1`; it
+  runs `tools\preflight.ps1` then `MedBox.exe`, and a blocking line keeps its
+  window open. The preflight is two-homed (repo / portable folder, told apart
+  by `app\config.toml`): run from the folder it used to look for `.venv`,
+  `config.toml` and the machine's Ollama and reported three blockers on a
+  ready folder. ASCII only, like `setup.ps1`.
 - **Every dashboard listens** (`5c345d6`): the crew page and each personal
   page ship the hidden `micBtn`, load `mic.js`, and take the station's ears
   from the board frame like the ship page. A personal page calls
