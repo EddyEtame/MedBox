@@ -34,6 +34,12 @@ VOICE_DIR = ROOT / "models" / "piper"
 VOICES = {"fr": "fr_FR-siwis-medium", "en": "en_US-lessac-medium"}
 MAX_CHARS = 400
 CACHE_SIZE = 64
+# A little quicker than the voice's own pace: 0.92 of its default length,
+# measured 24 Sep as the point where it reads briskly and stays clear.
+LENGTH_SCALE = 0.92
+# Rendered sentences outlive the process: the same sentence at the next
+# launch costs a file read, not a synthesis (about 0.4 to 1.9 s).
+DISK_CACHE = ROOT / "data" / "voice-cache"
 
 # What the voice would misread. The clip renderer learned the first one by
 # transcribing its own output back; the rest are how a French clinician says
@@ -69,6 +75,14 @@ def normalise(text: str, lang: str = "fr") -> str:
     return out.strip()[:MAX_CHARS]
 
 
+def _synthesis_config():
+    try:
+        from piper import SynthesisConfig
+        return SynthesisConfig(length_scale=LENGTH_SCALE)
+    except Exception:  # an older engine without the option keeps its own pace
+        return None
+
+
 class Speaker:
     """One Piper voice, loaded on first use, rendering one sentence at a time."""
 
@@ -98,17 +112,26 @@ class Speaker:
         if not self.available():
             self.last_error = f"aucune voix sous {self.model_path.parent}"
             raise RuntimeError(self.last_error)
-        key = hashlib.sha1(spoken.encode("utf-8")).hexdigest()
+        key = hashlib.sha1(f"{self.lang}|{LENGTH_SCALE}|{spoken}".encode("utf-8")).hexdigest()
         with self._lock:
             hit = self._cache.get(key)
             if hit is not None:
                 self._cache.move_to_end(key)
                 return hit
+            on_disk = DISK_CACHE / self.lang / f"{key}.wav"
+            try:
+                if on_disk.is_file():
+                    audio = on_disk.read_bytes()
+                    if audio:
+                        self._cache[key] = audio
+                        return audio
+            except OSError:
+                pass
             try:
                 voice = self._load()
                 buffer = io.BytesIO()
                 with wave.open(buffer, "wb") as handle:
-                    voice.synthesize_wav(spoken, handle)
+                    voice.synthesize_wav(spoken, handle, syn_config=_synthesis_config())
             except Exception as exc:  # the engine's own failures, reported not raised further up
                 self.last_error = f"{type(exc).__name__}: {exc}"
                 log.warning("voice could not render %r: %s", spoken[:60], exc)
@@ -117,8 +140,25 @@ class Speaker:
             self._cache[key] = audio
             while len(self._cache) > CACHE_SIZE:
                 self._cache.popitem(last=False)
+            try:
+                on_disk.parent.mkdir(parents=True, exist_ok=True)
+                on_disk.write_bytes(audio)
+            except OSError as exc:  # a read-only folder keeps the voice, not the cache
+                log.debug("voice cache not written: %s", exc)
             self.last_error = None
             return audio
+
+    def warm(self, texts: list[str]) -> int:
+        """Render (or read back) the fixed sentences, so the first thing the
+        referent says on stage is already on disk. Returns how many are ready."""
+        ready = 0
+        for text in texts:
+            try:
+                self.render(text)
+                ready += 1
+            except (RuntimeError, ValueError):
+                break
+        return ready
 
     async def say(self, text: str) -> bytes:
         """`render`, off the event loop: the board keeps its ten frames a second."""

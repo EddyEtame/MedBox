@@ -248,8 +248,26 @@
      question, a wake-word reply. One request, one WAV, played here. A 503
      means no voice is bundled; remember it and stop asking. */
   var serverVoice = null;
-  function serverSpeech(text, serial, lang) {
-    if (serverVoice === false) return Promise.resolve(false);
+
+  /* One request per sentence, the next one fetched while the current plays:
+     the first words come after the first sentence is rendered (about a
+     third of a second), not after the whole answer (up to two seconds for
+     a long one, measured 24 Sep). Sentence ends are ., !, ? or an ellipsis
+     followed by a space; a number like 37.0 never splits. */
+  function sentencesOf(text) {
+    var parts;
+    try { parts = String(text).split(/(?<=[.!?…])\s+/); } catch (e) { parts = [String(text)]; }
+    var out = [];
+    for (var i = 0; i < parts.length; i++) {
+      var piece = parts[i].trim();
+      if (!piece) continue;
+      if (out.length && (piece.length < 24 || out[out.length - 1].length < 30)) out[out.length - 1] += " " + piece;
+      else out.push(piece);
+    }
+    return out.length ? out.slice(0, 8) : [String(text)];
+  }
+
+  function fetchClip(text, lang) {
     return fetch("/api/voice/say", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -259,27 +277,49 @@
       if (!r.ok) throw new Error(String(r.status));
       serverVoice = true;
       return r.blob();
-    }).then(function (blob) {
-      if (!blob || serial !== consentSerial) return false;
-      return new Promise(function (resolve) {
-        var url = URL.createObjectURL(blob);
-        var audio = new Audio(url);
-        var finished = false;
-        consentAudio = audio;
-        function done(ok) {
-          if (finished) return;
-          finished = true;
-          consentAudio = null;
-          URL.revokeObjectURL(url);
-          resolve(ok);
-        }
-        audio.addEventListener("ended", function () { done(true); }, { once: true });
-        audio.addEventListener("error", function () { done(false); }, { once: true });
-        var promise = audio.play();
-        if (promise && promise.catch) promise.catch(function () { done(false); });
-        setTimeout(function () { done(false); }, 45000);
-      });
-    }).catch(function () { return false; });
+    });
+  }
+
+  function playClip(blob, serial) {
+    return new Promise(function (resolve) {
+      var url = URL.createObjectURL(blob);
+      var audio = new Audio(url);
+      var finished = false;
+      consentAudio = audio;
+      function done(ok) {
+        if (finished) return;
+        finished = true;
+        consentAudio = null;
+        URL.revokeObjectURL(url);
+        resolve(ok);
+      }
+      audio.addEventListener("ended", function () { done(true); }, { once: true });
+      audio.addEventListener("error", function () { done(false); }, { once: true });
+      var promise = audio.play();
+      if (promise && promise.catch) promise.catch(function () { done(false); });
+      setTimeout(function () { done(false); }, 45000);
+    });
+  }
+
+  function serverSpeech(text, serial, lang) {
+    if (serverVoice === false) return Promise.resolve(false);
+    var parts = sentencesOf(text);
+    var i = 0, spokenAny = false;
+    var next = fetchClip(parts[0], lang);
+    function step() {
+      return next.then(function (blob) {
+        if (blob === null) return spokenAny;
+        i++;
+        if (i < parts.length) next = fetchClip(parts[i], lang).catch(function () { return false; });
+        if (!blob || serial !== consentSerial) return spokenAny;
+        return playClip(blob, serial).then(function (ok) {
+          spokenAny = spokenAny || ok;
+          if (!ok || serial !== consentSerial || i >= parts.length) return spokenAny;
+          return step();
+        });
+      }).catch(function () { return spokenAny; });
+    }
+    return step();
   }
 
   /* Speak a short response: the bundled voice first, then a French voice

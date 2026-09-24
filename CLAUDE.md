@@ -258,6 +258,22 @@ zero is not a sign**, whatever the model says about it.
   the other half: two Ollama servers (the tray app's and the bundle's, on
   11434 and 11555) held 2.8 GB of duplicate runners with 0.8 GB free;
   `tools/preflight.ps1` flags both. Rehearsal script: `docs/CAHIER-DE-SOUTENANCE.md`.
+- **The screen and the voice, night of 24 Sep** (Eddy: « responsive issues,
+  fix and go over all again, optimize speed again, including voice speed »).
+  The crew and personal pages wrote a bare `<header>` that no rule styled:
+  name, counters and buttons stacked at the left edge on a 1900-pixel
+  screen. `header,.bar` now share the bar; `main` has a 1560 px ceiling,
+  120 px of room under the content for the listening pill, and the
+  measurement curves take their column (`main.crew figure`). Voice: the
+  client speaks sentence by sentence and fetches the next while one plays
+  (`sentencesOf`, `fetchClip` in `web/voice.js`); rendered sentences live
+  in `data/voice-cache/<lang>/` across launches; `LENGTH_SCALE` 0.92; the
+  lifespan renders `FIXED_SENTENCES` and loads the ears at start-up
+  (`warm_voice_and_ears`); faster-whisper gets six threads. Measured: a
+  fresh sentence 0.4–1.9 s, a cached one 1 ms, the ears 0.95 s for 2 s of
+  audio. Headless Edge captures at 1366 and 1920 live in
+  `.build/deliverables/shots/resp` (a duplicated header at the bottom of a
+  capture is a headless artefact, not the page).
 - **The demo starts from the working copy, not the portable folder** (`68350e2`,
   Eddy at 22:30 on 24 Sep: « I want everything on the MedBox folder... I just
   want to be able to click on it on my PC and it opens up properly »).

@@ -564,11 +564,27 @@ async def lifespan(app: FastAPI):
     loop_task = asyncio.create_task(STATION.loop())
     ai_task = asyncio.create_task(STATION.watch_ai())
     prefetch_task = asyncio.create_task(STATION.prefetch_ai())
+    # The voice and the ears, warmed off the loop: the introduction and the
+    # waiting phrases are rendered (or read back from data/voice-cache) and
+    # the speech model is loaded before anyone presses a button, so the
+    # first spoken exchange on stage pays nothing (24 Sep: 0.9 s to load
+    # the ears, 0.4 to 1.9 s per fresh sentence).
+    async def warm_voice_and_ears() -> None:
+        try:
+            if SPEAKER.available():
+                n = await asyncio.to_thread(SPEAKER.warm, FIXED_SENTENCES)
+                log.info("voice warm: %d fixed sentences ready", n)
+            if TRANSCRIBER.available:
+                await asyncio.to_thread(TRANSCRIBER._load)
+                log.info("ears warm")
+        except Exception as exc:  # never a reason for the station not to start
+            log.warning("voice warm-up skipped: %s", exc)
+    warm_task = asyncio.create_task(warm_voice_and_ears())
     log.info("MedBox %s ready on http://%s:%s", __version__, CONFIG.server.host, CONFIG.server.port)
     try:
         yield
     finally:
-        for t in (loop_task, ai_task, prefetch_task):
+        for t in (loop_task, ai_task, prefetch_task, warm_task):
             t.cancel()
         # Bounded. Stopping the station must not depend on every task agreeing
         # to stop; see watch_ai for the one that once did not.
@@ -1611,8 +1627,19 @@ CREW_QUESTION = re.compile(r"[ée]quipage|crew|tout le monde|[àa] bord|combien"
 
 INTRO_QUESTION = re.compile(r"pr[ée]sent(e|ez)[- ]?(toi|vous)|qui (es[- ]tu|[êe]tes[- ]vous)|who are you|introduce yourself|"
                             r"c.est quoi medbox|qu.est[- ]ce que medbox|what is medbox|tu es qui|vous [êe]tes qui", re.I)
+# Rendered at start-up so the first words on stage cost nothing.
+FIXED_SENTENCES: list[str] = []
+
+
 INTRO_SPOKEN = ("Je suis MedBox, le référent médical du bord. Je surveille l’équipage en continu, je décide des "
                 "isolements et je réponds à vos questions. Je ne prescris aucun médicament.")
+FIXED_SENTENCES.extend([
+    INTRO_SPOKEN,
+    "Un instant, je regarde les constantes.",
+    "Un instant, je regarde vos constantes.",
+    "Oui ? Que puis-je faire pour vous ?",
+    "Tout l’équipage est dans sa plage habituelle. Personne n’est en isolement.",
+])
 
 
 VITAL_WORDS = [

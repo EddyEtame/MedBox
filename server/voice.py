@@ -119,8 +119,10 @@ class Transcriber:
             # By path, never by name: a bare name sends faster-whisper to
             # Hugging Face, and the one thing this product promises is that it
             # does not need the network.
+            # Six threads: the person speaks while the model is idle, and
+            # a two-second phrase then comes back in well under a second.
             self._model = WhisperModel(
-                str(self.model_dir), device="cpu", compute_type="int8"
+                str(self.model_dir), device="cpu", compute_type="int8", cpu_threads=6
             )
             self.last_error = None
         except Exception as exc:
