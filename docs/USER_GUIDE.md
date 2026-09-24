@@ -127,6 +127,12 @@ Chaque membre reçoit un dépistage partiel dérivé de NEWS2, calculé à parti
 
 *Toujours actif : aucune demande à formuler.*
 
+#### Lire à voix haute ses évaluations et ses réponses
+
+Une voix française embarquée (Piper, hors ligne) lit le résumé d’une évaluation, ses hypothèses et sa question, ainsi que la réponse à une question tapée. Rien ne sort de la machine. Les annonces du vaisseau restent des phrases pré-enregistrées écrites par l’équipe, jamais par le modèle.
+
+*Activer la voix (bouton haut-parleur). Si la voix embarquée manque, seules les phrases pré-enregistrées sont dites.*
+
 #### Expliquer le calcul du score d’une personne
 
 Après sélection d’un membre, chaque constante indique pourquoi elle a reçu ses points. MedBox distingue aussi les paramètres réellement mesurés de ceux qui sont absents ou supposés.
@@ -171,6 +177,12 @@ Après l’autorisation du navigateur et une réponse vocale explicite, MedBox �
 
 ### Nécessite l’assistant
 
+#### Répondre à une question tapée, à partir des faits de la station
+
+L’opérateur tape une question (« pourquoi ce score ? », « que mesure MedBox ? »). L’assistant répond en deux phrases, uniquement à partir des faits que la station lui écrit : mesures, lignes de base, score, isolement, déclarations. Sa réponse est décodée sous un format fermé et passe le même filtre que les évaluations : pas de diagnostic, pas de médicament, pas de dose. Sans assistant, la station répond elle-même avec ces faits, et le dit.
+
+*Dans la barre de commande du vaisseau, basculer sur « Question » ou commencer par « ? » ; sur le tableau, le champ « Question à l’assistant ».*
+
 #### Proposer des hypothèses classées pour une personne
 
 L’assistant lit les mesures et les déclarations de cette personne, puis propose des explications possibles. Chaque signe nomme son capteur ou reste clairement marqué comme déclaré et non mesuré. Il ne diagnostique pas, ne change jamais la priorité et doit reconnaître l’insuffisance des données au lieu d’inventer un profil.
@@ -183,7 +195,7 @@ MedBox mesure cinq paramètres et en fait observer deux. L’assistant peut donc
 
 *Inclus dans chaque évaluation de l’assistant.*
 
-8 des 10 capacités documentées ne dépendent pas du modèle. L’IA reste une couche d’explication au-dessus d’un système déterministe.
+9 des 12 capacités documentées ne dépendent pas du modèle. L’IA reste une couche d’explication au-dessus d’un système déterministe.
 
 ## 11. Limites absolues de l’assistant
 

@@ -14,7 +14,7 @@ import time
 import httpx
 
 from ..config import CONFIG
-from .schemas import ASSESSMENT_SCHEMA, SYSTEM_PROMPT
+from .schemas import ANSWER_RULES, ANSWER_SCHEMA, ASSESSMENT_SCHEMA, SYSTEM_PROMPT
 
 log = logging.getLogger("medbox.ai")
 
@@ -251,6 +251,51 @@ class OllamaClient:
             self.last_error = f"{type(exc).__name__}: {exc}"
             return None
 
+
+    async def answer(self, question: str, facts: str) -> dict | None:
+        """One typed question, answered from facts the station wrote, under a shape.
+
+        This is the text mode, and it is deliberately not `freeform`: the
+        question is caller text, but it is decoded under ANSWER_SCHEMA (two
+        sentences and a declared source, nothing else), under the same system
+        prompt as an assessment so the cached prefix survives, and the caller
+        passes the result through `validate.enforce_answer` before anyone
+        reads it. `tests/test_the_text_mode_has_a_shape.py` pins the format.
+        """
+        body = {
+            "model": self.model,
+            "stream": False,
+            "keep_alive": CONFIG.ai.keep_alive,
+            "format": ANSWER_SCHEMA,
+            "options": {**_options(), "num_predict": 96},
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"{facts}\n\nQuestion de l’opérateur : {question}\n\n{ANSWER_RULES}",
+                },
+            ],
+        }
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout, verify=_TLS) as client:
+                r = await client.post(f"{self.host}/api/chat", json=body)
+                r.raise_for_status()
+                payload = r.json()
+                content = payload.get("message", {}).get("content", "")
+            self.warmed = True
+            self.slow = False
+            return json.loads(content)
+        except httpx.TimeoutException:
+            log.warning("AI answer to a question exceeded %.0f s; the model is still up", self.timeout)
+            self.slow = True
+            self.last_error = f"délai dépassé ({self.timeout:.0f} s)"
+            return None
+        except Exception as exc:
+            log.warning("AI unavailable for a question: %s", exc)
+            self.available = False
+            self.warmed = False
+            self.last_error = f"{type(exc).__name__}: {exc}"
+            return None
 
     async def introduce(self) -> str | None:
         """Return a complete French orientation with a tightly bounded AI greeting.

@@ -153,6 +153,8 @@ Cela a été vérifié contre un faux Ollama volontairement malveillant
 | | |
 |---|---|
 | Une évaluation, modèle chaud | 18 à 36 s ; plafond du clic : 40 s |
+| Une question tapée | 5 à 10 s, sous la même grammaire fermée |
+| La voix lit une phrase | moins d'une seconde (processeur libre), 3,7 s pour charger la voix la première fois |
 | Clic sur un membre déjà **préparé** | 1 à 2 s depuis le dépôt ; 0,03 s mesuré depuis le dossier portable |
 | Génération | 14 à 15,5 jetons par seconde |
 | Préchauffage au démarrage | 40 s (chargement 7 s, évaluation du préambule 33 s) |
@@ -169,6 +171,29 @@ et qu'un préambule différent le fait recalculer (quinze secondes de perdues) ;
 et un modèle **lent n'est pas un modèle mort** : un dépassement de délai ne
 fait pas annoncer « l'assistant s'est arrêté », seule la sonde de présence le
 fait.
+
+### Le mode texte : poser une question à l'assistant
+
+Depuis le 24 septembre, on peut **taper une question** à l'assistant (barre de
+commande du vaisseau basculée sur « Question », ou une ligne commençant par
+« ? » ; sur le tableau, le champ « Question à l'assistant »). Ce n'est pas un
+chat libre, et c'est voulu : le dépôt interdit tout chemin qui donnerait du
+texte au modèle sans forme de réponse imposée. Concrètement :
+
+1. **la station écrit les faits** (ce qu'elle mesure, comment elle score, ce
+   qu'elle sait faire, et, si un membre est sélectionné, ses mesures, ses
+   lignes de base, son score, son isolement, ses déclarations) ;
+2. **le modèle ne peut que formuler** deux phrases à partir de ces faits,
+   sous une grammaire qui n'a que deux champs : la réponse et sa source
+   (« mesures », « manuel », ou « rien ») ;
+3. **le validateur relit** : un médicament, une dose ou un nom de maladie
+   remplace toute la réponse par « MedBox ne sait pas répondre à cela à
+   partir de ce qu'elle mesure », et le panneau dit pourquoi ;
+4. **si l'assistant est mort**, la station répond elle-même avec ses faits,
+   et le dit (« l'assistant est arrêté : réponse de la station »).
+
+Mesuré : cinq à dix secondes par réponse, sous le même préambule que les
+évaluations, donc sans vider le cache.
 
 ## 7. Ce qu'il apprend
 
@@ -197,6 +222,17 @@ dit est **écrit par nous**, jamais par le modèle. Chaque clip a été
 retranscrit par la station elle-même pour vérifier qu'il se comprend à l'oral
 (c'est ainsi qu'on a découvert que « MedBox » se disait mal et qu'il fallait
 écrire « Med Box »).
+
+**La voix de l'assistant** : ce que personne n'a pré-enregistré (le résumé
+d'une évaluation, ses hypothèses, sa question, la réponse à une question
+tapée) est lu par une voix française embarquée, Piper `fr_FR-siwis-medium`,
+rendue **sur la machine**, hors ligne, en moins d'une seconde par phrase
+quand le processeur est libre. Le texte lu est celui que le validateur a
+reconstruit, jamais la sortie brute du modèle. Sans cette voix, la station
+garde ses clips et reste muette pour le texte libre. Vérifié en retranscrivant
+la voix avec le modèle de reconnaissance de la station : « Température 38,3
+degrés, saturation 98,9 pour cent… Hypothèses : fièvre avec atteinte
+respiratoire, tachycardie. »
 
 **Entrée** : reconnaissance par `faster-whisper` (modèle *base*), en local.
 Pas l'API de reconnaissance vocale du navigateur, qui envoie le son chez

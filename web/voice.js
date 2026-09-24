@@ -237,15 +237,56 @@
     });
   }
 
-  /* Speak a short deterministic/local response after a wake-word command.
-     It uses only a voice the browser reports as local and is optional: the
-     same sentence is always visible in the listening panel. */
+  /* The station's own voice (Piper, on the server, offline) for text nobody
+     pre-recorded: an assessment the validator rebuilt, an answer to a typed
+     question, a wake-word reply. One request, one WAV, played here. A 503
+     means no voice is bundled; remember it and stop asking. */
+  var serverVoice = null;
+  function serverSpeech(text, serial) {
+    if (serverVoice === false) return Promise.resolve(false);
+    return fetch("/api/voice/say", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text })
+    }).then(function (r) {
+      if (r.status === 503) { serverVoice = false; return null; }
+      if (!r.ok) throw new Error(String(r.status));
+      serverVoice = true;
+      return r.blob();
+    }).then(function (blob) {
+      if (!blob || serial !== consentSerial) return false;
+      return new Promise(function (resolve) {
+        var url = URL.createObjectURL(blob);
+        var audio = new Audio(url);
+        var finished = false;
+        consentAudio = audio;
+        function done(ok) {
+          if (finished) return;
+          finished = true;
+          consentAudio = null;
+          URL.revokeObjectURL(url);
+          resolve(ok);
+        }
+        audio.addEventListener("ended", function () { done(true); }, { once: true });
+        audio.addEventListener("error", function () { done(false); }, { once: true });
+        var promise = audio.play();
+        if (promise && promise.catch) promise.catch(function () { done(false); });
+        setTimeout(function () { done(false); }, 45000);
+      });
+    }).catch(function () { return false; });
+  }
+
+  /* Speak a short response: the bundled voice first, then a French voice
+     the browser reports as local, then nothing. Optional every step: the
+     same sentence is always visible on screen. */
   function speakText(text) {
     if (!on || !String(text || "").trim()) return Promise.resolve(false);
     var serial = ++consentSerial;
     consentPlaying = true;
     return waitForOperationalLine(serial).then(function () {
-      return localFrenchSpeech(String(text), serial);
+      return serverSpeech(String(text), serial).then(function (spoken) {
+        return spoken ? true : localFrenchSpeech(String(text), serial);
+      });
     }).then(function (spoken) {
       if (serial !== consentSerial) return false;
       consentPlaying = false;

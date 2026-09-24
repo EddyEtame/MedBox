@@ -178,6 +178,11 @@
       </section>
 
       <button id="aiBtn" class="btn primary wide" disabled>Demander une analyse à l’assistant</button>
+      <form id="askForm" class="ask" autocomplete="off">
+        <input id="askInput" type="text" maxlength="220" placeholder="Question à l’assistant, en texte" aria-label="Question à l’assistant">
+        <button class="btn" type="submit">Demander</button>
+      </form>
+      <p class="cmd-out" id="askOut" aria-live="polite"></p>
       <div class="stale-note" id="aiStale" hidden></div>
       <div class="ai" id="aiOut"></div>
     </section>

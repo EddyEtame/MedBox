@@ -1124,6 +1124,30 @@
     say("Commande « " + word + " » inconnue. Ouvrez Aide pour la liste.", true);
   }
 
+  /* The text mode. The station writes the facts, the model phrases two
+     sentences under a shape, the validator rebuilds them; when the model is
+     dead the station answers with the facts itself and says so. */
+  function askQuestion(text) {
+    text = String(text || "").trim();
+    if (!text) return;
+    say("Question posée… l’assistant répond en quelques secondes.");
+    fetch("/api/assistant/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text, patient_id: state.selected })
+    })
+      .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+      .then(function (res) {
+        var b = res.body || {};
+        if (!res.ok) return say(b.detail || "Question refusée.", true);
+        var note = b.held_reason ? " (l’assistant est arrêté : réponse de la station)" : "";
+        var blocked = b.blocked && b.blocked.length ? " — " + b.blocked.join(" ") : "";
+        say(b.answer + note + blocked, !!blocked);
+        if (MedBox.voice) MedBox.voice.speakText(b.answer);
+      })
+      .catch(function () { say("L’assistant n’a pas répondu. La surveillance continue.", true); });
+  }
+
   function bandColor(u) {
     return { routine:"#4a6b78", low:"#7fc6d6", medium:"#f0c459", high:"#ff5c6e" }[u] || "#4a6b78";
   }
@@ -1153,6 +1177,7 @@
         // written against stop being the readings on screen.
         state.held = res.body;
         out.innerHTML = MedBox.assessment.render(res.body, { flyable: true });
+        if (MedBox.assessment.spoken && MedBox.voice) MedBox.voice.speakText(MedBox.assessment.spoken(res.body));
       })
       .catch(function () {
         btn.disabled = false;
@@ -1233,7 +1258,17 @@
     e.preventDefault();
     var input = el("cmdInput"), text = input.value;
     input.value = "";
-    runCommand(text, 0);
+    if (state.askMode || /^\?/.test(text.trim())) askQuestion(text.replace(/^\s*\?\s*/, ""));
+    else runCommand(text, 0);
+  });
+  el("cmdMode").addEventListener("click", function () {
+    state.askMode = !state.askMode;
+    el("cmdMode").textContent = state.askMode ? "Question" : "Commande";
+    el("cmdMode").classList.toggle("ask", state.askMode);
+    el("cmdInput").placeholder = state.askMode
+      ? "Question à l’assistant — exemple : pourquoi ce score ?"
+      : "Commande locale — exemple : worst";
+    el("cmdInput").focus();
   });
   el("guideClose").addEventListener("click", closeGuide);
   el("introBtn").addEventListener("click", introduce);

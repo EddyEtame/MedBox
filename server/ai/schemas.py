@@ -220,6 +220,39 @@ ASSESSMENT_SCHEMA = {
 #                 The server sets it from CLIENT.stand_in, which comes from
 #                 probing /api/version, never from the model's own output.
 
+# One typed question, one bounded answer. The text mode exists because an
+# operator asked for it, and it exists *under a shape* because this file's
+# whole argument is that the model cannot write what the schema has no field
+# for. Two sentences, no urgency field, no treatment field, and a declared
+# source so the panel can say what the answer rests on.
+MAX_ANSWER_CHARS = 280
+ANSWER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "answer": {
+            "type": "string",
+            "maxLength": MAX_ANSWER_CHARS,
+            "description": "Deux phrases au plus, en français, uniquement à partir des faits fournis.",
+        },
+        "grounded_in": {
+            "type": "string",
+            "enum": ["measurements", "manual", "nothing"],
+            "description": (
+                "Sur quoi la réponse s’appuie : les mesures du membre sélectionné, "
+                "le manuel de la station, ou rien (la station ne le sait pas)."
+            ),
+        },
+    },
+    "required": ["answer", "grounded_in"],
+    "additionalProperties": False,
+}
+ANSWER_RULES = (
+    "Répondez à la question de l’opérateur en français, en deux phrases au plus, "
+    "uniquement à partir des faits ci-dessus. Aucun diagnostic, aucun médicament, "
+    "aucune dose, aucun niveau d’urgence. Si les faits ne permettent pas de répondre, "
+    "dites que MedBox ne le sait pas et mettez grounded_in à « nothing »."
+)
+
 SYSTEM_PROMPT = """Vous êtes l’assistant à bord de l’ESA Horizon, un vaisseau spatial \
 sans contact avec la Terre et sans médecin à bord.
 

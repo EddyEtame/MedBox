@@ -31,6 +31,38 @@ CAPABILITIES = [
         "how": "Toujours actif : aucune demande à formuler.",
     },
     {
+        "id": "ask",
+        "title": "Répondre à une question tapée, à partir des faits de la station",
+        "does": (
+            "L’opérateur tape une question (« pourquoi ce score ? », « que mesure MedBox ? »). "
+            "L’assistant répond en deux phrases, uniquement à partir des faits que la station "
+            "lui écrit : mesures, lignes de base, score, isolement, déclarations. Sa réponse est "
+            "décodée sous un format fermé et passe le même filtre que les évaluations : pas de "
+            "diagnostic, pas de médicament, pas de dose. Sans assistant, la station répond "
+            "elle-même avec ces faits, et le dit."
+        ),
+        "needs_ai": True,
+        "how": (
+            "Dans la barre de commande du vaisseau, basculer sur « Question » ou commencer "
+            "par « ? » ; sur le tableau, le champ « Question à l’assistant »."
+        ),
+    },
+    {
+        "id": "speak",
+        "title": "Lire à voix haute ses évaluations et ses réponses",
+        "does": (
+            "Une voix française embarquée (Piper, hors ligne) lit le résumé d’une évaluation, "
+            "ses hypothèses et sa question, ainsi que la réponse à une question tapée. Rien ne "
+            "sort de la machine. Les annonces du vaisseau restent des phrases pré-enregistrées "
+            "écrites par l’équipe, jamais par le modèle."
+        ),
+        "needs_ai": False,
+        "how": (
+            "Activer la voix (bouton haut-parleur). Si la voix embarquée manque, seules les "
+            "phrases pré-enregistrées sont dites."
+        ),
+    },
+    {
         "id": "explain_score",
         "title": "Expliquer le calcul du score d’une personne",
         "does": (

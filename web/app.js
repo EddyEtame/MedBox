@@ -280,6 +280,7 @@
         }
         state.held = res.body;
         out.innerHTML = MedBox.assessment.render(res.body);
+        if (MedBox.assessment.spoken && MedBox.voice) MedBox.voice.speakText(MedBox.assessment.spoken(res.body));
       })
       .catch(function () {
         state.asking = false;
@@ -396,6 +397,29 @@
     MedBox.patientTools.attach(function () { return state.selected; }, renderDetail);
   }
   el("aiBtn").addEventListener("click", askAI);
+  // The text mode on the flat board: same route, same shape, same validator.
+  el("askForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var input = el("askInput"), text = input.value.trim(), out = el("askOut");
+    if (!text) return;
+    input.value = "";
+    out.textContent = "Question posée… l’assistant répond en quelques secondes.";
+    fetch("/api/assistant/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text, patient_id: state.selected })
+    })
+      .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+      .then(function (res) {
+        var b = res.body || {};
+        if (!res.ok) { out.textContent = b.detail || "Question refusée."; return; }
+        var note = b.held_reason ? " (l’assistant est arrêté : réponse de la station)" : "";
+        var blocked = b.blocked && b.blocked.length ? " — " + b.blocked.join(" ") : "";
+        out.textContent = b.answer + note + blocked;
+        if (MedBox.voice) MedBox.voice.speakText(b.answer);
+      })
+      .catch(function () { out.textContent = "L’assistant n’a pas répondu. La surveillance continue."; });
+  });
   // Replies to the assistant's questions. Not guarded: the assessment
   // panel cannot exist without assessment.js, see CLAUDE.md.
   MedBox.assessment.wireAnswers(el("aiOut"), function (pid, list) {

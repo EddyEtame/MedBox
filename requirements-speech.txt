@@ -16,3 +16,9 @@ ctranslate2==4.8.2
 # Decodes the webm/opus the browser records. PyAV bundles its own FFmpeg, so
 # no system ffmpeg has to be installed on the demo laptop.
 av==18.1.0
+# The assistant's own voice: Piper renders what nobody pre-recorded (an
+# assessment, an answer to a typed question) in under a second on the demo
+# CPU, offline. Optional like the rest of this file: without it the station
+# keeps its pre-rendered clips and stays silent for free text.
+piper-tts==1.8.0
+pathvalidate==3.3.1

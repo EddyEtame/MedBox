@@ -367,3 +367,44 @@ def enforce(result: dict, urgency: str = "", params: list | None = None) -> dict
         out["summary"] or out["hypotheses"] or out["questions_for_patient"] or out["insufficient_data"]
     )
     return out
+
+
+SUPPRESSED_ANSWER = (
+    "L’assistant a répondu avec un diagnostic, un médicament ou une dose. "
+    "MedBox n’affiche pas cette réponse."
+)
+NO_ANSWER = "MedBox ne sait pas répondre à cela à partir de ce qu’elle mesure."
+
+
+def enforce_answer(result) -> dict:
+    """Rebuild a text-mode answer from its two allowed fields, and nothing else.
+
+    The same idea as `enforce`: whatever the model returned, the panel only
+    ever sees `answer`, `grounded_in` and `blocked`. A prescription, a dose or
+    a disease name replaces the whole answer with the station's own sentence,
+    and says so. Never raises.
+    """
+    from .schemas import MAX_ANSWER_CHARS
+
+    if not isinstance(result, dict):
+        return {
+            "ok": False,
+            "answer": NO_ANSWER,
+            "grounded_in": "nothing",
+            "blocked": ["La réponse de l’assistant ne respectait pas le format attendu."],
+        }
+    blocked: list[str] = []
+    answer = " ".join(str(result.get("answer") or "").split())
+    grounded = result.get("grounded_in")
+    if grounded not in ("measurements", "manual", "nothing"):
+        grounded = "nothing"
+    if len(answer) > MAX_ANSWER_CHARS:
+        cut = answer[:MAX_ANSWER_CHARS]
+        answer = (cut.rsplit(" ", 1)[0] if " " in cut else cut).rstrip(" ,;:-") + "…"
+    if answer and (_looks_like_a_prescription(answer) or _names_a_disease(answer) or DOSE.search(answer)):
+        blocked.append(SUPPRESSED_ANSWER)
+        answer = ""
+    if not answer:
+        answer = NO_ANSWER
+        grounded = "nothing"
+    return {"ok": True, "answer": answer, "grounded_in": grounded, "blocked": blocked}

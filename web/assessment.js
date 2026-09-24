@@ -199,6 +199,21 @@
    * `held` is the assessment as returned; `liveTotal` is the NEWS2 aggregate
    * showing right now. Returns null while it still holds, or the sentence to
    * put over it when it does not. */
+  /* What the voice reads out of an assessment: the rebuilt summary, the
+     hypothesis names and the one question. Nothing the validator removed. */
+  function spoken(b) {
+    if (!b || !b.ok) return "";
+    var parts = [];
+    if (b.summary) parts.push(String(b.summary));
+    if (b.hypotheses && b.hypotheses.length) {
+      parts.push("Hypothèses : " + b.hypotheses.map(function (h) { return h.name; }).join(", ") + ".");
+    }
+    if (b.questions_for_patient && b.questions_for_patient.length) {
+      parts.push("Question à poser : " + b.questions_for_patient[0]);
+    }
+    return parts.join(" ");
+  }
+
   function staleness(held, liveTotal, nowMs) {
     if (!held) return null;
     var age = nowMs - (held.at || 0) * 1000;
@@ -272,6 +287,7 @@
   root.MedBox = root.MedBox || {};
   root.MedBox.assessment = {
     render: render,
+    spoken: spoken,
     staleness: staleness,
     failure: failure,
     wireAnswers: wireAnswers,

@@ -233,3 +233,8 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
    this view the crew panel is the right-hand column, so bottom-right covers
    the one thing the operator is reading. Bottom-left is empty. */
 .medbox-listener{right:auto !important;left:18px !important}
+
+/* The text mode on the flat board. */
+.ask { display: flex; gap: 8px; margin-top: 10px; }
+.ask input { flex: 1; min-width: 0; }
+.ask + .cmd-out { margin-top: 6px; font-size: 0.9rem; line-height: 1.35; opacity: 0.92; }

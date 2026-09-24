@@ -121,6 +121,8 @@ else {
     if (Test-Path -LiteralPath $consent) { Ok "Notice de consentement enregistree (consent_fr.wav)" } else { Fail "consent_fr.wav absent : la station ne se presentera pas a voix haute" }
     $speech = Join-Path $root "models\faster-whisper-base\model.bin"
     if (Test-Path -LiteralPath $speech) { Ok "Modele de reconnaissance vocale present" } else { Warn "Modele vocal absent : le micro restera cache (tools\assets.py)" }
+    $voice = Join-Path $root "models\piper\fr_FR-siwis-medium.onnx"
+    if (Test-Path -LiteralPath $voice) { Ok "Voix Piper embarquee : l'assistant lit ses reponses" } else { Warn "Voix Piper absente (models\piper) : l'assistant reste muet, les clips suffisent" }
 }
 $voices = @()
 try { Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $voices = $s.GetInstalledVoices() | ForEach-Object { $_.VoiceInfo.Culture.Name }; $s.Dispose() } catch {}

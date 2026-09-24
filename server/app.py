@@ -20,13 +20,13 @@ from pathlib import Path
 from urllib.parse import unquote
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, scenarios
 from .ai.capabilities import manifest
 from .ai.ollama import CLIENT
-from .ai.validate import enforce
+from .ai.validate import enforce, enforce_answer
 from .bus import BUS
 from .config import CONFIG, ROOT
 from .commands import Command, classify as classify_command
@@ -37,6 +37,7 @@ from .quarantine import QuarantineRegistry
 from .protocols import ProtocolDataError, ProtocolEngine
 from .sensors.synthetic import BASELINE_PROFILE_VERSION, ScenarioSource
 from .speech import Announcer
+from .tts import MAX_CHARS as VOICE_MAX_CHARS, SPEAKER, VOICE_NAME
 from .voice import TRANSCRIBER
 from .symptoms import SymptomLog
 from .triage import Urgency, assess
@@ -515,6 +516,11 @@ async def status() -> dict:
             "available": TRANSCRIBER.available,
             "error": TRANSCRIBER.last_error,
             "model": str(TRANSCRIBER.model_dir.name),
+        },
+        "mouth": {
+            "available": SPEAKER.available(),
+            "voice": VOICE_NAME,
+            "error": SPEAKER.last_error,
         },
         "scenario": STATION.scenario.name if STATION.scenario else None,
         "scenarios": scenarios.available(),
@@ -1353,6 +1359,123 @@ async def assistant_introduce() -> JSONResponse:
             },
         )
     return JSONResponse(content={"text": text, "stand_in": CLIENT.stand_in})
+
+
+VITAL_FR = {
+    "temperature": ("température", "°C"),
+    "spo2": ("SpO2", "%"),
+    "pulse": ("pouls", "/min"),
+    "respiration": ("respiration", "/min"),
+    "systolic_bp": ("tension systolique", "mmHg"),
+}
+URGENCY_FR = {"routine": "routine", "low": "faible", "medium": "moyenne", "high": "haute"}
+
+
+def _facts_for(patient_id: str | None) -> tuple[str, str]:
+    """The facts the assistant may answer from, and the station's own answer.
+
+    Deterministic, written by the station: the model reads them, it never
+    supplies them. Returns (facts for the model, the sentence the station
+    gives instead when the model is absent or silent).
+    """
+    caps = " ; ".join(c["title"] for c in manifest()["capabilities"])
+    lines = [
+        "Faits de la station : MedBox mesure cinq constantes (température, SpO2, pouls, "
+        "respiration, tension systolique) et reçoit deux observations saisies (conscience "
+        "ACVPU, oxygène d’appoint). Le score est NEWS2 (Royal College of Physicians 2017), "
+        "calculé sans modèle. L’isolement est proposé par la station et confirmé par une "
+        "personne. L’assistant ne diagnostique pas, ne prescrit pas et ne décide pas.",
+        f"Ce que la station sait faire : {caps}.",
+    ]
+    station_answer = "L’assistant est arrêté. " + lines[0]
+    entry = STATION.latest.get(patient_id) if patient_id else None
+    if entry:
+        p, t = entry["patient"], entry["triage"]
+        baseline = p.get("baseline") or {}
+        vitals = ", ".join(
+            f"{VITAL_FR[k][0]} {p[k]} {VITAL_FR[k][1]} (ligne de base {baseline.get(k)})"
+            for k in VITAL_FR
+            if p.get(k) is not None
+        )
+        urgency = URGENCY_FR.get(t.get("urgency"), t.get("urgency"))
+        measured = ", ".join(t.get("measured") or []) or "aucun"
+        missing = ", ".join(t.get("missing_news2") or []) or "aucun"
+        iso = STATION.quarantine.assignments.get(patient_id)
+        if iso is None:
+            iso_text = "pas d’isolement proposé"
+        elif iso.confirmed:
+            iso_text = f"isolement confirmé en zone {iso.zone}" if iso.zone else "isolement confirmé, en attente d’un lit"
+        else:
+            iso_text = "isolement proposé, à confirmer par une personne"
+        said = [s.get("text", "") for s in STATION.symptoms.for_patient(patient_id)][-3:]
+        said_text = " ; ".join(x for x in said if x) or "rien"
+        lines.append(
+            f"Membre sélectionné : {p.get('name')} ({p.get('role', '')}). Mesures actuelles : {vitals}. "
+            f"NEWS2 {t.get('total')} ({urgency}) ; paramètres mesurés : {measured} ; non mesurés : {missing}. "
+            f"{iso_text}. Déclarations récentes : {said_text}."
+        )
+        station_answer = (
+            f"L’assistant est arrêté. {p.get('name')} : NEWS2 {t.get('total')} ({urgency}), "
+            f"{iso_text}. Mesures : {vitals}."
+        )
+    return "\n".join(lines), station_answer
+
+
+@app.post("/api/assistant/ask")
+async def assistant_ask(body: dict) -> dict:
+    """The text mode: one typed question, answered from facts the station wrote.
+
+    The facts are deterministic and come first; the model may only phrase an
+    answer from them, inside ANSWER_SCHEMA, and the answer passes
+    `enforce_answer` before anyone reads it. When the model is absent or
+    silent the station answers with the facts itself and says so, exactly as
+    the held assessment does.
+    """
+    text = str(body.get("text") or "").strip()
+    if not text or len(text) > 300:
+        raise HTTPException(400, "Une question courte est requise")
+    patient_id = str(body.get("patient_id") or "").strip() or None
+    if patient_id is not None and patient_id not in STATION.latest:
+        raise HTTPException(404, f"Membre inconnu : {patient_id}")
+    facts, station_answer = _facts_for(patient_id)
+    if not CLIENT.available:
+        return {"ok": True, "answer": station_answer, "grounded_in": "manual", "blocked": [],
+                "stand_in": False, "held_reason": "assistant_down"}
+    async with STATION._ai_lock:
+        raw = await CLIENT.answer(text, facts)
+    if raw is None:
+        return {"ok": True, "answer": station_answer, "grounded_in": "manual", "blocked": [],
+                "stand_in": False, "held_reason": "assistant_silent", "detail": CLIENT.last_error}
+    out = enforce_answer(raw)
+    out["stand_in"] = CLIENT.stand_in
+    out["held_reason"] = None
+    return out
+
+
+@app.get("/api/voice/status")
+async def voice_status() -> dict:
+    return {"available": SPEAKER.available(), "voice": VOICE_NAME, "error": SPEAKER.last_error}
+
+
+@app.post("/api/voice/say")
+async def voice_say(body: dict) -> Response:
+    """Render one short French text with the bundled voice. Slow track only.
+
+    The browser asks for this after the validator has rebuilt an answer or an
+    assessment; the ship's announcements never come through here, they are
+    the pre-rendered clips. Absent voice: 503, and the browser stays silent
+    for free text, as before.
+    """
+    text = str(body.get("text") or "").strip()
+    if not text or len(text) > VOICE_MAX_CHARS:
+        raise HTTPException(400, "Un texte court est requis")
+    if not SPEAKER.available():
+        raise HTTPException(503, "Aucune voix embarquée : les phrases pré-enregistrées restent disponibles.")
+    try:
+        audio = await SPEAKER.say(text)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(503, f"La voix n’a pas pu lire ce texte : {exc}") from exc
+    return Response(content=audio, media_type="audio/wav", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/interconnect/health")

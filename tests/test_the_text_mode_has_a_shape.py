@@ -1,0 +1,122 @@
+"""The text mode is a typed question answered under a shape, never free prose.
+
+`tests/test_ai_path.py` pins that no method runs caller text with no schema.
+This file pins the one method that takes caller text: it decodes under
+ANSWER_SCHEMA, under the same system prompt as an assessment, and its output
+is rebuilt by `enforce_answer` before a panel or a voice gets it. When the
+model is absent the station answers with its own facts and says so.
+"""
+from __future__ import annotations
+
+import asyncio
+import inspect
+import sys
+from pathlib import Path
+
+import pytest
+from fastapi import HTTPException
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from server import app as station  # noqa: E402
+from server.ai.ollama import OllamaClient  # noqa: E402
+from server.ai.schemas import ANSWER_SCHEMA, MAX_ANSWER_CHARS  # noqa: E402
+from server.ai.validate import NO_ANSWER, SUPPRESSED_ANSWER, enforce_answer  # noqa: E402
+
+
+def test_the_question_path_always_sends_a_shape():
+    assert list(inspect.signature(OllamaClient.answer).parameters) == ["self", "question", "facts"]
+    src = inspect.getsource(OllamaClient.answer)
+    assert '"format": ANSWER_SCHEMA' in src, "a question must be decoded under the answer schema"
+    assert '{"role": "system", "content": SYSTEM_PROMPT}' in src, "same prompt as an assessment, or the cache is evicted"
+
+
+def test_the_shape_has_no_room_for_a_diagnosis_or_an_urgency():
+    assert set(ANSWER_SCHEMA["properties"]) == {"answer", "grounded_in"}
+    assert ANSWER_SCHEMA["additionalProperties"] is False
+    assert ANSWER_SCHEMA["properties"]["answer"]["maxLength"] == MAX_ANSWER_CHARS <= 280
+    assert ANSWER_SCHEMA["properties"]["grounded_in"]["enum"] == ["measurements", "manual", "nothing"]
+
+
+@pytest.mark.parametrize("text", [
+    "Prenez 500 mg de paracétamol toutes les six heures.",
+    "Administrez de l’oxygène par voie nasale.",
+    "C’est probablement une pneumonie débutante.",
+])
+def test_a_prescription_or_a_disease_in_the_answer_is_replaced_and_said(text):
+    out = enforce_answer({"answer": text, "grounded_in": "manual"})
+    assert out["answer"] == NO_ANSWER and out["grounded_in"] == "nothing"
+    assert out["blocked"] == [SUPPRESSED_ANSWER]
+
+
+def test_a_plain_answer_passes_and_a_long_one_is_cut_on_a_word():
+    out = enforce_answer({"answer": "Le score vient de la respiration à 25 par minute et de la température.", "grounded_in": "measurements"})
+    assert out == {"ok": True, "answer": "Le score vient de la respiration à 25 par minute et de la température.",
+                   "grounded_in": "measurements", "blocked": []}
+    long = enforce_answer({"answer": "mot " * 200, "grounded_in": "manual"})
+    assert long["answer"].endswith("…") and len(long["answer"]) <= MAX_ANSWER_CHARS + 1
+
+
+def test_garbage_and_an_unknown_source_get_the_station_sentence():
+    assert enforce_answer("nope")["answer"] == NO_ANSWER
+    assert enforce_answer("nope")["ok"] is False
+    out = enforce_answer({"answer": "", "grounded_in": "cloud"})
+    assert out["answer"] == NO_ANSWER and out["grounded_in"] == "nothing"
+
+
+def test_the_facts_are_written_by_the_station():
+    facts, own = station._facts_for(None)
+    assert "NEWS2" in facts and "ne diagnostique pas" in facts
+    assert "Ce que la station sait faire" in facts
+    assert own.startswith("L’assistant est arrêté.")
+
+
+def test_without_the_model_the_station_answers_itself(monkeypatch):
+    monkeypatch.setattr(station.CLIENT, "available", False)
+    out = asyncio.run(station.assistant_ask({"text": "Que mesure MedBox ?"}))
+    assert out["held_reason"] == "assistant_down" and out["grounded_in"] == "manual"
+    assert "MedBox mesure cinq constantes" in out["answer"]
+
+
+def test_the_model_answer_passes_the_validator_before_anyone_reads_it(monkeypatch):
+    monkeypatch.setattr(station.CLIENT, "available", True)
+
+    async def prescribes(question, facts):
+        assert "Question de l’opérateur" not in facts, "the facts are the station's, the question is separate"
+        return {"answer": "Donnez 1 g de paracétamol.", "grounded_in": "manual"}
+
+    monkeypatch.setattr(station.CLIENT, "answer", prescribes)
+    out = asyncio.run(station.assistant_ask({"text": "Que faire ?"}))
+    assert out["answer"] == NO_ANSWER and out["blocked"] == [SUPPRESSED_ANSWER]
+    assert out["held_reason"] is None
+
+
+def test_a_silent_model_yields_the_station_sentence(monkeypatch):
+    monkeypatch.setattr(station.CLIENT, "available", True)
+
+    async def silent(question, facts):
+        return None
+
+    monkeypatch.setattr(station.CLIENT, "answer", silent)
+    out = asyncio.run(station.assistant_ask({"text": "Pourquoi ce score ?"}))
+    assert out["held_reason"] == "assistant_silent"
+    assert out["answer"].startswith("L’assistant est arrêté.")
+
+
+def test_an_empty_or_endless_question_is_refused():
+    for body in ({"text": ""}, {"text": "x" * 301}, {}):
+        with pytest.raises(HTTPException) as bad:
+            asyncio.run(station.assistant_ask(body))
+        assert bad.value.status_code == 400
+    with pytest.raises(HTTPException) as unknown:
+        asyncio.run(station.assistant_ask({"text": "Pourquoi ?", "patient_id": "P-999"}))
+    assert unknown.value.status_code == 404
+
+
+def test_the_manifest_tells_the_operator_both_new_things():
+    from server.ai.capabilities import CAPABILITIES
+
+    ids = {c["id"]: c for c in CAPABILITIES}
+    assert ids["ask"]["needs_ai"] is True and "format fermé" in ids["ask"]["does"]
+    assert ids["speak"]["needs_ai"] is False and "Piper" in ids["speak"]["does"]

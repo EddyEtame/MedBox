@@ -60,6 +60,15 @@ ligne « Préparée il y a N s, avant la demande ».
 > droit de faire : pas de diagnostic, pas de médicament, pas de dose. S'il en
 > écrit un, la station le bloque et vous le dit.
 
+Si la voix est activée (bouton haut-parleur), l'assistant **lit sa réponse**
+pendant qu'on parle. Puis, dans la barre de commande, taper
+**« ? quel médicament lui donner ? »** : la réponse revient en quelques
+secondes et dit que MedBox ne répond pas à cela ; le panneau montre ce qui a
+été bloqué.
+
+> Même quand on lui demande, il ne peut pas : la question passe par la même
+> grammaire fermée et le même filtre que tout le reste.
+
 Basculer sur le terminal, valider `tools\assistant.ps1 stop`. Revenir.
 
 > Je viens de tuer l'intelligence artificielle.

@@ -529,6 +529,7 @@ function Write-BundleManifest([string]$BundleRoot, [bool]$HasOllama, [bool]$HasM
             ollama = [ordered]@{ present = $HasOllama; requiredVersion = $requiredOllama }
             model = [ordered]@{ present = $HasModel; name = $model }
             speechModel = [ordered]@{ present = $HasSpeech; name = "faster-whisper-base" }
+            voice = [ordered]@{ present = (Test-Path -LiteralPath (Join-Path $RepoRoot "models\piper\fr_FR-siwis-medium.onnx") -PathType Leaf); name = "fr_FR-siwis-medium" }
         }
         readiness = [ordered]@{
             completeForVoiceDemo = ($HasOllama -and $HasModel -and $HasSpeech)
@@ -769,6 +770,13 @@ try {
         if ($inventory.HasSpeech) {
             Write-Step "Offline speech model"
             Copy-CleanTree $inventory.Speech (Join-Path $stage "app\models\faster-whisper-base")
+        }
+        # The assistant's voice, when the repository has it. Optional, like the
+        # microphone: the station says in /api/status whether it is there.
+        $voiceSource = Join-Path $RepoRoot "models\piper"
+        if (Test-Path -LiteralPath (Join-Path $voiceSource "fr_FR-siwis-medium.onnx") -PathType Leaf) {
+            Write-Step "Offline voice (Piper fr_FR-siwis-medium)"
+            Copy-CleanTree $voiceSource (Join-Path $stage "app\models\piper")
         }
 
         Write-Step "Manifest and checksums"
