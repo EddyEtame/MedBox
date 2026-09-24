@@ -203,11 +203,15 @@
      hypothesis names and the one question. Nothing the validator removed. */
   function spoken(b) {
     if (!b || !b.ok) return "";
+    // Written for the ear on the server (server/spoken.py): no numbers, the
+    // pattern in plain words, "not a diagnosis", the question. This fallback
+    // only exists for an older server that sent no `spoken`.
+    if (b.spoken) return String(b.spoken);
     var parts = [];
-    if (b.summary) parts.push(String(b.summary));
     if (b.hypotheses && b.hypotheses.length) {
-      parts.push("Hypothèses : " + b.hypotheses.map(function (h) { return h.name; }).join(", ") + ".");
+      parts.push("Profil observé : " + b.hypotheses.map(function (h) { return String(h.name).toLowerCase(); }).join(", ") + ".");
     }
+    parts.push("Ce n’est pas un diagnostic.");
     if (b.questions_for_patient && b.questions_for_patient.length) {
       parts.push("Question à poser : " + b.questions_for_patient[0]);
     }

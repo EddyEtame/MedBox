@@ -121,6 +121,8 @@ def main() -> int:
     ap.add_argument("--voice", help="path to a Piper .onnx voice")
     ap.add_argument("--check", action="store_true",
                     help="report what is missing or unexpected, write nothing")
+    ap.add_argument("--missing", action="store_true",
+                    help="render only the clips that do not exist yet (with --voice)")
     args = ap.parse_args()
 
     clips = every_clip(crew_names())
@@ -149,6 +151,8 @@ def main() -> int:
             print("  python -m piper.download_voices fr_FR-siwis-medium --data-dir voices/",
                   file=sys.stderr)
             return 1
+        if args.missing:
+            clips = {stem: text for stem, text in clips.items() if not (OUT / f"{stem}.wav").exists()}
         n = render_with_piper(path, clips)
         print(f"\nRendered {n} clips with {path.name}. Commit web/speech/.")
     else:

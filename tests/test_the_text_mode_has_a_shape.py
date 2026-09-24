@@ -66,10 +66,11 @@ def test_garbage_and_an_unknown_source_get_the_station_sentence():
 
 
 def test_the_facts_are_written_by_the_station():
-    facts, own = station._facts_for(None)
+    facts, own, spoken = station._facts_for(None)
     assert "NEWS2" in facts and "ne diagnostique pas" in facts
     assert "Ce que la station sait faire" in facts
     assert own.startswith("L’assistant est arrêté.")
+    assert spoken.startswith("L’assistant est arrêté.") and len(spoken.split()) <= 25
 
 
 def test_without_the_model_the_station_answers_itself(monkeypatch):
@@ -77,6 +78,8 @@ def test_without_the_model_the_station_answers_itself(monkeypatch):
     out = asyncio.run(station.assistant_ask({"text": "Que mesure MedBox ?"}))
     assert out["held_reason"] == "assistant_down" and out["grounded_in"] == "manual"
     assert "MedBox mesure cinq constantes" in out["answer"]
+    # The voice gets the short form, never the fact sheet with the baselines.
+    assert "ligne de base" not in out["spoken"] and len(out["spoken"].split()) <= 25
 
 
 def test_the_model_answer_passes_the_validator_before_anyone_reads_it(monkeypatch):
@@ -90,6 +93,7 @@ def test_the_model_answer_passes_the_validator_before_anyone_reads_it(monkeypatc
     out = asyncio.run(station.assistant_ask({"text": "Que faire ?"}))
     assert out["answer"] == NO_ANSWER and out["blocked"] == [SUPPRESSED_ANSWER]
     assert out["held_reason"] is None
+    assert out["spoken"] == out["answer"], "the voice reads the validated answer, nothing else"
 
 
 def test_a_silent_model_yields_the_station_sentence(monkeypatch):

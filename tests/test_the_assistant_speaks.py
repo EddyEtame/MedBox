@@ -79,6 +79,69 @@ def test_a_sentence_renders_to_real_audio_and_is_cached():
     assert asyncio.run(tts.SPEAKER.say("Isolement proposé pour Nils Rossi. Confirmation humaine requise.")) is audio
 
 
+def test_the_voice_never_reads_numbers_off_the_screen():
+    """Heard on 24 Sep: the voice read "Température 39.19 °C, SpO2 92.2 %,
+    pouls 113.4 /min". The spoken form names the pattern, says it is not a
+    diagnosis, asks the question, and carries no number."""
+    from server.spoken import NOT_A_DIAGNOSIS, spoken_assessment, spoken_station_answer
+
+    body = {
+        "ok": True,
+        "summary": "Température 39.19 °C, SpO2 92.2 %, pouls 113.4 /min et respiration 27.0 /min.",
+        "hypotheses": [{"name": "Fièvre avec atteinte respiratoire", "supporting_signs": []},
+                       {"name": "Fièvre avec désaturation", "supporting_signs": []}],
+        "questions_for_patient": ["Depuis quand avez-vous de la fièvre ?"],
+        "information_to_gather": ["Reprendre la saturation dans dix minutes"],
+    }
+    said = spoken_assessment("Ines Novak", body)
+    assert said.startswith("Pour Ines Novak, le profil observé est : fièvre avec atteinte respiratoire et fièvre avec désaturation.")
+    assert NOT_A_DIAGNOSIS in said
+    assert said.endswith("Question à lui poser : Depuis quand avez-vous de la fièvre ?")
+    assert not any(ch.isdigit() for ch in said.split("Question")[0])
+    assert len(said.split()) <= 60
+    held = spoken_assessment("Ines Novak", {**body, "held_reason": "assistant_down"})
+    assert held.startswith("L’assistant est arrêté ; voici ce qu’il avait préparé.")
+    assert spoken_assessment("X", {"ok": False}) == ""
+    alone = spoken_station_answer()
+    assert alone.startswith("L’assistant est arrêté.") and not any(ch.isdigit() for ch in alone)
+    short = spoken_station_answer("Ines Novak", 9, "haute", "isolement proposé, à confirmer par une personne")
+    assert "ligne de base" not in short and len(short.split()) <= 25
+
+
+def test_the_voice_introduces_itself_when_someone_switches_it_on():
+    from server.speech import PHRASES
+
+    assert PHRASES["intro"].startswith("Bonjour, je suis MedBox")
+    assert "décide" in PHRASES["intro_rule"]
+    voice = (ROOT / "web" / "voice.js").read_text(encoding="utf-8")
+    assert 'say(["intro", "intro_rule"])' in voice
+    for view in ("ship.js", "app.js"):
+        js = (ROOT / "web" / view).read_text(encoding="utf-8")
+        assert "MedBox.voice.setOn(!MedBox.voice.isOn(), true)" in js, f"{view}: the button announces, the restore does not"
+        assert "MedBox.voice.setOn(MedBox.voice.restore());" in js
+    for stem in ("intro", "intro_rule"):
+        assert (ROOT / "web" / "speech" / f"{stem}.wav").is_file(), f"{stem}.wav must be rendered"
+
+
+def test_an_assessment_response_carries_its_spoken_form(monkeypatch):
+    from server import app as station
+
+    monkeypatch.setitem(station.STATION.latest, "P-TEST", {
+        "patient": {"id": "P-TEST", "name": "Test Crew"},
+        "triage": {"total": 5, "urgency": "medium", "params": []},
+    })
+    monkeypatch.setitem(station.STATION.assessments, "P-TEST", {
+        "ok": True, "patient_id": "P-TEST", "news2_at_assessment": 5, "at": __import__("time").time(),
+        "summary": "Température 38.3 °C.", "hypotheses": [{"name": "Fièvre", "supporting_signs": []}],
+        "questions_for_patient": [], "information_to_gather": [], "blocked": [], "insufficient_data": False,
+    })
+    response = asyncio.run(station.ai_assess("P-TEST"))
+    body = __import__("json").loads(response.body)
+    assert body["cached"] is True
+    assert body["spoken"].startswith("Pour Test Crew, le profil observé est : fièvre.")
+    assert "38" not in body["spoken"]
+
+
 def test_the_browser_asks_the_station_first_and_stays_guarded():
     voice = (ROOT / "web" / "voice.js").read_text(encoding="utf-8")
     assert "/api/voice/say" in voice and "localFrenchSpeech(String(text), serial)" in voice
@@ -90,3 +153,4 @@ def test_the_browser_asks_the_station_first_and_stays_guarded():
         )
     assessment = (ROOT / "web" / "assessment.js").read_text(encoding="utf-8")
     assert "spoken: spoken," in assessment
+    assert "if (b.spoken) return String(b.spoken);" in assessment, "the server's spoken form wins"

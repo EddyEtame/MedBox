@@ -79,6 +79,10 @@ PHRASES: dict[str, str] = {
     "ai_blocked": "L’assistant a dépassé son rôle. La station l’a bloqué.",
 
     # --- the session ---
+    # The first thing the voice says once someone switches it on: who it is,
+    # and the one rule. Heard by Eddy on 24 Sep as a missing introduction.
+    "intro": "Bonjour, je suis MedBox, l’assistant de bord.",
+    "intro_rule": "Je dis ce que je mesure. Une personne décide, jamais moi.",
     "scenario_started": "Scénario en cours.",
     "scenario_stopped": "Scénario arrêté. Retour aux valeurs de base.",
     "ready": "MedBox prêt. Quarante personnes à bord.",

@@ -37,6 +37,7 @@ from .quarantine import QuarantineRegistry
 from .protocols import ProtocolDataError, ProtocolEngine
 from .sensors.synthetic import BASELINE_PROFILE_VERSION, ScenarioSource
 from .speech import Announcer
+from .spoken import spoken_assessment, spoken_station_answer
 from .tts import MAX_CHARS as VOICE_MAX_CHARS, SPEAKER, VOICE_NAME
 from .voice import TRANSCRIBER
 from .symptoms import SymptomLog
@@ -1281,21 +1282,22 @@ async def ai_assess(patient_id: str, fresh: bool = False) -> JSONResponse:
     if entry is None:
         raise HTTPException(404, f"No crew member {patient_id}")
     triage = entry["triage"]
+    name = (entry.get("patient") or {}).get("name")
     held = STATION.assessments.get(patient_id)
     if (not fresh and held is not None and held.get("ok")
             and held.get("news2_at_assessment") == triage.get("total")
             and time.time() - held.get("at", 0) < 180):
-        return JSONResponse(content={
-            **held, "cached": True, "age_seconds": round(time.time() - held["at"], 1),
-        })
+        body = {**held, "cached": True, "age_seconds": round(time.time() - held["at"], 1)}
+        return JSONResponse(content={**body, "spoken": spoken_assessment(name, body)})
     if held is not None and held.get("ok") and not CLIENT.available:
         # The demo's own beat: the assistant is killed on stage. What it
         # wrote before it died is still what it wrote, dated and labelled;
         # the panel says the assistant is down and the measurements go on.
-        return JSONResponse(content={
+        body = {
             **held, "cached": True, "age_seconds": round(time.time() - held["at"], 1),
             "held_reason": "assistant_down",
-        })
+        }
+        return JSONResponse(content={**body, "spoken": spoken_assessment(name, body)})
     result = await STATION.assess_now(patient_id)
     if result is None:
         return JSONResponse(
@@ -1328,7 +1330,10 @@ async def ai_assess(patient_id: str, fresh: bool = False) -> JSONResponse:
 
     # Stamped by assess_now() from what the server knows: which crew member,
     # which score and which moment, so the panel can detect a stale answer.
-    return JSONResponse(content={**safe, "cached": False, "age_seconds": 0.0})
+    # `spoken` is the one breath the voice says about it: no numbers, the
+    # pattern in plain words, not a diagnosis, the question.
+    body = {**safe, "cached": False, "age_seconds": 0.0}
+    return JSONResponse(content={**body, "spoken": spoken_assessment(name, body)})
 
 
 @app.get("/api/assistant/help")
@@ -1371,12 +1376,13 @@ VITAL_FR = {
 URGENCY_FR = {"routine": "routine", "low": "faible", "medium": "moyenne", "high": "haute"}
 
 
-def _facts_for(patient_id: str | None) -> tuple[str, str]:
+def _facts_for(patient_id: str | None) -> tuple[str, str, str]:
     """The facts the assistant may answer from, and the station's own answer.
 
     Deterministic, written by the station: the model reads them, it never
     supplies them. Returns (facts for the model, the sentence the station
-    gives instead when the model is absent or silent).
+    shows instead when the model is absent or silent, and the short form of
+    that sentence for the voice, which carries no baselines).
     """
     caps = " ; ".join(c["title"] for c in manifest()["capabilities"])
     lines = [
@@ -1388,6 +1394,7 @@ def _facts_for(patient_id: str | None) -> tuple[str, str]:
         f"Ce que la station sait faire : {caps}.",
     ]
     station_answer = "L’assistant est arrêté. " + lines[0]
+    station_spoken = spoken_station_answer()
     entry = STATION.latest.get(patient_id) if patient_id else None
     if entry:
         p, t = entry["patient"], entry["triage"]
@@ -1418,7 +1425,8 @@ def _facts_for(patient_id: str | None) -> tuple[str, str]:
             f"L’assistant est arrêté. {p.get('name')} : NEWS2 {t.get('total')} ({urgency}), "
             f"{iso_text}. Mesures : {vitals}."
         )
-    return "\n".join(lines), station_answer
+        station_spoken = spoken_station_answer(p.get("name"), t.get("total"), urgency, iso_text)
+    return "\n".join(lines), station_answer, station_spoken
 
 
 @app.post("/api/assistant/ask")
@@ -1437,16 +1445,18 @@ async def assistant_ask(body: dict) -> dict:
     patient_id = str(body.get("patient_id") or "").strip() or None
     if patient_id is not None and patient_id not in STATION.latest:
         raise HTTPException(404, f"Membre inconnu : {patient_id}")
-    facts, station_answer = _facts_for(patient_id)
+    facts, station_answer, station_spoken = _facts_for(patient_id)
     if not CLIENT.available:
-        return {"ok": True, "answer": station_answer, "grounded_in": "manual", "blocked": [],
-                "stand_in": False, "held_reason": "assistant_down"}
+        return {"ok": True, "answer": station_answer, "spoken": station_spoken, "grounded_in": "manual",
+                "blocked": [], "stand_in": False, "held_reason": "assistant_down"}
     async with STATION._ai_lock:
         raw = await CLIENT.answer(text, facts)
     if raw is None:
-        return {"ok": True, "answer": station_answer, "grounded_in": "manual", "blocked": [],
-                "stand_in": False, "held_reason": "assistant_silent", "detail": CLIENT.last_error}
+        return {"ok": True, "answer": station_answer, "spoken": station_spoken, "grounded_in": "manual",
+                "blocked": [], "stand_in": False, "held_reason": "assistant_silent", "detail": CLIENT.last_error}
     out = enforce_answer(raw)
+    # Two validated sentences read as they are; the voice module says the units.
+    out["spoken"] = out["answer"]
     out["stand_in"] = CLIENT.stand_in
     out["held_reason"] = None
     return out

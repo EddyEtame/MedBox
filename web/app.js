@@ -397,7 +397,7 @@
       btn.setAttribute("aria-pressed", on ? "true" : "false");
       btn.classList.toggle("primary", on);
     }
-    btn.addEventListener("click", function () { MedBox.voice.setOn(!MedBox.voice.isOn()); paint(); });
+    btn.addEventListener("click", function () { MedBox.voice.setOn(!MedBox.voice.isOn(), true); paint(); });
     MedBox.voice.setOn(MedBox.voice.restore());
     paint();
   })();
@@ -433,7 +433,7 @@
         var note = b.held_reason ? " (l’assistant est arrêté : réponse de la station)" : "";
         var blocked = b.blocked && b.blocked.length ? " — " + b.blocked.join(" ") : "";
         out.textContent = b.answer + note + blocked;
-        if (MedBox.voice) MedBox.voice.speakText(b.answer);
+        if (MedBox.voice) MedBox.voice.speakText(b.spoken || b.answer);
       })
       .catch(function () { out.textContent = "L’assistant n’a pas répondu. La surveillance continue."; });
   });

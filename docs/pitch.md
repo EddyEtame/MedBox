@@ -28,9 +28,9 @@ La station parle, avec sa propre voix, hors ligne : qui elle est, ce qu'elle
 ne fera jamais, et demande si elle peut écouter. Dire clairement :
 **« J'accepte. »** L'état passe à « À L'ÉCOUTE ».
 
-> Vous venez d'entendre la seule voix de MedBox. Elle est enregistrée à bord ;
-> aucun moteur de parole, aucun service. Ce qu'elle dit est écrit par nous,
-> jamais par le modèle. L'écoute reste locale : aucun son n'est conservé.
+> Vous venez d'entendre la voix de MedBox. Elle est rendue à bord, hors ligne ;
+> aucun service. Ce que la station annonce est écrit par nous ; quand l'assistant
+> parle, c'est sa réponse relue par la station, jamais son texte brut. L'écoute reste locale : aucun son n'est conservé.
 
 ## Minute 2 – 3 · La crise : quinze pour cent de l'équipage
 

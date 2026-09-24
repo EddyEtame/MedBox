@@ -111,10 +111,15 @@
     pump();
   }
 
-  function setOn(v) {
+  var introduced = false;
+  /* `announce` is true when a person just pressed the button: the first
+     thing the voice says is who it is, once per page. A restored preference
+     at load says nothing, because nobody asked yet. */
+  function setOn(v, announce) {
     on = !!v;
     if (!on) { queue.length = 0; }
     try { localStorage.setItem("medbox.voice", on ? "1" : "0"); } catch (e) {}
+    if (on && announce && !introduced) { introduced = true; say(["intro", "intro_rule"]); }
     return on;
   }
 

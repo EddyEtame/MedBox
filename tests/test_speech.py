@@ -202,7 +202,10 @@ def test_nothing_spoken_names_a_condition_or_a_treatment():
     """The station speaks from measurements. The assistant's words are never
     spoken, because a sentence said out loud carries far more authority than
     the same sentence on screen, and the one output we cannot constrain is the
-    one that must never get a voice."""
+    one that must never get a voice. Since 24 Sep, at Eddy's request, the
+    validator's rebuilt output may be read aloud (server/spoken.py, one breath,
+    no numbers, "not a diagnosis" said first): still never the raw model, and
+    never a clip that names a condition."""
     banned = ("pneumonia", "sepsis", "infection", "diagnos", "paracetamol",
               "oxygen", "administer", "dose", "mg", "treat")
     for key, text in PHRASES.items():

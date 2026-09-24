@@ -1143,7 +1143,7 @@
         var note = b.held_reason ? " (l’assistant est arrêté : réponse de la station)" : "";
         var blocked = b.blocked && b.blocked.length ? " — " + b.blocked.join(" ") : "";
         say(b.answer + note + blocked, !!blocked);
-        if (MedBox.voice) MedBox.voice.speakText(b.answer);
+        if (MedBox.voice) MedBox.voice.speakText(b.spoken || b.answer);
       })
       .catch(function () { say("L’assistant n’a pas répondu. La surveillance continue.", true); });
   }
@@ -1230,7 +1230,7 @@
     // Pressing the button is itself the gesture a browser needs before it will
     // play anything, so switching sound on and unlocking playback are the same
     // action rather than two the operator has to discover separately.
-    btn.addEventListener("click", function () { MedBox.voice.setOn(!MedBox.voice.isOn()); paint(); });
+    btn.addEventListener("click", function () { MedBox.voice.setOn(!MedBox.voice.isOn(), true); paint(); });
     MedBox.voice.setOn(MedBox.voice.restore());
     paint();
   })();

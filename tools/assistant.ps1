@@ -135,7 +135,9 @@ if ($Action -eq "start") {
             Write-Host "Ollama is not installed at $APP. Run setup.ps1." -ForegroundColor Red
             exit 1
         }
-        Start-Process -FilePath $APP
+        # --hide --fast-startup: what the tray autostart uses. Without them the app
+        # opens its own chat window on top of the demo (seen by Eddy, 24 Sep).
+        Start-Process -FilePath $APP -ArgumentList "--hide", "--fast-startup"
         $port = $INSTALLED_PORT
     }
     foreach ($i in 1..30) {
