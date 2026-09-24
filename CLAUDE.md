@@ -72,14 +72,33 @@ was named `codex/...`), so it now ignores commits already on `origin/*`
 `pre-push.bak-2026-09-24`). And the stored GitHub credential must be the
 one with write access to `EddyEtame/MedBox`.
 
-### The dossier and the deck
+### The dossier and the deck: one crew, two projects
 
-`docs/dossier/NOTE-POUR-LE-DOSSIER.md` (24 Sep) is the state of the project
-written for whoever edits the PDF and the deck: done / open / corrections /
-paragraphs to paste / demo script. Keep it current when a feature lands.
-The PDF and PPTX themselves never enter the repository. We *present* the
-project (Fri 25 Sep local, Wed 30 Sep national); the code is not submitted,
-so the bundle stays on Eddy's PC and the USB stick.
+The brief asks a crew of six for two projects. Ours: **1A MedBox** (Eddy,
+Brad) and **1B ARIA / PsychoSpace** (Davidson, Anthony, Frederic, Merove;
+repo `ANTHONYSITCH/Psychospace`, their own dossier "ARIA", 23 Sep). Eddy was
+firm on 24 Sep: the documents present *both*, straight to the point, in
+French, in our own voice, to the reader. `tools/build_dossier.py` (PDF, two
+parts, Part B carries the 1B text as they wrote it) and
+`tools/build_deck.py` (10 slides) write `.build/deliverables/`; test and
+scenario counts are read from the last pytest log. Before sending, look at
+the rendered pages (PyMuPDF `get_pixmap`) and the slides (PowerPoint COM
+`Slide.Export`) — every "empty page" and orphan line was found that way.
+`FICHE-ORATEUR-EDDY.md` there is his private speaker sheet. The PDF and
+PPTX themselves never enter the repository. We *present* (Fri 25 Sep local,
+Wed 30 Sep national); the code is not submitted; the bundle stays on Eddy's
+PC and the USB stick.
+
+### The hull (24 Sep, "an actual space ship")
+
+`web/hull.js` draws the ship with a vendored three.js
+(`web/vendor/three.min.js`, r128) on `#hull`, a canvas under `#gl`; ship.js
+hands it its camera every frame (`MedBox.hull.render({eye, target, fov,
+aspect, spin, ...})`) and clears its own canvas transparent when the hull is
+there (`hullOn`; the overview camera sits 1.5× further back). Same units as
+ship.js: ring at radius 6 in y = 0, spinning around y. The room view rides
+the ring (`cam.follow`), berths and seals stay in the overlay. Without the
+script, the overlay draws as before on its opaque background.
 
 ### One folder: `Desktop\MedBox`
 
