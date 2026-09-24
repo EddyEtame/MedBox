@@ -47,6 +47,21 @@ carry Eddy's name, there is no group number.
    French. English is fine in code and commits; not on a screen, not in a
    clip, not in a prompt the model answers under.
 
+### Pull before anything (learned the hard way, 24 Sep)
+
+Brad pushed a pull request to `main` on 24 Sep while this branch sat on
+the old `main`, and nobody fetched for two days because the push was
+refused. Fetch works even when push does not. **Start every session with**
+
+```bash
+git -c safe.directory="C:/Users/Mommy Jayce/Desktop/MedBox" fetch --all --prune
+```
+
+and look at `git log wednesday-session..origin/main`. His work was merged
+by hand in e704728 (keep the current base, port his features): if a
+teammate pushes again, do the same, and never take their automatic
+quarantine release (release is a person's decision here).
+
 ### One folder: `Desktop\MedBox`
 
 Since Thursday 24 Sep, 00:15, this is the only working copy. The Monday to
@@ -159,6 +174,21 @@ zero is not a sign**, whatever the model says about it.
   cutting the stream into utterances transcribed locally by faster-whisper
   (language detected per utterance). Only an utterance with the wake word
   « MedBox » is acted on. No browser speech recognition, ever: that is Google.
+- **Brad's patient record, merged 24 Sep** (`e704728`): persisted answers
+  (`answers` table, also written by `/api/patient/{id}/answer`, read by
+  `_prompt_note` after a restart), urgency snapshots per change
+  (`record_triage`, `triage_history`), contact trace on confirmation and
+  manual release (`QuarantineRegistry.contacts`, `save_contacts` every
+  persist tick), `/api/sessions`, his `web/patient-record.js` under the
+  assessment on all three pages, two scenarios rewritten as deltas
+  (`false-alarm`, `slow-burn`), `tools/build_dev2_dossier.py`. His timer
+  release is not taken (xfail in `tests/test_dev2.py`).
+- **Navigation and the named assistant** (`4c9410b`): `web/nav.js` on every
+  page (ship, board, crew, and each personal space from `/api/status`
+  `personal_pages`); the personal page embeds its own ship and lets the
+  member name their assistant (`preferences` table, `POST
+  /api/me/{id}/agent`), which the referent uses to introduce itself and
+  which wakes the microphone like « MedBox » (`MedBox.mic.setWakeName`).
 - **The crew is the team, each with a page and a port; the referent persona**
   (Thursday 24 Sep, morning). `TEAM` in `server/sensors/synthetic.py` takes
   the first six berths (profile version `crew-roster-v3` in both derivations);
