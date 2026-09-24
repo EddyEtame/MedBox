@@ -39,7 +39,7 @@ ne fera jamais, et demande si elle peut écouter. Dire clairement :
 
 Cliquer **« Lancer »**. Pendant trente secondes, commenter ce que la salle voit :
 
-- les points de l'anneau qui changent de couleur, ordonnés par **NEWS2**, le
+- les points du vaisseau qui changent de couleur, ordonnés par **NEWS2**, le
   score d'alerte du Royal College of Physicians, calculé sans aucun modèle ;
 - la voix : « Isolement proposé. Confirmation humaine requise. » pour chaque
   cas, avec le nom ;

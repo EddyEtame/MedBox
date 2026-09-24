@@ -362,7 +362,10 @@
     // The cut follows the camera: whichever flank faces it is opened.
     if (f.eye[2] >= 0) clipNear.set(new THREE.Vector3(0, 0, -1), 0.9); else clipNear.set(new THREE.Vector3(0, 0, 1), 0.9);
     // A lower-deck room in view: the deck above it comes off, like a doll's house.
-    clipDeck.constant = (f.view === "zone" || f.view === "medbay") ? LAY.DECK1.floor + 0.05 : 1000;
+    // Eased, so the deck lifts off as the camera arrives instead of vanishing
+    // while it is still far away; 8 is above the mast, nothing is cut.
+    var wantDeck = (f.view === "zone" || f.view === "medbay") ? LAY.DECK1.floor + 0.05 : 8.0;
+    clipDeck.constant += (wantDeck - clipDeck.constant) * 0.16;
     var t = (performance.now() - t0) / 1000;
     for (var z = 0; z < zoneTiles.length; z++) {
       var m = zoneTiles[z].material, name = f.zoneNames && f.zoneNames[z];

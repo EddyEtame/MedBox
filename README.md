@@ -13,8 +13,8 @@ ARIA / PsychoSpace, est dans [ANTHONYSITCH/Psychospace](https://github.com/ANTHO
 |---|---|
 | ![Le vaisseau en 3D](docs/assets/vaisseau.png) | ![Le tableau de bord de l’équipage](docs/assets/equipage.png) |
 | *Le vaisseau, ouvert côté public : deux ponts, quarante cabines, l’infirmerie, les trois zones d’isolement.* | *L’équipage : messages du référent, membre en forme, activités du jour.* |
-| ![Un espace personnel](docs/assets/espace-personnel.png) | ![La vue par pièce](docs/assets/vue-piece.png) |
-| *L’espace personnel de Merove pendant la contamination.* | *La vue par pièce : chaque zone a ses quatre couchettes.* |
+| ![Un espace personnel](docs/assets/espace-personnel.png) | |
+| *L’espace personnel de Merove pendant la contamination.* | |
 
 ---
 

@@ -554,7 +554,7 @@
     }).length : 0;
     el("gResp").textContent = meanResp.toFixed(0) + " /min";
     el("gRespHz").textContent = "· rythme du bord";
-    el("shipSub").textContent = "anneau d’habitation · " + state.board.length + " membres";
+    el("shipSub").textContent = "vaisseau-monde · " + state.board.length + " membres";
     state.standIn = !!(m.ai && m.ai.stand_in);
     // The frame carries what to say, decided server-side from measurements.
     // Usually an empty list.
@@ -762,7 +762,7 @@
     gl.drawArrays(gl.POINTS, 0, starData.length / 4);
     }
 
-    // habitation ring: spins for artificial gravity, warms with crew fever
+    // the hull warms with crew fever; without the plan, the old ring spins
     if (LAY) drawLines(planBuf, planData.length / 4, 0.0, breath, 0, [0.45, 0.78, 0.84], [0.45, 0.78, 0.84]);
     else drawLines(ringBuf, ringData.length / 4, state.heat, breath, spin);
 
@@ -1570,6 +1570,19 @@
     state.focus = params.get("focus") || null;
     state.glowZone = params.get("glow") || null;
     if (params.get("embed")) document.body.classList.add("embed");
+    // ?zone=A (or 0) opens the page inside that room once the first frame
+    // has placed everyone: the crew card and the documentation captures.
+    var zoneParam = params.get("zone");
+    if (zoneParam !== null) {
+      var zi = /^\d+$/.test(zoneParam) ? Number(zoneParam) : "ABC".indexOf(zoneParam.toUpperCase());
+      if (zi >= 0 && zi < ZONES) {
+        var tries = 0;
+        (function openRoom() {
+          if (state.board.length && LAY) viewZone(zi);
+          else if (tries++ < 40) setTimeout(openRoom, 250);
+        })();
+      }
+    }
   })();
   el("guideClose").addEventListener("click", closeGuide);
   el("roomBack").addEventListener("click", viewShip);
