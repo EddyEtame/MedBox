@@ -1,0 +1,36 @@
+# Fausse alerte (Brad, Dev 2, réécrit en deltas le 24 septembre) : une montée
+# de température seule, après un effort, sans signe respiratoire. Le score
+# monte d'un cran, personne n'est isolé. Toutes les valeurs sont des DELTAS par
+# rapport à la ligne de base saine et personnelle de chaque membre.
+name: Fausse alerte après l’effort
+description: >
+  Un membre voit sa température monter après un effort, sans signe
+  respiratoire ni désaturation. Le score passe en surveillance simple ;
+  aucun isolement n'est attendu.
+crew: 40
+
+simulation:
+  data: synthetic
+  clock: accelerated
+  represented_duration: 1h
+  demo_duration: 40s
+  adjustment_mode: delta-from-personal-healthy-baseline
+  diagnostic_claim: none
+  parameter_source: operator-authored-demo-choreography
+  provenance:
+    - Royal College of Physicians NEWS2
+
+timeline:
+  - at: 0s
+    do: afflict
+    exposure_confirmed: false
+    mode: delta
+    provenance: operator-authored-demo-choreography
+    patients: 1
+    temperature: 1.6
+    pulse: 25
+    respiration: 1
+    over: 30
+  - at: 40s
+    do: note
+    text: "La température seule ne déclenche pas d’isolement dans cette démonstration."

@@ -1,0 +1,10 @@
+.patient-record {padding:16px; font-size:13px; overflow-wrap:anywhere; border-top:1px solid #64748b;}
+.patient-record h3 {margin:18px 0 8px; font-size:15px;}
+.patient-record figure {margin:12px 0;}
+.patient-record svg {width:100%; height:75px; color:#38bdf8;}
+.patient-record small {opacity:.75;}
+.patient-answer {padding:10px 0;}
+.patient-answer label {display:block; margin:8px 0;}
+.patient-answer input {display:block; width:100%; box-sizing:border-box;}
+.patient-answer button {cursor:pointer; padding:6px 9px; margin:3px;}
+.patient-answer .answer-status {font-size:12px;}

@@ -811,6 +811,7 @@
 
   function selectCrew(id) {
     state.selected = id;
+    if (MedBox.patientRecord) MedBox.patientRecord.select(id);
     state.held = null;
     el("aiOut").innerHTML = "";
     el("aiStale").hidden = true;
@@ -826,6 +827,7 @@
 
   function closePanel() {
     state.selected = null;
+    if (MedBox.patientRecord) MedBox.patientRecord.select(null);
     el("panel").hidden = true;
     document.body.classList.remove("has-panel");
     resetCam();

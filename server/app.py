@@ -158,7 +158,8 @@ class MedBox:
         self.symptoms.clear()
         self.announcer.reset()
         self._messaged.clear()
-        self.quarantine.assignments.clear()
+        self.quarantine.reset()
+        self.db.save_contacts(self.quarantine.contacts)
         self.scenario = sc
         self.scenario_t0 = time.monotonic()
         self._fired.clear()
@@ -173,7 +174,8 @@ class MedBox:
         self.symptoms.clear()
         self.announcer.reset()
         self._messaged.clear()
-        self.quarantine.assignments.clear()
+        self.quarantine.reset()
+        self.db.save_contacts(self.quarantine.contacts)
 
     def _advance_scenario(self, now: float) -> None:
         if self.scenario is None or self.scenario_t0 is None:
@@ -270,6 +272,22 @@ class MedBox:
             elapsed = time.perf_counter() - started
             await asyncio.sleep(max(0.0, interval - elapsed))
 
+    def _prompt_note(self, patient_id: str) -> str:
+        """What the crew member said, for the model: this session's log, or,
+        after a restart, the last three persisted answers, inside the span."""
+        if self.symptoms.for_patient(patient_id):
+            return self.symptoms.prompt_note(patient_id)
+        persisted = self.db.answers(patient_id, limit=3)
+        if not persisted:
+            return self.symptoms.prompt_note(patient_id)
+        log = SymptomLog()
+        for a in reversed(persisted):
+            try:
+                log.answer(patient_id, a["question"], a["answer"])
+            except ValueError:
+                continue
+        return log.prompt_note(patient_id)
+
     def _message_for(self, change: dict, patient) -> None:
         """Tell the crew, and the person, once per decision: a message that
         pings the dashboards and is read out loud on « Lire »."""
@@ -314,6 +332,8 @@ class MedBox:
                 },
                 "triage": result.to_dict(),
             }
+            # One row per change of urgency: the record's history of levels.
+            self.db.record_triage(reading.patient_id, now, result.to_dict())
             change = self.quarantine.evaluate(
                 reading.patient_id,
                 v,
@@ -351,6 +371,7 @@ class MedBox:
                 )
 
         if self._tick % self._persist_every == 0:
+            self.db.save_contacts(self.quarantine.contacts)
             self.db.commit()
 
         rows = self._board()
@@ -428,7 +449,7 @@ class MedBox:
         try:
             async with self._ai_lock:
                 result = await CLIENT.assess(
-                    entry["patient"], triage, self.symptoms.prompt_note(patient_id),
+                    entry["patient"], triage, self._prompt_note(patient_id),
                     timeout=timeout,
                 )
         finally:
@@ -585,12 +606,21 @@ async def patient(patient_id: str) -> dict:
     isolation = STATION.quarantine.assignments.get(patient_id)
     return {
         **entry,
-        "history": STATION.db.history(patient_id, limit=120),
+        "history": STATION.db.history(patient_id, limit=300, since=time.time() - 600),
+        "triage_history": STATION.db.triage_history(patient_id),
+        "answers": STATION.db.answers(patient_id),
+        "contacts": STATION.db.contacts(patient_id),
         "reported": STATION.symptoms.for_patient(patient_id),
         "documents": STATION.db.medical_documents(patient_id),
         "isolation": isolation.to_dict() if isolation else None,
         "observations": STATION.observations.get(patient_id),
     }
+
+
+@app.get("/api/sessions")
+async def sessions() -> dict:
+    """Every scenario run so far, with its events: the record's journal."""
+    return {"sessions": STATION.db.sessions()}
 
 
 @app.post("/api/patient/{patient_id}/observations")
@@ -830,7 +860,13 @@ async def record_answer(patient_id: str, body: dict) -> dict:
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+    # Persisted too (Brad, Dev 2): the record keeps it across restarts, and
+    # the next assessment after a restart still reads it, inside the span.
+    STATION.db.record_answer(patient_id, entry.text.split('"', 1)[1].rsplit('", answered', 1)[0]
+                             if entry.text.startswith('Asked "') else str(body.get("question", ""))[:200],
+                             str(body.get("answer", ""))[:180])
     BUS.publish({"type": "symptom", "reported": entry.to_dict()})
+    BUS.publish({"type": "answer", "patient_id": patient_id})
     return {"reported": STATION.symptoms.for_patient(patient_id)}
 
 

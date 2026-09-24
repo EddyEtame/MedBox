@@ -314,6 +314,7 @@
   /* ---------- wiring ---------- */
   function select(id) {
     state.selected = id;
+    if (MedBox.patientRecord) MedBox.patientRecord.select(id);
     state.held = null;
     el("aiOut").innerHTML = "";
     el("aiStale").hidden = true;

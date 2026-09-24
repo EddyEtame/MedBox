@@ -63,6 +63,18 @@ CAPABILITIES = [
         ),
     },
     {
+        "id": "patient_record",
+        "title": "Tenir le dossier : réponses, historique des niveaux, contacts, journal",
+        "does": (
+            "Sous chaque fiche, les deux vues montrent quatre courbes des dix dernières minutes, "
+            "les changements de niveau, les réponses du membre (conservées après redémarrage et "
+            "relues par l’assistant comme texte déclaré, jamais comme mesure), les contacts en "
+            "zone d’isolement et le journal des scénarios."
+        ),
+        "needs_ai": False,
+        "how": "Sélectionner un membre : le dossier est sous l’évaluation.",
+    },
+    {
         "id": "crew_dashboard",
         "title": "Montrer la semaine de tout l’équipage et ce qu’on fait ensemble",
         "does": (

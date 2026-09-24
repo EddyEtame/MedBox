@@ -151,6 +151,7 @@
     paintVoice();
   })();
   if (MedBox.mic) MedBox.mic.attach(function () { return pid; }, function () {});
+  if (MedBox.patientRecord) MedBox.patientRecord.select(pid);
   root.MedBox = root.MedBox || {};
   load();
   setInterval(load, 30000);

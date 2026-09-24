@@ -133,6 +133,12 @@ Une voix française embarquée (Piper, hors ligne) lit le résumé d’une éval
 
 *Activer la voix (bouton haut-parleur). Si la voix embarquée manque, seules les phrases pré-enregistrées sont dites.*
 
+#### Tenir le dossier : réponses, historique des niveaux, contacts, journal
+
+Sous chaque fiche, les deux vues montrent quatre courbes des dix dernières minutes, les changements de niveau, les réponses du membre (conservées après redémarrage et relues par l’assistant comme texte déclaré, jamais comme mesure), les contacts en zone d’isolement et le journal des scénarios.
+
+*Sélectionner un membre : le dossier est sous l’évaluation.*
+
 #### Montrer la semaine de tout l’équipage et ce qu’on fait ensemble
 
 Le tableau d’équipage (/crew) montre, pour chacun, sa semaine (moyennes, minimums, maximums, jour par jour), son état du jour, et ce que le référent a décidé. Il propose chaque jour trois activités à faire ensemble pour rester en forme et garder le moral, et il reçoit les messages du référent.
@@ -213,7 +219,7 @@ MedBox mesure cinq paramètres et en fait observer deux. L’assistant peut donc
 
 *Inclus dans chaque évaluation de l’assistant.*
 
-12 des 15 capacités documentées ne dépendent pas du modèle. L’IA reste une couche d’explication au-dessus d’un système déterministe.
+13 des 16 capacités documentées ne dépendent pas du modèle. L’IA reste une couche d’explication au-dessus d’un système déterministe.
 
 ## 11. Limites absolues de l’assistant
 
@@ -268,6 +274,10 @@ Un membre revient d'une intervention physique avec pouls et respiration élevés
 
 Trois membres suivis montrent des écarts concordants après une exposition confirmée par le scénario. MedBox affiche ce regroupement connu et propose un isolement opérationnel avec validation humaine.
 
+### Fausse alerte après l’effort (`false-alarm`)
+
+Un membre voit sa température monter après un effort, sans signe respiratoire ni désaturation. Le score passe en surveillance simple ; aucun isolement n'est attendu.
+
 ### Gêne respiratoire progressive (`gene-respiratoire`)
 
 Un membre sous surveillance présente une augmentation de sa fréquence respiratoire puis une baisse de SpO2 explicitement simulée. Le scénario teste l'alerte rapide sans attribuer de maladie.
@@ -279,6 +289,10 @@ Un membre présente des écarts thermiques et respiratoires compatibles avec plu
 ### Écart thermique individuel (`single-patient`)
 
 Un membre signale un mal de tête puis sa température s'écarte progressivement de sa ligne habituelle. Le système surveille et priorise sans diagnostiquer.
+
+### Dégradation lente sur dix minutes (`slow-burn`)
+
+Un membre se dégrade progressivement pendant dix minutes : fièvre, désaturation, pouls et respiration accélérés. Le score monte cran par cran, l'isolement est décidé en cours de route ; l'historique des mesures montre la pente.
 
 **Pendant la soutenance, annoncer explicitement qu’il s’agit de données synthétiques.** Les scénarios démontrent la réaction du logiciel ; ils ne valident pas un capteur médical réel.
 

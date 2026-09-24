@@ -82,6 +82,30 @@ class QuarantineRegistry:
         self.require_confirmation = require_confirmation
         self.allow_automatic_release = allow_automatic_release
         self.assignments: dict[str, Assignment] = {}
+        # Who shared a zone with whom, and when (Brad, Dev 2): the contact
+        # trace the crew dashboard and the record show. Persisted by the
+        # station every couple of seconds.
+        self.contacts: list[dict] = []
+
+    def _enter(self, patient_id: str, zone: str | None, now: float) -> None:
+        if zone is None:
+            return
+        for other in self.assignments.values():
+            if other.patient_id != patient_id and other.confirmed and other.zone == zone:
+                self.contacts.append(dict(patient_a=patient_id, patient_b=other.patient_id,
+                                          zone=zone, since=now, until=None))
+
+    def _leave(self, patient_id: str, now: float) -> None:
+        for contact in self.contacts:
+            if contact["until"] is None and patient_id in (contact["patient_a"], contact["patient_b"]):
+                contact["until"] = now
+
+    def reset(self) -> None:
+        """A scenario ends: every stay ends now, the registry empties."""
+        now = time.time()
+        for pid in list(self.assignments):
+            self._leave(pid, now)
+        self.assignments.clear()
 
     def occupancy(self) -> dict[str, int]:
         counts = {z: 0 for z in self.zones}
@@ -124,6 +148,7 @@ class QuarantineRegistry:
             return a
 
         if not isolate and existing is not None and self.allow_automatic_release:
+            self._leave(patient_id, time.time())
             del self.assignments[patient_id]
             return Assignment(patient_id, None, time.time(), "released", confirmed=True)
 
@@ -132,6 +157,7 @@ class QuarantineRegistry:
             zone = self._next_zone()
             if zone is not None:
                 existing.zone = zone
+                self._enter(patient_id, zone, time.time())
                 return existing
         return None
 
@@ -144,6 +170,7 @@ class QuarantineRegistry:
             existing.confirmed = True
             existing.zone = self._next_zone()
             existing.since = time.time()
+            self._enter(patient_id, existing.zone, existing.since)
         return existing
 
     def release(self, patient_id: str, reason: str = "manual release") -> Assignment:
@@ -151,6 +178,7 @@ class QuarantineRegistry:
         existing = self.assignments.pop(patient_id, None)
         if existing is None:
             raise KeyError(patient_id)
+        self._leave(patient_id, time.time())
         return Assignment(patient_id, None, time.time(), reason, confirmed=True)
 
     def sealed_zones(self) -> list[str]:
@@ -167,4 +195,6 @@ class QuarantineRegistry:
             "awaiting_bed": sum(
                 1 for a in self.assignments.values() if a.confirmed and a.zone is None
             ),
+            # Release is a person's decision, never a timer's (Eddy, 23 Sep).
+            "release_policy": {"manual_only": not self.allow_automatic_release, "simulation_only": True},
         }

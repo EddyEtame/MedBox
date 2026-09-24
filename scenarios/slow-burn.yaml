@@ -1,0 +1,38 @@
+# Dégradation lente (Brad, Dev 2, réécrit en deltas le 24 septembre) : un seul
+# membre se dégrade progressivement sur dix minutes, avec exposition confirmée.
+# Toutes les valeurs sont des DELTAS par rapport à la ligne de base saine et
+# personnelle de chaque membre.
+name: Dégradation lente sur dix minutes
+description: >
+  Un membre se dégrade progressivement pendant dix minutes : fièvre,
+  désaturation, pouls et respiration accélérés. Le score monte cran par cran,
+  l'isolement est décidé en cours de route ; l'historique des mesures montre
+  la pente.
+crew: 40
+
+simulation:
+  data: synthetic
+  clock: accelerated
+  represented_duration: 10h
+  demo_duration: 600s
+  adjustment_mode: delta-from-personal-healthy-baseline
+  diagnostic_claim: none
+  parameter_source: operator-authored-demo-choreography
+  provenance:
+    - Royal College of Physicians NEWS2
+
+timeline:
+  - at: 0s
+    do: afflict
+    exposure_confirmed: true
+    mode: delta
+    provenance: operator-authored-demo-choreography
+    patients: 1
+    temperature: 2.5
+    spo2: -8
+    pulse: 50
+    respiration: 10
+    over: 600
+  - at: 600s
+    do: note
+    text: "Dix minutes de dégradation : consulter l’historique des mesures dans le dossier."

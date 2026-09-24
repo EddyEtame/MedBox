@@ -1,5 +1,16 @@
 # Dev 2 — hardware, history, and the patient dialogue
 
+## Integration status - 22 September 2026
+
+D1, D2, D4 and D5 are implemented locally; see `docs/DEV2_DELIVERY.md` for
+the changes, verification and limits. D1's transport and both interfaces were
+tested with the explicitly labelled stand-in; real-model answer quality still
+needs acceptance on the presentation machine. D3 is deferred because the team
+has no hardware. The local D6 dossier includes the team names and a crisis
+capture; no group number has been assigned.
+
+The original task descriptions below are retained as acceptance context.
+
 Your half is the part that makes MedBox a medical instrument rather than a
 dashboard: real sensors, a real record, and an actual conversation with the
 patient. The brief names every one of these explicitly, so they are marks.

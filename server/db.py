@@ -88,6 +88,20 @@ CREATE TABLE IF NOT EXISTS readings (
 );
 CREATE INDEX IF NOT EXISTS idx_readings_patient_at ON readings(patient_id, at);
 
+CREATE TABLE IF NOT EXISTS contacts (
+    patient_a TEXT NOT NULL, patient_b TEXT NOT NULL, zone TEXT NOT NULL,
+    since REAL NOT NULL, until REAL,
+    PRIMARY KEY(patient_a, patient_b, zone, since)
+);
+CREATE TABLE IF NOT EXISTS answers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    patient_id TEXT NOT NULL REFERENCES patients(id),
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_answers_patient ON answers(patient_id, at);
+
 CREATE TABLE IF NOT EXISTS triage_snapshots (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id  TEXT NOT NULL REFERENCES patients(id),
@@ -563,6 +577,81 @@ class Database:
             "kind": row["kind"], "text": row["text"], "spoken": row["spoken"], "read_at": row["read_at"],
         }
 
+    # ---- the patient record (Brad, Dev 2): answers, urgency changes, contacts, sessions
+    def record_answer(self, patient_id: str, question: str, answer: str) -> dict[str, Any]:
+        at = time.time()
+        with self.conn:
+            cur = self.conn.execute(
+                "INSERT INTO answers(patient_id, question, answer, at) VALUES (?,?,?,?)",
+                (patient_id, question, answer, at),
+            )
+        return dict(id=cur.lastrowid, patient_id=patient_id, question=question, answer=answer, at=at)
+
+    def answers(self, patient_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        return [dict(r) for r in self.conn.execute(
+            "SELECT * FROM answers WHERE patient_id=? ORDER BY id DESC LIMIT ?",
+            (patient_id, max(1, min(int(limit), 500))),
+        )]
+
+    def record_triage(self, patient_id: str, at: float, result: dict) -> None:
+        """One row per change of urgency, never one per frame."""
+        previous = self.conn.execute(
+            "SELECT urgency FROM triage_snapshots WHERE patient_id=? ORDER BY id DESC LIMIT 1",
+            (patient_id,),
+        ).fetchone()
+        if previous is None or previous["urgency"] != result["urgency"]:
+            self.conn.execute(
+                "INSERT INTO triage_snapshots(patient_id,at,total,urgency,detail) VALUES (?,?,?,?,?)",
+                (patient_id, float(at), int(result["total"]), str(result["urgency"]), json.dumps(result)),
+            )
+
+    def triage_history(self, patient_id: str) -> list[dict[str, Any]]:
+        return [dict(r) for r in self.conn.execute(
+            "SELECT at,total,urgency FROM triage_snapshots WHERE patient_id=? ORDER BY id DESC LIMIT 100",
+            (patient_id,),
+        )]
+
+    def recent_events(self, limit: int = 200) -> list[dict[str, Any]]:
+        return [dict(r) for r in self.conn.execute(
+            "SELECT * FROM events ORDER BY id DESC LIMIT ?", (max(1, min(int(limit), 2000)),),
+        )]
+
+    def save_contacts(self, contacts: list[dict]) -> None:
+        if not contacts:
+            return
+        with self.conn:
+            self.conn.executemany(
+                "INSERT INTO contacts VALUES (:patient_a,:patient_b,:zone,:since,:until) "
+                "ON CONFLICT(patient_a,patient_b,zone,since) DO UPDATE SET until=excluded.until",
+                contacts,
+            )
+
+    def contacts(self, patient_id: str) -> list[dict[str, Any]]:
+        return [dict(r) for r in self.conn.execute(
+            "SELECT * FROM contacts WHERE patient_a=? OR patient_b=? ORDER BY since DESC LIMIT 100",
+            (patient_id, patient_id),
+        )]
+
+    def sessions(self) -> list[dict[str, Any]]:
+        """Every scenario run, newest first, with what happened inside it."""
+        starts = self.conn.execute(
+            "SELECT * FROM events WHERE kind='scenario_start' ORDER BY id DESC LIMIT 20"
+        ).fetchall()
+        result = []
+        next_id = 9223372036854775807
+        for start in starts:
+            events = self.conn.execute(
+                "SELECT * FROM events WHERE id>? AND id<? AND kind IN "
+                "('scenario_stop','afflict','quarantine','isolation_candidate') ORDER BY id",
+                (start["id"], next_id),
+            ).fetchall()
+            stop = next((e for e in events if e["kind"] == "scenario_stop"), None)
+            result.append(dict(name=start["detail"], since=start["at"],
+                               until=stop["at"] if stop else None,
+                               events=[dict(e) for e in events[-20:]]))
+            next_id = start["id"]
+        return result
+
     def record_event(self, kind: str, detail: str, patient_id: str | None = None) -> None:
         self.conn.execute(
             "INSERT INTO events (at, kind, patient_id, detail) VALUES (?,?,?,?)",
@@ -802,11 +891,11 @@ class Database:
         ).fetchone()
         return dict(row) if row is not None else None
 
-    def history(self, patient_id: str, limit: int = 200) -> list[dict[str, Any]]:
+    def history(self, patient_id: str, limit: int = 200, since: float = 0) -> list[dict[str, Any]]:
         cur = self.conn.execute(
             "SELECT at, temperature, spo2, pulse, respiration, systolic_bp, source, provenance FROM readings"
-            " WHERE patient_id=? ORDER BY at DESC, id DESC LIMIT ?",
-            (patient_id, max(1, min(int(limit), 10_000))),
+            " WHERE patient_id=? AND at>=? ORDER BY at DESC, id DESC LIMIT ?",
+            (patient_id, float(since), max(1, min(int(limit), 10_000))),
         )
         rows = []
         for row in cur.fetchall():
