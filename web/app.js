@@ -384,6 +384,23 @@
     var row = e.target.closest(".row");
     if (row) { e.preventDefault(); select(row.dataset.id); }
   });
+  // The voice on the flat board: the same preference as the ship (it is
+  // stored per origin) and the same button. Found on 24 Sep by opening the
+  // page: without this block the board never restored the preference, so the
+  // assistant could speak on the ship and never here.
+  (function wireVoice() {
+    var btn = el("voiceBtn");
+    if (!MedBox.voice) { if (btn) btn.hidden = true; return; }
+    function paint() {
+      var on = MedBox.voice.isOn();
+      btn.textContent = on ? "Son activé" : "Son coupé";
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+      btn.classList.toggle("primary", on);
+    }
+    btn.addEventListener("click", function () { MedBox.voice.setOn(!MedBox.voice.isOn()); paint(); });
+    MedBox.voice.setOn(MedBox.voice.restore());
+    paint();
+  })();
   if (MedBox.mic) MedBox.mic.attach(function () { return state.selected; }, renderReported);
   window.addEventListener("medbox-command", function (event) {
     var detail = event.detail || {};
