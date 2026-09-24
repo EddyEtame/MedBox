@@ -270,7 +270,14 @@ zero is not a sign**, whatever the model says about it.
   a sun glow. Every canvas texture is declared sRGB: left linear, the
   renderer lifted the darks and the sky came out grey-blue. Measured on the
   Iris Xe at 1366×768: 7–11 ms per render call. Headless captures at 1366
-  and 1920 in `.build/deliverables/shots/resp/hull4-*.png`.
+  and 1920 in `.build/deliverables/shots/resp/hull4-*.png`. Then (01:50):
+  an environment map baked from the same night, sun and rim
+  (`PMREMGenerator.fromScene`) so metals reflect; the cut face drawn as
+  two strips of hull wall that follow the camera side (`cutStrips`);
+  engine bells with the mouth aft, a glowing throat and three rings; ten
+  people (bridge watch, a mess table, two medics, one in the stores),
+  never the forty (the overlay carries every member as a light).
+  `LAY.bridge` has no `cx`: use `(x0 + x1) / 2`. Still 10–11 ms a frame.
 - **« Mon évaluation » is instant for the six** (00:40, 25 Sep): `_note_prefetch_targets`
   queues the members with a page (`_has_a_page`) after the worst, and a
   routine assessment stands fifteen minutes (`assessment_fresh_for`: 900 s

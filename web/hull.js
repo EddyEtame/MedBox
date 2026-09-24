@@ -29,7 +29,7 @@
   var ready = false, lastW = 0, lastH = 0, t0 = 0;
   var clipNear = null, clipDeck = null, shellMats = [], zoneTiles = [], zoneDoors = [], windows = null;
   var engineGlow = null, engineLight = null, engineDiscs = [], engineSprites = [], radiators = [];
-  var navLamps = [], growLights = [], growSprites = [], stars = [], planetGroup = null;
+  var navLamps = [], growLights = [], growSprites = [], stars = [], planetGroup = null, cutStrips = [];
   var LAY = null, panelTex = null, plateTex = null, glowTex = null;
 
   /* ---------- painted surfaces: small canvases, made once ---------- */
@@ -234,6 +234,14 @@
     hullGeo.translate(-L / 2, 0, 0);
     var hull = lit(new THREE.Mesh(hullGeo, shell(plated(0xaab6bf, 6, 2, { side: THREE.DoubleSide }))), true, true);
     g.add(hull);
+    // The cut face: the hull's wall, seen edge-on where the flank is opened,
+    // so the cut reads as a thick skin sliced, not a hollow shell.
+    [H / 2 - 0.1, -H / 2 + 0.1].forEach(function (y) {
+      var strip = new THREE.Mesh(new THREE.BoxGeometry(L, 0.2, 0.05), mat(0xdfe7ec, { metalness: 0.35, roughness: 0.5 }));
+      strip.position.set(0, y, 0.9);
+      g.add(strip);
+      cutStrips.push(strip);
+    });
     // Deck plates between the two decks and the roof, seen in the cut:
     // grating, worn.
     var plate1 = plateTex.clone(); plate1.needsUpdate = true; plate1.repeat.set(14, 4);
@@ -276,9 +284,21 @@
     var bellRing = mat(0x141a1e, { metalness: 0.95, roughness: 0.25 });
     [[0, 1.3], [-2.4, -0.9], [2.4, -0.9]].forEach(function (p) {
       var bell = lit(new THREE.Mesh(new THREE.ConeGeometry(1.05, 2.6, 32, 1, true), bellMat), true, false);
-      bell.rotation.z = Math.PI / 2;
+      bell.rotation.z = -Math.PI / 2;   // the mouth aft, the throat at the stern block
       bell.position.set(-L / 2 - 4.0, p[1], p[0]);
       g.add(bell);
+      var throat = new THREE.Mesh(new THREE.ConeGeometry(0.8, 2.2, 24, 1, true),
+        new THREE.MeshBasicMaterial({ color: 0x4fb0ff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false }));
+      throat.rotation.z = -Math.PI / 2;
+      throat.position.set(-L / 2 - 4.1, p[1], p[0]);
+      g.add(throat);
+      [0.7, 1.4, 2.1].forEach(function (dd) {
+        var rr = 1.05 * dd / 2.6;
+        var ring = new THREE.Mesh(new THREE.TorusGeometry(rr + 0.03, 0.045, 6, 32), bellRing);
+        ring.rotation.y = Math.PI / 2;
+        ring.position.set(-L / 2 - 2.7 - dd, p[1], p[0]);
+        g.add(ring);
+      });
       var lip = new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.09, 8, 40), bellRing);
       lip.rotation.y = Math.PI / 2;
       lip.position.set(-L / 2 - 5.3, p[1], p[0]);
@@ -452,6 +472,29 @@
       pillow.position.set(x + Math.cos(rotY) * px, y + 0.255, z + Math.sin(rotY) * px); pillow.rotation.y = rotY; g.add(pillow);
     }
 
+    // People. Not forty (the overlay carries every member as a light); a
+    // watch on the bridge, a table in the mess, two on duty in the
+    // infirmary, one in the stores: enough that the ship is inhabited.
+    var suitA = mat(0x6f8797, { roughness: 0.7, metalness: 0.1 }), suitB = mat(0x3f6f8f, { roughness: 0.7, metalness: 0.1 });
+    var medic = mat(0xe4ecf0, { roughness: 0.8, metalness: 0.0 }), skin = mat(0xd9b08c, { roughness: 0.8, metalness: 0.0 });
+    var suitAUp = upper(suitA.clone()), suitBUp = upper(suitB.clone()), skinUp = upper(skin.clone());
+    function person(x, floorY, z, suit, seated, up, facing) {
+      var h = seated ? 0.42 : 0.62;
+      var body = lit(new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, h, 10), suit), true, false);
+      body.position.set(x, floorY + h / 2 + (seated ? 0.3 : 0), z);
+      body.rotation.y = facing || 0;
+      g.add(body);
+      var head = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 10), up ? skinUp : skin);
+      head.position.set(x, floorY + h + (seated ? 0.3 : 0) + 0.1, z);
+      g.add(head);
+    }
+    for (var w = -1; w <= 1; w++) person(LAY.bridge.x1 - 1.55 - Math.abs(w) * 0.25, LAY.DECK1.floor, w * 0.95, w ? suitAUp : suitBUp, false, true);
+    [[-0.8, -1.3 + 0.55], [0.8, -1.3 - 0.55], [-0.6, 1.3 + 0.55], [0.7, 1.3 - 0.55]].forEach(function (q, idx) {
+      person((LAY.mess.x0 + LAY.mess.x1) / 2 + q[0], LAY.DECK1.floor, q[1], idx % 2 ? suitAUp : suitBUp, true, true);
+    });
+    person(0.95, LAY.DECK2.floor, 0.9, medic, false, false);
+    person(-0.9, LAY.DECK2.floor, -0.7, medic, false, false);
+    person(LAY.stores.x0 + 2.4, LAY.DECK2.floor, 0.2, suitA, false, false);
     // Corridor light strips along each deck's centre line: the decks read
     // as lit corridors, not as slabs.
     var strip1 = new THREE.Mesh(new THREE.BoxGeometry(LAY.L - 3, 0.04, 0.12), stripUp);
@@ -503,7 +546,7 @@
     chair.position.set(LAY.bridge.x0 + 1.2, LAY.DECK1.floor + 0.45, 0);
     g.add(chair);
     var bridgeLight = new THREE.PointLight(0x8fd0ff, 0.8, 7, 2);
-    bridgeLight.position.set(LAY.bridge.cx, LAY.DECK1.ceil - 0.2, 0);
+    bridgeLight.position.set((LAY.bridge.x0 + LAY.bridge.x1) / 2, LAY.DECK1.ceil - 0.2, 0);
     g.add(bridgeLight);
     // Mess: two long tables and benches, a warm lamp.
     [-1.3, 1.3].forEach(function (z) {
@@ -679,6 +722,24 @@
     var rim = new THREE.DirectionalLight(0x63c8ff, 1.1);
     rim.position.set(-18, -6, -24);
     scene.add(rim);
+    // What the metal reflects: the same night, the same sun, the same cool
+    // rim, baked once into an environment map. Without it every metal is a
+    // matte grey; with it the nacelles, the bells and the band catch light.
+    try {
+      var pmrem = new THREE.PMREMGenerator(renderer);
+      var envScene = new THREE.Scene();
+      envScene.add(new THREE.Mesh(new THREE.SphereGeometry(60, 32, 16), new THREE.MeshBasicMaterial({ side: THREE.BackSide, map: canvasTexture(256, paintNebula) })));
+      var sunBall = new THREE.Mesh(new THREE.SphereGeometry(7, 16, 8), new THREE.MeshBasicMaterial({ color: 0xffe6c0 }));
+      sunBall.position.set(30, 22, 26);
+      envScene.add(sunBall);
+      var rimBall = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 8), new THREE.MeshBasicMaterial({ color: 0x63c8ff }));
+      rimBall.position.set(-18, -6, -24);
+      envScene.add(rimBall);
+      scene.environment = pmrem.fromScene(envScene, 0.04).texture;
+      pmrem.dispose();
+    } catch (e) {
+      if (root.console) console.warn("hull: no environment map: " + e.message);
+    }
     // A failure here must not take the overlay down with it: the ship page
     // works without the hull, so the hull is allowed to fail alone.
     try {
@@ -706,6 +767,7 @@
     camera.lookAt(f.target[0], f.target[1], f.target[2]);
     // The cut follows the camera: whichever flank faces it is opened.
     if (f.eye[2] >= 0) clipNear.set(new THREE.Vector3(0, 0, -1), 0.9); else clipNear.set(new THREE.Vector3(0, 0, 1), 0.9);
+    for (var cs = 0; cs < cutStrips.length; cs++) cutStrips[cs].position.z = f.eye[2] >= 0 ? 0.9 : -0.9;
     // A lower-deck room in view: the deck above it comes off, like a doll's house.
     // Eased, so the deck lifts off as the camera arrives instead of vanishing
     // while it is still far away; 8 is above the mast, nothing is cut.
