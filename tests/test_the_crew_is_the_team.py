@@ -343,3 +343,18 @@ def test_the_ship_has_rooms_the_referent_can_show():
     mic = (ROOT / "web" / "mic.js").read_text(encoding="utf-8")
     assert "MedBox.ship.local(text)" in mic
 
+def test_the_ship_page_draws_a_hull_under_its_overlay():
+    """Eddy, 24 Sep: "the space ship view should look like an actual space
+    ship". A vendored three.js draws the hull (ring, spokes, core, spine,
+    engines, arrays) on a canvas under the overlay, with the camera ship.js
+    computes; without the script, the overlay draws as before."""
+    html = (ROOT / "web" / "ship.html").read_text(encoding="utf-8")
+    assert '<canvas id="hull"' in html and 'src="/static/vendor/three.min.js"' in html and 'src="/static/hull.js"' in html
+    assert html.index('src="/static/hull.js"') < html.index('src="/static/nav.js"')
+    ship = (ROOT / "web" / "ship.js").read_text(encoding="utf-8")
+    assert "MedBox.hull.init(" in ship and "MedBox.hull.render({" in ship and "alpha: hullOn" in ship
+    hull = (ROOT / "web" / "hull.js").read_text(encoding="utf-8")
+    for needle in ("function buildRing(", "function buildCore(", "TorusGeometry", "root.MedBox.hull = {"):
+        assert needle in hull, needle
+    assert (ROOT / "web" / "vendor" / "three.min.js").stat().st_size > 100_000
+

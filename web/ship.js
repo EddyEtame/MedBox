@@ -23,8 +23,13 @@
   "use strict";
 
   var canvas = document.getElementById("gl");
-  var gl = canvas.getContext("webgl2", { antialias: true, alpha: false })
-        || canvas.getContext("webgl", { antialias: true, alpha: false });
+  // The hull (a real ship, three.js) draws on its own canvas underneath;
+  // this canvas then keeps only the overlay: structure lines, berths, seals
+  // and the crew glow, over a transparent clear. Without the hull script
+  // everything draws here as before, on an opaque background.
+  var hullOn = !!(window.MedBox && MedBox.hull && MedBox.hull.init(document.getElementById("hull")));
+  var gl = canvas.getContext("webgl2", { antialias: true, alpha: hullOn, premultipliedAlpha: false })
+        || canvas.getContext("webgl", { antialias: true, alpha: hullOn, premultipliedAlpha: false });
 
   if (!gl) {
     document.getElementById("fallback").hidden = false;
@@ -369,7 +374,9 @@
     // A phone cannot hold a 12-unit-wide ring and still have it mean
     // anything, so portrait crops the rim slightly rather than shrinking
     // the ship into a logo. The ring reads as continuing past the edge.
-    var t = Math.tan(FOV / 2), m = aspect < 0.85 ? 0.82 : 1.10;
+    // With the hull drawn, the ship is spine, arrays and engines as well as
+    // the ring, so the overview sits further back.
+    var t = Math.tan(FOV / 2), m = (aspect < 0.85 ? 0.82 : 1.10) * (hullOn ? 1.5 : 1);
     var near = RING_R * Math.cos(pitch);          // near edge, toward camera
     var halfV = RING_R * Math.sin(pitch) + DECK_Y * 1.4;
     var needV = halfV * m / t + near;
@@ -702,14 +709,20 @@
     right[0] = view[0]; right[1] = view[4]; right[2] = view[8];
     upv[0]   = view[1]; upv[1]   = view[5]; upv[2]   = view[9];
 
+    if (hullOn) {
+      MedBox.hull.render({ eye: eye, target: cam.target, fov: FOV, aspect: W / H, spin: spin, heat: state.heat,
+                           breath: breath, sealed: state.sealed, view: state.view, viewZone: state.viewZone,
+                           glowZone: state.glowZone, zoneNames: state.zoneNames });
+    }
     gl.viewport(0, 0, W, H);
-    gl.clearColor(0.012, 0.031, 0.043, 1);
+    if (hullOn) gl.clearColor(0, 0, 0, 0); else gl.clearColor(0.012, 0.031, 0.043, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.disable(gl.DEPTH_TEST);
 
-    // stars
+    // stars (the hull layer draws its own when it is there)
+    if (!hullOn) {
     gl.useProgram(starProg);
     gl.bindBuffer(gl.ARRAY_BUFFER, starBuf);
     var sPos = gl.getAttribLocation(starProg, "aPos");
@@ -721,6 +734,7 @@
     gl.uniformMatrix4fv(gl.getUniformLocation(starProg, "uVP"), false, vp);
     gl.uniform1f(gl.getUniformLocation(starProg, "uTime"), ts / 1000);
     gl.drawArrays(gl.POINTS, 0, starData.length / 4);
+    }
 
     // habitation ring: spins for artificial gravity, warms with crew fever
     drawLines(ringBuf, ringData.length / 4, state.heat, breath, spin);

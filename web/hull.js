@@ -30,7 +30,7 @@
     // The torus: the crew live in here. Slightly translucent so the
     // technical overlay (berths, bulkheads, the crew glow) reads through.
     var hull = new THREE.Mesh(new THREE.TorusGeometry(RING_R, TUBE, 22, 180),
-      mat(0x25343d, { transparent: true, opacity: 0.66, roughness: 0.5 }));
+      mat(0x1c2a33, { transparent: true, opacity: 0.5, roughness: 0.55 }));
     hull.rotation.x = Math.PI / 2;
     g.add(hull);
     // Two outer rails, the structure ship.js draws as lines, made solid.
@@ -41,12 +41,12 @@
       g.add(rail);
     });
     // Windows: a belt of small lit panes on the outer wall.
-    var paneGeo = new THREE.BoxGeometry(0.22, 0.12, 0.04);
-    var paneMat = new THREE.MeshStandardMaterial({ color: 0x0b1a20, emissive: 0x7be8d3, emissiveIntensity: 1.6, roughness: 0.2 });
-    windows = new THREE.InstancedMesh(paneGeo, paneMat, 120);
+    var paneGeo = new THREE.BoxGeometry(0.13, 0.07, 0.04);
+    var paneMat = new THREE.MeshStandardMaterial({ color: 0x0b1a20, emissive: 0x9ff0e0, emissiveIntensity: 1.3, roughness: 0.2 });
+    windows = new THREE.InstancedMesh(paneGeo, paneMat, 160);
     var dummy = new THREE.Object3D();
-    for (var i = 0; i < 120; i++) {
-      var a = i / 120 * Math.PI * 2, r = RING_R + TUBE * 0.98;
+    for (var i = 0; i < 160; i++) {
+      var a = i / 160 * Math.PI * 2, r = RING_R + TUBE * 0.98;
       dummy.position.set(Math.cos(a) * r, (i % 2 ? 0.18 : -0.18), Math.sin(a) * r);
       dummy.rotation.set(0, -a, 0);
       dummy.updateMatrix();
@@ -131,23 +131,23 @@
     engineLight.position.y = -10.4;
     g.add(engineLight);
     // Solar arrays forward of the ring, radiators aft.
-    var panelMat = new THREE.MeshStandardMaterial({ color: 0x14245a, emissive: 0x0d1f4d, emissiveIntensity: 0.35, metalness: 0.4, roughness: 0.35, side: THREE.DoubleSide });
+    var panelMat = new THREE.MeshStandardMaterial({ color: 0x0f1b46, emissive: 0x0a1a44, emissiveIntensity: 0.3, metalness: 0.4, roughness: 0.4, side: THREE.DoubleSide });
     [1, -1].forEach(function (sx) {
-      var truss = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 3.0, 8), mat(0x5d7c88));
+      var truss = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.4, 8), mat(0x5d7c88));
       truss.rotation.z = Math.PI / 2;
-      truss.position.set(sx * 1.9, 4.4, 0);
+      truss.position.set(sx * 1.5, 5.6, 0);
       g.add(truss);
-      var panel = new THREE.Mesh(new THREE.BoxGeometry(7.5, 0.05, 2.6), panelMat);
-      panel.position.set(sx * 7.1, 4.4, 0);
+      var panel = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.04, 1.9), panelMat);
+      panel.position.set(sx * 5.3, 5.6, 0);
       g.add(panel);
-      for (var k = 1; k < 6; k++) {
-        var line = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.06, 2.6), mat(0x8fa8b2, { metalness: 0.9 }));
-        line.position.set(sx * (3.35 + k * 1.25), 4.4, 0);
+      for (var k = 1; k < 5; k++) {
+        var line = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.05, 1.9), mat(0x8fa8b2, { metalness: 0.9 }));
+        line.position.set(sx * (2.7 + k * 1.04), 5.6, 0);
         g.add(line);
       }
       var radMat = new THREE.MeshStandardMaterial({ color: 0x3b3238, emissive: 0xff7a3a, emissiveIntensity: 0.18, roughness: 0.7, side: THREE.DoubleSide });
-      var rad = new THREE.Mesh(new THREE.BoxGeometry(0.05, 2.2, 4.8), radMat);
-      rad.position.set(0, -5.2, sx * 3.0);
+      var rad = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.6, 3.6), radMat);
+      rad.position.set(0, -7.6, sx * 2.4);
       g.add(rad);
       radiators.push(rad);
     });

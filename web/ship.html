@@ -10,6 +10,7 @@
 </head>
 <body>
 
+<canvas id="hull" aria-hidden="true"></canvas>
 <canvas id="gl" aria-label="Vue tridimensionnelle de l’anneau d’habitation et de l’équipage"></canvas>
 
 <div id="fallback" hidden>
@@ -241,6 +242,8 @@
   <span class="disc">Simulation à bord · données synthétiques · pas un dispositif médical validé.</span>
 </footer>
 
+<script src="/static/vendor/three.min.js"></script>
+<script src="/static/hull.js"></script>
 <script src="/static/nav.js"></script>
 <script src="/static/voice.js"></script>
 <script src="/static/mic.js"></script>
