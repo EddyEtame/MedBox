@@ -39,7 +39,7 @@ from .protocols import ProtocolDataError, ProtocolEngine
 from .sensors.synthetic import BASELINE_PROFILE_VERSION, ScenarioSource
 from .speech import Announcer
 from .spoken import spoken_assessment, spoken_isolation_message, spoken_personal_intro, spoken_station_answer
-from .activities import for_crew, for_member
+from .activities import for_crew, for_member, habits_for
 from .tts import MAX_CHARS as VOICE_MAX_CHARS, SPEAKER, VOICE_NAME, speaker_for
 from .voice import consent_answer
 from .voice import TRANSCRIBER
@@ -116,6 +116,10 @@ class MedBox:
         self.db.seed_week({pid: dict(p.baseline) for pid, p in self.source.patients.items()}, time.time())
         # Isolation decisions already told to the crew and to the person.
         self._messaged: set[tuple[str, str]] = set()
+        # Questions waiting for the model: while one waits, the prefetch loop
+        # starts nothing, so a person is never queued behind a background
+        # assessment. Eddy, 24 Sep: "he replies but very slowly".
+        self.questions_pending = 0
         DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
         # What crew members say, kept apart from what the box measures. The
         # log is handed the recorder rather than importing the database, so
@@ -448,7 +452,7 @@ class MedBox:
 
     async def prefetch_once(self) -> str | None:
         """Assess the first wanted crew member, if the assistant is free. Returns who."""
-        if not CLIENT.available or CLIENT.warming or self._ai_lock.locked():
+        if not CLIENT.available or CLIENT.warming or self._ai_lock.locked() or self.questions_pending:
             return None
         for pid in list(self._prefetch_wanted):
             if pid in self._assessing:
@@ -1536,8 +1540,12 @@ async def assistant_ask(body: dict) -> dict:
     if not CLIENT.available:
         return {"ok": True, "answer": station_answer, "spoken": station_spoken, "grounded_in": "manual",
                 "blocked": [], "stand_in": False, "held_reason": "assistant_down"}
-    async with STATION._ai_lock:
-        raw = await CLIENT.answer(text, facts)
+    STATION.questions_pending += 1
+    try:
+        async with STATION._ai_lock:
+            raw = await CLIENT.answer(text, facts)
+    finally:
+        STATION.questions_pending -= 1
     if raw is None:
         return {"ok": True, "answer": station_answer, "spoken": station_spoken, "grounded_in": "manual",
                 "blocked": [], "stand_in": False, "held_reason": "assistant_silent", "detail": CLIENT.last_error}
@@ -1623,9 +1631,41 @@ async def crew_week() -> dict:
         "summary": {"total": len(members), "fit": len(members) - impaired, "impaired": impaired,
                     "isolated": isolated, "proposed": proposed},
         "members": members,
+        "champion": _champion(members),
+        "zones": STATION.quarantine.to_dict().get("zones", {}),
         "activities": for_crew(now, isolated=isolated + proposed),
         "messages": STATION.db.messages("crew", limit=20),
     }
+
+
+def _champion(members: list[dict]) -> dict | None:
+    """The member whose week stayed closest to their own baseline, today in
+    routine: the example the referent holds up to the crew, with the habits
+    behind it. Deterministic, from the same numbers the table shows."""
+    span = {"temperature": 0.6, "spo2": 2.0, "pulse": 12.0, "respiration": 4.0, "systolic_bp": 15.0}
+    best, best_score = None, None
+    for m in members:
+        if (m["today"]["urgency"] or "routine") != "routine" or m.get("isolation"):
+            continue
+        vitals = (m.get("week") or {}).get("vitals") or {}
+        score = 0.0
+        for key, tol in span.items():
+            stats, base = vitals.get(key), (m.get("baseline") or {}).get(key)
+            if not stats or base is None:
+                score += 1.0
+                continue
+            score += (abs(stats["max"] - base) + abs(stats["min"] - base)) / tol
+        if best_score is None or score < best_score:
+            best, best_score = m, score
+    if best is None:
+        return None
+    week = (best.get("week") or {}).get("vitals") or {}
+    pulse = week.get("pulse", {}) or {}
+    resp = week.get("respiration", {}) or {}
+    why = (f"La semaine la plus stable de l’équipage : pouls de repos autour de {pulse.get('avg', '–')}, "
+           f"respiration autour de {resp.get('avg', '–')}, tout dans sa plage habituelle.")
+    return {"id": best["id"], "name": best["name"], "role": best["role"], "why": why,
+            "habits": habits_for(best["id"]), "port": best.get("port")}
 
 
 @app.get("/api/me/{patient_id}")

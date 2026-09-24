@@ -511,7 +511,7 @@
       var capacity = Math.max(1, Number(zone.capacity) || 1);
       var occupied = Math.max(0, Number(zone.occupied) || 0);
       var percent = Math.min(100, occupied / capacity * 100);
-      return '<div class="zone-row ' + (zone.sealed ? "sealed" : "open") + '">' +
+      return '<div class="zone-row ' + (zone.sealed ? "sealed" : "open") + (state.glowZone === zoneName ? " glow" : "") + '">' +
         '<span class="zone-name">' + esc(zoneName) + '</span>' +
         '<span class="zone-cap" aria-label="' + occupied + ' places occupées sur ' + capacity + '">' +
           '<i style="width:' + percent.toFixed(1) + '%"></i></span>' +
@@ -534,6 +534,12 @@
     el("timelineFill").style.width = percentDone.toFixed(1) + "%";
 
     if (state.selected) renderPanel();
+    // Explanation mode: the member the card is about, lit as soon as the
+    // board knows them; the camera flies to them once.
+    if (state.focus && !state.focused && state.byId[state.focus]) {
+      state.focused = true;
+      selectCrew(state.focus);
+    }
     lastPainted = Date.now();
   }
 
@@ -1270,6 +1276,15 @@
       : "Commande locale — exemple : worst";
     el("cmdInput").focus();
   });
+  /* Embedded explanation mode: /ship?embed=1&focus=P-02&glow=A shows the
+     ship with one member lit and one zone glowing, and no controls. The
+     crew dashboard opens it inside the card that « Lire » brings up. */
+  (function embedMode() {
+    var params = new URLSearchParams(location.search);
+    state.focus = params.get("focus") || null;
+    state.glowZone = params.get("glow") || null;
+    if (params.get("embed")) document.body.classList.add("embed");
+  })();
   el("guideClose").addEventListener("click", closeGuide);
   el("introBtn").addEventListener("click", introduce);
   el("closeBtn").addEventListener("click", closePanel);

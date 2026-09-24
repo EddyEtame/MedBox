@@ -63,3 +63,24 @@ def for_member(urgency: str | None, isolated: bool, now: float | None = None, co
         pool = [a for a in PERSONAL if a["id"] in ("stretch", "read", "breath", "message")]
     start = _day_index(now) % len(pool)
     return [pool[(start + i) % len(pool)] for i in range(count)]
+
+
+# What the fittest member of the week is doing right: chosen from their id,
+# so the same person keeps the same habits from one day to the next.
+HABITS = [
+    "une marche quotidienne en boucle dans le module vert",
+    "dix minutes de respiration lente le soir",
+    "un sommeil régulier, sept heures, à heure fixe",
+    "un verre d’eau à chaque quart",
+    "des étirements au réveil",
+    "un vrai repas assis, sans écran",
+    "du sport collectif trois fois par semaine",
+    "un tour de table chaque matin pour dire comment ça va",
+]
+
+
+def habits_for(patient_id: str, count: int = 3) -> list[str]:
+    import hashlib
+
+    start = int.from_bytes(hashlib.blake2b(patient_id.encode(), digest_size=2).digest(), "big") % len(HABITS)
+    return [HABITS[(start + i * 3) % len(HABITS)] for i in range(count)]

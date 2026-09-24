@@ -267,7 +267,7 @@ class OllamaClient:
             "stream": False,
             "keep_alive": CONFIG.ai.keep_alive,
             "format": ANSWER_SCHEMA,
-            "options": {**_options(), "num_predict": 96},
+            "options": {**_options(), "num_predict": 72},
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {

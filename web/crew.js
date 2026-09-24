@@ -5,7 +5,7 @@
   "use strict";
   function el(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
-  var state = { members: {}, seen: {} };
+  var state = { members: {}, seen: {}, zones: {} };
   var URGENCY = { routine: "routine", low: "faible", medium: "moyenne", high: "haute" };
 
   /* A loud, short ping from the browser itself: nothing to download, and it
@@ -54,9 +54,63 @@
         // Opened by a person: the referent says it. The click is the gesture.
         if (MedBox.voice) { MedBox.voice.setOn(true, false); MedBox.voice.speakText(m.spoken || m.text, "fr"); }
         paintVoice();
+        openCard(m);
         load();
       })
       .catch(function () {});
+  }
+
+  /* Explanation mode: who the message is about, their numbers today against
+     their own baseline, and the ship with them lit and their isolation zone
+     glowing. Eddy, 24 Sep: "pull up a card about the person, show the 3D
+     view, glow the room where my man's gonna be quarantined". */
+  function nextZone(member) {
+    if (member && member.isolation && member.isolation.zone) return member.isolation.zone;
+    var names = Object.keys(state.zones || {});
+    for (var i = 0; i < names.length; i++) {
+      var z = state.zones[names[i]];
+      if ((Number(z.occupied) || 0) < (Number(z.capacity) || 1)) return names[i];
+    }
+    return names[0] || "A";
+  }
+  function initials(name) { return String(name || "?").split(/\s+/).map(function (w) { return w[0]; }).join("").slice(0, 2).toUpperCase(); }
+  function openCard(m) {
+    var member = state.members[m.patient_id];
+    if (!member) return;
+    closeCard();
+    var zone = nextZone(member);
+    var u = UNITS_ROWS(member);
+    var back = document.createElement("div");
+    back.className = "card-back"; back.id = "cardBack";
+    back.innerHTML = '<div class="card" role="dialog" aria-label="Fiche de ' + esc(member.name) + '">' +
+      '<button class="x" id="cardClose" aria-label="Fermer">×</button>' +
+      '<div class="card-h"><div class="avatar">' + esc(initials(member.name)) + "</div>" +
+      "<div><h2>" + esc(member.name) + "</h2><div class=\"hint\">" + esc(member.role) + (member.port ? " · port " + member.port : "") + "</div></div></div>" +
+      '<p class="card-msg">' + esc(m.text) + "</p>" +
+      '<table class="week card-vitals"><tbody>' + u + "</tbody></table>" +
+      '<div class="card-ship"><iframe src="/ship?embed=1&focus=' + encodeURIComponent(member.id) + "&glow=" + encodeURIComponent(zone) + '" title="Vaisseau"></iframe></div>' +
+      '<p class="hint">Zone ' + esc(zone) + " en surbrillance : c’est là que " + esc(member.name) + " sera isolé.</p>" +
+      "</div>";
+    document.body.appendChild(back);
+    el("cardClose").addEventListener("click", closeCard);
+    back.addEventListener("click", function (e) { if (e.target === back) closeCard(); });
+  }
+  function closeCard() { var b = el("cardBack"); if (b) b.remove(); }
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeCard(); });
+  function UNITS_ROWS(member) {
+    var units = { temperature: ["Température", "°C", 1], spo2: ["SpO₂", "%", 1], pulse: ["Pouls", "/min", 0], respiration: ["Respiration", "/min", 0], systolic_bp: ["Tension", "mmHg", 0] };
+    return Object.keys(units).map(function (k) {
+      var u = units[k], now = (member.vitals || {})[k], base = (member.baseline || {})[k];
+      return "<tr><th>" + u[0] + "</th><td>" + (now == null ? "–" : fmt(now, u[2]) + " " + u[1]) + "</td><td class=\"hint\">habituel " + (base == null ? "–" : fmt(base, u[2])) + "</td></tr>";
+    }).join("");
+  }
+
+  function renderChampion(c) {
+    var box = el("champion");
+    if (!c) { box.innerHTML = '<p class="hint">Personne n’est dans sa plage habituelle toute la semaine.</p>'; return; }
+    box.innerHTML = '<div class="champ"><div class="avatar">' + esc(initials(c.name)) + "</div><div><b>" + esc(c.name) + "</b> <span class=\"hint\">" + esc(c.role) + "</span>" +
+      "<p>" + esc(c.why) + "</p><p>Ce que " + esc(c.name) + " fait, à suivre :</p><ul>" +
+      c.habits.map(function (h) { return "<li>" + esc(h) + "</li>"; }).join("") + "</ul></div></div>";
   }
 
   function renderMembers(members) {
@@ -95,7 +149,11 @@
       el("crewSummary").textContent = s.impaired === 0
         ? "Tout l’équipage est dans sa plage habituelle. Rien à signaler."
         : s.impaired + " membre(s) à surveiller, " + s.isolated + " en isolement" + (s.proposed ? ", " + s.proposed + " décision(s) à accuser" : "") + ".";
+      state.members = {};
+      d.members.forEach(function (m) { state.members[m.id] = m; });
+      state.zones = d.zones || {};
       renderMembers(d.members);
+      renderChampion(d.champion);
       renderActivities(d.activities || []);
       renderMessages(d.messages || []);
       (d.messages || []).forEach(function (m) { state.seen[m.id] = true; });

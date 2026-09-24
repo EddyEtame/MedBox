@@ -266,3 +266,19 @@ table.week tr.u-medium td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
 body.alert{animation:flash 1.2s ease-out 1}
 @keyframes flash{0%{background:#4a1f26}100%{background:var(--bg)}}
 @media (max-width:900px){main.crew{grid-template-columns:1fr}}
+
+/* the card « Lire » opens, and the member in best shape */
+.card-back{position:fixed;inset:0;background:rgba(2,10,14,.72);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px}
+.card{position:relative;width:min(920px,100%);max-height:94vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 18px 14px}
+.card .x{position:absolute;top:10px;right:12px;background:none;border:0;color:var(--ink2);font-size:26px;cursor:pointer}
+.card-h{display:flex;align-items:center;gap:14px;margin-bottom:10px}
+.card-h h2{margin:0;font-size:22px}
+.avatar{width:46px;height:46px;border-radius:50%;background:var(--accent);color:#04191c;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:var(--mono);flex:none}
+.card-msg{font-size:15px;line-height:1.5;margin:0 0 10px;padding:10px 12px;border-left:3px solid var(--warn);background:var(--sunk);border-radius:8px}
+.card-vitals th{width:34%;color:var(--ink2);font-weight:500}
+.card-ship{margin-top:12px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#020a0e}
+.card-ship iframe{display:block;width:100%;height:min(52vh,460px);border:0}
+.champion{padding:0 14px 8px}
+.champ{display:flex;gap:12px;align-items:flex-start;font-size:14px;line-height:1.45}
+.champ p{margin:6px 0}
+.champ ul{margin:4px 0 0 18px;padding:0}
