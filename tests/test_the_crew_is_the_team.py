@@ -275,8 +275,7 @@ def test_the_answer_carries_its_own_reason_and_the_referent_says_un_instant():
     for name in ("app.js", "ship.js", "me.js"):
         js = (ROOT / "web" / name).read_text(encoding="utf-8")
         assert "réponse de la station" not in js, name
-        assert "clearTimeout(thinking)" in js and "setTimeout(function () {" in js, name
-        assert "Un instant, je regarde" in js, name
+        assert "thinking.stop()" in js and "MedBox.thinking.start(" in js, name
     crew = (ROOT / "web" / "crew.js").read_text(encoding="utf-8")
     assert "à confirmer</small>" in crew
     ship_css = (ROOT / "web" / "ship.css").read_text(encoding="utf-8")
