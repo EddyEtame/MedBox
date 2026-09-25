@@ -728,7 +728,10 @@
       if (!command) {
         wakeUntil = now + WAKE_WINDOW_MS;
         transition("WAKE", lang === "en" ? "Yes? How can I help you?" : "Oui ? Que puis-je faire pour vous ?");
-        if (lang === "en") speak("Yes? How can I help you?", "en"); else sayClip(["wake_ack"]);
+        // The station's own voice, the sentence rendered at start-up: said, not
+        // only written (Eddy, 25 Sep: « he just types it »), and in the same
+        // queue as the answer that follows, so nothing overlaps.
+        speak(lang === "en" ? "Yes? How can I help you?" : "Oui ? Que puis-je faire pour vous ?", lang);
         return Promise.resolve();
       }
       return recordCommand(command, heard.confidence, generation);

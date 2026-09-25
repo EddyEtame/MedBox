@@ -270,7 +270,7 @@ Un membre revient d'une zone froide avec une baisse progressive de température.
 
 ### Alerte respiratoire à bord (`contamination`)
 
-Six membres sur quarante présentent une détérioration compatible avec une exposition respiratoire confirmée par le scénario. Le système détecte les écarts, priorise la surveillance et propose l'affectation en zone d'isolement sans poser de diagnostic.
+La moitié du bord présente une détérioration compatible avec une exposition respiratoire confirmée par le scénario. Le système détecte les écarts, priorise la surveillance et propose l'affectation en zone d'isolement sans poser de diagnostic.
 
 ### Récupération après effort prolongé (`effort-prolonge`)
 

@@ -198,7 +198,7 @@ curl -X POST http://127.0.0.1:8765/api/scenario/contamination
 
 | Scénario | Ce qui se passe |
 |---|---|
-| `contamination` | Six membres sur quarante se dégradent en quatre-vingt-dix secondes : le scénario du cahier des charges. |
+| `contamination` | Trois membres sur six se dégradent en quatre-vingt-dix secondes : le scénario du cahier des charges. |
 | `single-patient` | Une consultation : un membre, des mesures qui évoluent, les questions du référent. |
 | `slow-burn` | Une dégradation lente sur dix minutes ; le score monte cran par cran. |
 | `false-alarm` | Une fièvre seule après l’effort : surveillance, pas d’isolement. |

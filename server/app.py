@@ -1828,7 +1828,8 @@ def _subject(text: str, patient_id: str | None, second_person: bool) -> tuple[st
     return patient_id, second_person
 
 
-ACTIVITY_QUESTION = re.compile(r"sport|entra[îi]n|courir|course|effort|muscul|exercice|travailler|reprendre|sortir|activit", re.I)
+ACTIVITY_QUESTION = re.compile(r"sport|entra[îi]n|courir|course|effort|muscul|exercice|travailler|reprendre|sortir|activit|en forme|la forme|bouger|garder la forme|rester en forme", re.I)
+SUGGEST_QUESTION = re.compile(r"\b(quel|quels|quelle|quelles|quoi|propose|conseille|id[ée]e|recommande|que (puis|pourrais|dois|peux)[- ]je faire)\b", re.I)
 REST_QUESTION = re.compile(r"dormir|sommeil|repos|me reposer|se reposer|coucher|fatigu", re.I)
 WHAT_TO_DO = re.compile(r"que (dois|devrais|puis)[- ]je faire|quoi faire|que faire|qu[’']est[- ]ce que je (dois|peux) faire|conseil|recommand", re.I)
 
@@ -1850,9 +1851,20 @@ def _advice_answer(patient_id: str, text: str, second_person: bool) -> str | Non
     you, your = ("vous", "vos") if second_person else (name, "ses")
     seen = ", ".join(devs) if devs else "un écart"
     if ACTIVITY_QUESTION.search(text):
+        # « Quel exercice pour rester en forme ? » wants exercises, not a
+        # verdict (Eddy, 25 Sep). Two of the day, from the same list the
+        # personal page shows, then the state that allows them.
+        if SUGGEST_QUESTION.search(text) or "exercice" in text.lower():
+            picks = for_member(t.get("urgency"), iso is not None, time.time(), count=2)
+            what = " ; ".join(f"{a['title'].lower()} ({a['why'].lower().rstrip('.')})" for a in picks)
+            if calm:
+                return (f"{'Deux idées pour vous' if second_person else 'Deux idées pour ' + name} aujourd’hui : {what}. "
+                        f"Score {total}, toutes {your} constantes dans {'votre' if second_person else 'sa'} plage habituelle : rien ne {'vous' if second_person else 'le'} retient.")
+            return (f"{'Deux idées pour vous' if second_person else 'Deux idées pour ' + name} aujourd’hui, en douceur : {what}. "
+                    f"Score {total}, priorité {urgency}, avec {seen} : pas d’effort soutenu, et je {'vous' if second_person else 'le'} garde sous surveillance.")
         if calm:
             return (f"Oui : score {total}, toutes {your} constantes dans {'votre' if second_person else 'sa'} plage habituelle. "
-                    f"{'Allez-y' if second_person else 'Il peut y aller'}, et {'dites-moi' if second_person else 'qu’il me dise'} si quelque chose change.")
+                    f"Rien ne {'vous' if second_person else 'le'} retient ; {'dites-moi' if second_person else 'qu’il me dise'} si quelque chose change.")
         hold = (" L’isolement est décidé, à confirmer." if iso is not None and not iso.confirmed else " L’isolement est confirmé." if iso is not None else "")
         return (f"Pas aujourd’hui : score {total}, priorité {urgency}, avec {seen}. "
                 f"{'Reposez-vous' if second_person else 'Qu’il se repose'}, {'buvez' if second_person else 'boive'}, et je {'vous' if second_person else 'le'} garde sous surveillance rapprochée.{hold}")
@@ -1877,6 +1889,7 @@ def _advice_answer(patient_id: str, text: str, second_person: bool) -> str | Non
 WEEK_QUESTION = re.compile(r"(ma|sa|cette|la|votre|mes|ses) (semaine|stats?|statistiques|constantes de la semaine)|bilan|r[ée]sum[ée]|pr[ée]sente[rz]?[- ]?(moi |nous )?(ma|sa|la|les|mes) ", re.I)
 FORECAST_QUESTION = re.compile(r"semaine prochaine|demain|tomber malade|tomberai|tombera|serai malade|sera malade|vais[- ]je (être|tomber)|risque|pr[ée]voi|pr[ée]di|dans les prochains|prochains jours|avenir|futur", re.I)
 VITAL_LABEL = {"temperature": "température", "spo2": "saturation", "pulse": "pouls", "respiration": "respiration", "systolic_bp": "tension"}
+VITAL_MASCULINE = {"pulse"}   # « pouls habituel, monté » ; the others « habituelle, montée »
 WEEK_TOL = {"temperature": 0.6, "spo2": 2.0, "pulse": 12.0, "respiration": 4.0, "systolic_bp": 15.0}
 
 
@@ -1907,7 +1920,8 @@ def _week_lines(pid: str, second_person: bool) -> tuple[list[str], list[str], in
         if out:
             worst = max(out, key=lambda t: abs(float(t[1]) - b))
             days = ", ".join(_day_fr(d) for d, _ in out[:3])
-            moved.append(f"{label} habituelle {fmt(b)}, {'montée' if float(worst[1]) > b else 'descendue'} à {fmt(float(worst[1]))} {days}")
+            e = "" if key in VITAL_MASCULINE else "e"
+            moved.append(f"{label} habituel{e} {fmt(b)}, {'monté' if float(worst[1]) > b else 'descendu'}{e} à {fmt(float(worst[1]))} {days}")
         else:
             stable.append(label)
     return moved, stable, len(daily)
@@ -1920,7 +1934,7 @@ def _week_brief(pid: str, second_person: bool = False, with_today: bool = True) 
         return None
     moved, stable, n = lines
     your, plage = ("votre", "votre plage habituelle") if second_person else ("sa", "sa plage habituelle")
-    head = f"{'Votre' if second_person else 'Sa'} semaine, sur {n} jours : "
+    head = f"{'Votre' if second_person else 'Sa'} semaine : "
     if moved:
         text = head + " ; ".join(moved) + "."
         if stable:
@@ -1946,7 +1960,7 @@ def _forecast_answer(pid: str, second_person: bool = False) -> str | None:
                 f"Si cela recommence, je {'vous' if second_person else 'le'} préviens avant que {'vous' if second_person else 'il'} ne {'le sentiez' if second_person else 'le sente'} : "
                 f"je mesure dix fois par seconde et je décide au premier écart.")
     return (f"Rien dans {'votre' if second_person else 'sa'} semaine ne l’annonce : {', '.join(stable) or 'toutes les constantes'} dans "
-            f"{'votre' if second_person else 'sa'} plage habituelle sur {n} jours. Je ne prédis pas, je surveille dix fois par seconde ; "
+            f"{'votre' if second_person else 'sa'} plage habituelle chaque jour. Je ne prédis pas, je surveille dix fois par seconde ; "
             f"au premier écart, je {'vous' if second_person else 'le'} préviens et je décide.")
 
 

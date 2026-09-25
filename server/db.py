@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS readings (
     provenance  TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS idx_readings_patient_at ON readings(patient_id, at);
+CREATE INDEX IF NOT EXISTS idx_readings_patient_source_at ON readings(patient_id, source, at);
 
 CREATE TABLE IF NOT EXISTS contacts (
     patient_a TEXT NOT NULL, patient_b TEXT NOT NULL, zone TEXT NOT NULL,
@@ -134,7 +135,7 @@ CREATE TABLE IF NOT EXISTS consent_events (
     session_id  TEXT NOT NULL REFERENCES listening_sessions(id),
     at          REAL NOT NULL,
     decision    TEXT NOT NULL CHECK(decision IN ('accepted', 'refused', 'revoked')),
-    method      TEXT NOT NULL CHECK(method IN ('voice', 'button', 'keyboard')),
+    method      TEXT NOT NULL CHECK(method IN ('voice', 'button', 'keyboard', 'carried-over')),
     language    TEXT NOT NULL,
     policy_version TEXT NOT NULL
 );
@@ -312,9 +313,37 @@ class Database:
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=NORMAL")
         self.conn.executescript(SCHEMA)
+        self._widen_consent_methods()
         self._migrate_existing_database()
         self.conn.executescript(APPEND_ONLY_GUARDS)
         self.conn.commit()
+
+    def _widen_consent_methods(self) -> None:
+        """A consent carried over from another page (25 Sep) is a method the
+        original CHECK did not allow, and SQLite cannot alter a CHECK: an
+        older database gets its consent table rebuilt once, rows kept."""
+        row = self.conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='consent_events'").fetchone()
+        if not row or "carried-over" in (row[0] or ""):
+            return
+        self.conn.executescript("""
+            DROP TRIGGER IF EXISTS consent_events_no_update;
+            DROP TRIGGER IF EXISTS consent_events_no_delete;
+            DROP TRIGGER IF EXISTS consent_events_session_open;
+            ALTER TABLE consent_events RENAME TO consent_events_old;
+            CREATE TABLE consent_events (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id  TEXT NOT NULL REFERENCES listening_sessions(id),
+                at          REAL NOT NULL,
+                decision    TEXT NOT NULL CHECK(decision IN ('accepted', 'refused', 'revoked')),
+                method      TEXT NOT NULL CHECK(method IN ('voice', 'button', 'keyboard', 'carried-over')),
+                language    TEXT NOT NULL,
+                policy_version TEXT NOT NULL
+            );
+            INSERT INTO consent_events (id, session_id, at, decision, method, language, policy_version)
+                SELECT id, session_id, at, decision, method, language, policy_version FROM consent_events_old;
+            DROP TABLE consent_events_old;
+            CREATE INDEX IF NOT EXISTS idx_consent_session_at ON consent_events(session_id, at);
+        """)
 
     def _migrate_existing_database(self) -> None:
         """Apply additive migrations to databases made by earlier demos."""
@@ -516,10 +545,14 @@ class Database:
         import datetime as _dt
 
         since = now - days * 86400
+        # The seeded week, plus the last quarter of an hour of live samples
+        # for today's bucket. Not every live sample of the week: at ten a
+        # second the table holds hundreds of thousands per member, and the
+        # personal page took three seconds to open (25 Sep).
         rows = self.conn.execute(
             "SELECT at, temperature, spo2, pulse, respiration, systolic_bp FROM readings"
-            " WHERE patient_id=? AND at >= ? ORDER BY at",
-            (patient_id, since),
+            " WHERE patient_id=? AND at >= ? AND (source = 'synthetic-week' OR at >= ?) ORDER BY at",
+            (patient_id, since, now - 900),
         ).fetchall()
         vitals = ("temperature", "spo2", "pulse", "respiration", "systolic_bp")
         out: dict[str, Any] = {"days": days, "count": len(rows), "vitals": {}, "daily": []}
