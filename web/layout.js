@@ -13,10 +13,13 @@
 (function (root) {
   "use strict";
 
-  var L = 30, W = 7, H = 5, BOW = 5, ZONES = 3, BERTHS = 4, CREW = 40;
+  // Six aboard, one room each (Eddy, 25 Sep: « there's just supposed to be
+  // six, and we're supposed to see each and everybody's room »): three a
+  // side on the upper deck, wide enough for a bed, a desk and a name.
+  var L = 30, W = 7, H = 5, BOW = 5, ZONES = 3, BERTHS = 4, CREW = 6;
   var DECK1 = { floor: 0.2, ceil: 2.3 };
   var DECK2 = { floor: -2.3, ceil: -0.2 };
-  var CABIN_PITCH = 0.9, CABIN_X0 = -8.5, CABIN_DEPTH = 1.6, HULL_Z = W / 2;
+  var CABIN_PITCH = 5.6, CABIN_X0 = -6.9, CABIN_DEPTH = 2.2, HULL_Z = W / 2;
 
   function cabinBox(i) {
     var side = i % 2 ? 1 : -1, col = Math.floor(i / 2);
@@ -26,8 +29,14 @@
              z0: Math.min(zOut, zIn), z1: Math.max(zOut, zIn), side: side, x: x };
   }
   function cabin(i) {
+    if (i >= CREW) return dorm(i);
     var b = cabinBox(i);
     return { x: b.x, y: DECK1.floor + 0.75, z: (b.z0 + b.z1) / 2 };
+  }
+  // Beyond the rooms (a crew of forty again): bunks in the mess, in rows.
+  function dorm(i) {
+    var k = i - CREW;
+    return { x: -13.0 + (k % 6) * 0.6, y: DECK1.floor + 0.75, z: -2.4 + (Math.floor(k / 6) % 8) * 0.65 };
   }
 
   // Isolation rooms on deck 2: A forward of the infirmary, B and C aft.

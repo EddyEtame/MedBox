@@ -84,7 +84,9 @@ def test_fresh_asks_again_and_a_routine_crew_member_is_never_prefetched(monkeypa
     # on stage is instant, and their routine assessment stands fifteen minutes.
     routine = [r["patient"]["id"] for r in station.STATION._board()
                if r["triage"]["urgency"] == "routine" and not station._has_a_page(r["patient"]["id"])]
-    assert routine and not (set(routine) & set(station.STATION._prefetch_wanted))
+    # With the crew reduced to the six with a page (25 Sep), nobody is
+    # without one; the rule still holds for a larger roster.
+    assert not (set(routine) & set(station.STATION._prefetch_wanted))
     with_page = [p for p in station.STATION._prefetch_wanted if station._has_a_page(p)]
     assert with_page, "the members with a page are prepared before anybody clicks"
     assert station.STATION._prefetch_wanted.index(pid) < station.STATION._prefetch_wanted.index(with_page[0]) or pid in with_page

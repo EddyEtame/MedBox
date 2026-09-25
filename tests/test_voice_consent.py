@@ -70,7 +70,12 @@ def test_browser_flow_names_every_visible_state_and_never_uses_cloud_recognition
     assert "webkitSpeechRecognition" not in source
     assert "SpeechRecognition(" not in source
     assert 'fetch("/api/voice/transcribe"' in source
-    assert "sessionStorage" not in source and "localStorage" not in source
+    # Nothing heard is ever stored. The one thing the browser keeps is that
+    # consent was given, and when, so the other pages of the station do
+    # not ask again for eight hours (Eddy, 25 Sep: "once the voice is
+    # activated for the main section, they shouldn't ask again").
+    assert "sessionStorage" not in source
+    assert source.count("localStorage") == source.count("localStorage.getItem(CONSENT_KEY)") + source.count("localStorage.setItem(CONSENT_KEY") + source.count("localStorage.removeItem(CONSENT_KEY)")
 
 
 def test_transcriber_auto_detects_french_or_english_and_keeps_vad(tmp_path):

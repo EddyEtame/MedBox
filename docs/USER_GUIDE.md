@@ -2,7 +2,7 @@
 
 # MedBox — guide de l’opérateur
 
-**ESA Horizon · 40 membres · aucun médecin à bord · aucun contact avec la Terre.**
+**ESA Horizon · 6 membres · aucun médecin à bord · aucun contact avec la Terre.**
 
 > **MedBox est un prototype de recherche et de formation. Ce n’est pas un dispositif médical et il ne pose aucun diagnostic.** La priorité affichée est un dépistage partiel dérivé de NEWS2. L’assistant ne fait que proposer des hypothèses traçables ; il ne prescrit rien et ne peut jamais modifier le score.
 

@@ -264,18 +264,40 @@ class Announcer:
         out, self._pending = self._pending, []
         return out
 
-    def on_ai(self, available: bool, stand_in: bool) -> list[Utterance]:
-        if self._ai_up == available:
-            return []
-        first = self._ai_up is None
-        self._ai_up = available
-        if first:
+    # How long a change must last before it is said: the assistant that
+    # times out under load and answers again ten seconds later is not down,
+    # and the crew heard « arrêté » and « de nouveau actif » on top of each
+    # other (Eddy, 25 Sep). Seconds; tests set them to zero.
+    DOWN_HOLD = 8.0
+    BACK_HOLD = 3.0
+
+    def on_ai(self, available: bool, stand_in: bool, now: float | None = None) -> list[Utterance]:
+        import time as _time
+        now = _time.monotonic() if now is None else now
+        if self._ai_up is None:
             # Say nothing on the first observation. Starting the program is not
             # an event, and announcing "the assistant has stopped" because it
             # had not finished probing yet would be a lie told at boot.
+            self._ai_up = available
             return [Utterance("ai_stand_in")] if (available and stand_in) else []
+        if available == self._ai_up:
+            self._ai_pending = None
+            return []
+        pending = getattr(self, "_ai_pending", None)
+        if pending is None or pending[0] != available:
+            self._ai_pending = (available, now)
+            if (self.BACK_HOLD if available else self.DOWN_HOLD) > 0:
+                return []
+        elif now - pending[1] < (self.BACK_HOLD if available else self.DOWN_HOLD):
+            return []
+        self._ai_up = available
+        self._ai_pending = None
         if not available:
+            self._down_said = True
             return [Utterance("ai_down")]
+        if not getattr(self, "_down_said", False):
+            return []   # never « de nouveau actif » for a stop nobody heard
+        self._down_said = False
         return [Utterance("ai_stand_in" if stand_in else "ai_back")]
 
 

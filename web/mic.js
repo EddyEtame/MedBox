@@ -52,6 +52,21 @@
   var pending = [];
   var uploading = false;
   var sessionId = null;
+  /* Consent given once on a page of the station holds for the others for
+     eight hours (Eddy, 25 Sep: "once the voice is activated for the main
+     section, the other pages shouldn't ask again"). A personal page still
+     asks: it is somebody's own space. The audit still records a consent
+     row per session, marked as carried over. */
+  var CONSENT_KEY = "medbox.consent", CONSENT_HOURS = 8;
+  function sharedConsent() {
+    try {
+      var v = JSON.parse(localStorage.getItem(CONSENT_KEY) || "null");
+      if (v && typeof v.at === "number" && Date.now() - v.at < CONSENT_HOURS * 3600e3) return v;
+    } catch (e) {}
+    return null;
+  }
+  function rememberConsent(l) { try { localStorage.setItem(CONSENT_KEY, JSON.stringify({ at: Date.now(), lang: l === "en" ? "en" : "fr" })); } catch (e) {} }
+  function forgetConsent() { try { localStorage.removeItem(CONSENT_KEY); } catch (e) {} }
   var getPatient = function () { return null; };
   var onReported = null;
   var ui = {};
@@ -256,7 +271,7 @@
     });
   }
 
-  function auditConsent(decision, language) {
+  function auditConsent(decision, language, carried) {
     if (!sessionId) return Promise.reject(new Error("missing listening session"));
     return fetch("/api/voice/sessions/" + encodeURIComponent(sessionId) + "/consent", {
       method: "POST",
@@ -264,7 +279,7 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         decision: decision,
-        method: "voice",
+        method: carried ? "carried-over" : "voice",
         language: language || "und"
       })
     }).then(function (response) {
@@ -480,6 +495,18 @@
           return;
         }
         if (consented) { beginListening(); return; }
+        var shared = sharedConsent();
+        if (shared && !selfMode) {
+          consented = true;
+          paused = false;
+          setLang(shared.lang);
+          auditConsent("accepted", shared.lang, true).catch(function () {});
+          if (root.MedBox && MedBox.voice && MedBox.voice.setOn) MedBox.voice.setOn(true, false);
+          transition("LISTENING", "À l’écoute : consentement déjà donné sur une autre page. Dites « MedBox », puis votre demande.");
+          setButtons();
+          beginListening();
+          return;
+        }
         transition("CONSENT", "MedBox présente les conditions d’écoute…");
         var spoken = root.MedBox && MedBox.voice && MedBox.voice.speakConsentNotice
           ? MedBox.voice.speakConsentNotice(CONSENT_TEXT)
@@ -535,7 +562,7 @@
   function setSelf(v) { selfMode = !!v; }
   var askingLang = false;
   // Kept for the session only: this file stores nothing, by design.
-  function setLang(code) { lang = code === "en" ? "en" : "fr"; }
+  function setLang(code) { lang = code === "en" ? "en" : "fr"; if (consented) rememberConsent(lang); }
   function languageChoice(text) {
     var value = " " + normalize(text) + " ";
     if (/ (anglais|english|angla) /.test(value)) return "en";
@@ -647,6 +674,7 @@
           if (generation !== armGeneration) return;
           consented = true;
           paused = false;
+          rememberConsent(heard.language);
           // The consent click was the gesture that unlocks audio: from here
           // the assistant answers out loud, and first asks which language.
           if (root.MedBox && MedBox.voice && MedBox.voice.setOn) MedBox.voice.setOn(true, false);
@@ -766,6 +794,7 @@
   }
 
   function revoke() {
+    forgetConsent();
     var audit = consented ? auditConsent("revoked", "fr").catch(function () {}) : Promise.resolve();
     stopCapture();
     pending.length = 0;

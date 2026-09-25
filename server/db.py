@@ -49,7 +49,7 @@ VITAL_UNITS = {
     "systolic_bp": "mmHg",
 }
 CONSENT_DECISIONS = frozenset({"accepted", "refused", "revoked"})
-CONSENT_METHODS = frozenset({"voice", "button", "keyboard"})
+CONSENT_METHODS = frozenset({"voice", "button", "keyboard", "carried-over"})
 _SESSION_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _BLOB_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")

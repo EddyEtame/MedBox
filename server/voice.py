@@ -122,7 +122,7 @@ class Transcriber:
             # Six threads: the person speaks while the model is idle, and
             # a two-second phrase then comes back in well under a second.
             self._model = WhisperModel(
-                str(self.model_dir), device="cpu", compute_type="int8", cpu_threads=6
+                str(self.model_dir), device="cpu", compute_type="int8", cpu_threads=4
             )
             self.last_error = None
         except Exception as exc:

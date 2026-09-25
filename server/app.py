@@ -122,6 +122,10 @@ class MedBox:
         # starts nothing, so a person is never queued behind a background
         # assessment. Eddy, 24 Sep: "he replies but very slowly".
         self.questions_pending = 0
+        # The ears at work: the model yields the processor to them (25 Sep,
+        # transcriptions timed out while a background assessment ran).
+        self.ears_busy = 0
+        self._state_said: dict[str, float] = {}
         DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
         # What crew members say, kept apart from what the box measures. The
         # log is handed the recorder rather than importing the database, so
@@ -322,6 +326,7 @@ class MedBox:
                 on_oxygen=seen.get("on_oxygen"),
             )
             patient = self.source.patients[reading.patient_id]
+            prev_urgency = ((self.latest.get(reading.patient_id) or {}).get("triage") or {}).get("urgency")
             self.latest[reading.patient_id] = {
                 "patient": {
                     "id": patient.id,
@@ -340,6 +345,16 @@ class MedBox:
             }
             # One row per change of urgency: the record's history of levels.
             self.db.record_triage(reading.patient_id, now, result.to_dict())
+            # Said out loud on every page with a voice: « Eddy passe à
+            # surveiller : score 4, priorité faible, avec de la fièvre… ».
+            # Eddy, 25 Sep: he applied a deviation and the referent said
+            # nothing. Once per member per forty-five seconds.
+            new_urgency = result.to_dict().get("urgency")
+            if prev_urgency is not None and new_urgency != prev_urgency and now - self._state_said.get(reading.patient_id, 0) > 45:
+                self._state_said[reading.patient_id] = now
+                BUS.publish({"type": "state", "patient_id": reading.patient_id, "name": patient.name,
+                             "urgency": new_urgency, "from": prev_urgency,
+                             "spoken": _state_sentence(reading.patient_id, patient.name, new_urgency)})
             change = self.quarantine.evaluate(
                 reading.patient_id,
                 v,
@@ -495,7 +510,7 @@ class MedBox:
 
     async def prefetch_once(self) -> str | None:
         """Assess the first wanted crew member, if the assistant is free. Returns who."""
-        if not CLIENT.available or CLIENT.warming or self._ai_lock.locked() or self.questions_pending:
+        if not CLIENT.available or CLIENT.warming or self._ai_lock.locked() or self.questions_pending or self.ears_busy:
             return None
         for pid in list(self._prefetch_wanted):
             if pid in self._assessing:
@@ -1033,6 +1048,8 @@ async def _transcribe_audio(request: Request) -> tuple[str, float, str | None] |
     # the Ogg or MP4 blobs browsers may produce. The UUID prevents concurrent
     # microphones from ever sharing a path.
     tmp = Path(tempfile.gettempdir()) / f"medbox-{uuid.uuid4().hex}.audio"
+    STATION.ears_busy += 1
+    STATION.yield_to_question()   # a background assessment lets the ears have the processor
     try:
         tmp.write_bytes(raw)
         headers = getattr(request, "headers", None) or {}
@@ -1054,6 +1071,7 @@ async def _transcribe_audio(request: Request) -> tuple[str, float, str | None] |
             return await TRANSCRIBER.listen(tmp, language=preferred)
         return await TRANSCRIBER.listen(tmp)
     finally:
+        STATION.ears_busy = max(0, STATION.ears_busy - 1)
         tmp.unlink(missing_ok=True)
 
 
@@ -1245,6 +1263,7 @@ async def assistant_command(body: dict) -> dict:
             "action": "answer",
             "reply": answer["answer"],
             "spoken": answer.get("spoken") or answer["answer"],
+            "subject": answer.get("subject"),
             "resolved_by": "ask",
             "learned": False,
             "understood_as": "question à l’assistant",
@@ -1855,6 +1874,92 @@ def _advice_answer(patient_id: str, text: str, second_person: bool) -> str | Non
     return None
 
 
+WEEK_QUESTION = re.compile(r"(ma|sa|cette|la|votre|mes|ses) (semaine|stats?|statistiques|constantes de la semaine)|bilan|r[ée]sum[ée]|pr[ée]sente[rz]?[- ]?(moi |nous )?(ma|sa|la|les|mes) ", re.I)
+FORECAST_QUESTION = re.compile(r"semaine prochaine|demain|tomber malade|tomberai|tombera|serai malade|sera malade|vais[- ]je (être|tomber)|risque|pr[ée]voi|pr[ée]di|dans les prochains|prochains jours|avenir|futur", re.I)
+VITAL_LABEL = {"temperature": "température", "spo2": "saturation", "pulse": "pouls", "respiration": "respiration", "systolic_bp": "tension"}
+WEEK_TOL = {"temperature": 0.6, "spo2": 2.0, "pulse": 12.0, "respiration": 4.0, "systolic_bp": 15.0}
+
+
+def _day_fr(iso: str) -> str:
+    try:
+        return f"le {int(iso[8:10])}"
+    except (ValueError, TypeError):
+        return "ce jour-là"
+
+
+def _week_lines(pid: str, second_person: bool) -> tuple[list[str], list[str], int] | None:
+    """What moved this week and what stayed, from the person's own days."""
+    patient = STATION.source.patients.get(pid)
+    week = _week_for(pid, time.time()) if patient else None
+    daily = (week or {}).get("daily") or []
+    if not patient or not daily:
+        return None
+    base = patient.baseline
+    your = "votre" if second_person else "sa"
+    moved, stable = [], []
+    for key, label in VITAL_LABEL.items():
+        vals = [(d["day"], d.get(key)) for d in daily if d.get(key) is not None]
+        if not vals or base.get(key) is None:
+            continue
+        b = float(base[key])
+        fmt = (lambda x: f"{x:.1f}") if key in ("temperature", "spo2") else (lambda x: f"{x:.0f}")
+        out = [(d, v) for d, v in vals if abs(float(v) - b) > WEEK_TOL[key]]
+        if out:
+            worst = max(out, key=lambda t: abs(float(t[1]) - b))
+            days = ", ".join(_day_fr(d) for d, _ in out[:3])
+            moved.append(f"{label} habituelle {fmt(b)}, {'montée' if float(worst[1]) > b else 'descendue'} à {fmt(float(worst[1]))} {days}")
+        else:
+            stable.append(label)
+    return moved, stable, len(daily)
+
+
+def _week_brief(pid: str, second_person: bool = False, with_today: bool = True) -> str | None:
+    """« Présente ma semaine » : the numbers of the week, said, then today."""
+    lines = _week_lines(pid, second_person)
+    if lines is None:
+        return None
+    moved, stable, n = lines
+    your, plage = ("votre", "votre plage habituelle") if second_person else ("sa", "sa plage habituelle")
+    head = f"{'Votre' if second_person else 'Sa'} semaine, sur {n} jours : "
+    if moved:
+        text = head + " ; ".join(moved) + "."
+        if stable:
+            text += f" {', '.join(stable).capitalize()} dans {plage} toute la semaine."
+    else:
+        text = head + f"toutes {'vos' if second_person else 'ses'} constantes dans {plage}, chaque jour."
+    if not with_today:
+        return text
+    today = _status_answer(pid, second_person)
+    return text + (" Aujourd’hui : " + today if today else "")
+
+
+def _forecast_answer(pid: str, second_person: bool = False) -> str | None:
+    """« Vais-je tomber malade la semaine prochaine ? » : no prophecy, the
+    week's trend and what the station will do about it."""
+    lines = _week_lines(pid, second_person)
+    if lines is None:
+        return None
+    moved, stable, n = lines
+    you = "vous" if second_person else STATION.source.patients[pid].name
+    if moved:
+        return (f"Je ne prédis pas, je mesure. Cette semaine, {'; '.join(moved)}. "
+                f"Si cela recommence, je {'vous' if second_person else 'le'} préviens avant que {'vous' if second_person else 'il'} ne {'le sentiez' if second_person else 'le sente'} : "
+                f"je mesure dix fois par seconde et je décide au premier écart.")
+    return (f"Rien dans {'votre' if second_person else 'sa'} semaine ne l’annonce : {', '.join(stable) or 'toutes les constantes'} dans "
+            f"{'votre' if second_person else 'sa'} plage habituelle sur {n} jours. Je ne prédis pas, je surveille dix fois par seconde ; "
+            f"au premier écart, je {'vous' if second_person else 'le'} préviens et je décide.")
+
+
+def _state_sentence(pid: str, name: str, urgency: str | None) -> str:
+    if (urgency or "routine") == "routine":
+        return f"{name} revient en routine : toutes ses constantes dans sa plage habituelle."
+    entry = STATION.latest.get(pid) or {}
+    p, t = entry.get("patient") or {}, entry.get("triage") or {}
+    devs = _deviations(p, p.get("baseline") or {})
+    return (f"{name} passe à surveiller : score {t.get('total', 0)}, priorité {URGENCY_FR.get(urgency, urgency)}, "
+            f"avec {', '.join(devs) if devs else 'un écart'}. Je surveille de près.")
+
+
 def _station_shortcut(text: str, patient_id: str | None, second_person: bool = False) -> dict | None:
     """An instant, deterministic answer when the station holds it: the
     introduction, the crew and isolation questions, a member's state, one
@@ -1878,6 +1983,12 @@ def _station_shortcut(text: str, patient_id: str | None, second_person: bool = F
             return out(answer) if answer else None
         if ACTIVITY_QUESTION.search(text) or REST_QUESTION.search(text) or WHAT_TO_DO.search(text):
             answer = _advice_answer(patient_id, text, second_person)
+            return out(answer) if answer else None
+        if FORECAST_QUESTION.search(text):
+            answer = _forecast_answer(patient_id, second_person)
+            return out(answer) if answer else None
+        if WEEK_QUESTION.search(text):
+            answer = _week_brief(patient_id, second_person)
             return out(answer) if answer else None
         for key, rx in VITAL_WORDS.items() if isinstance(VITAL_WORDS, dict) else VITAL_WORDS:
             if rx.search(text):
@@ -2042,10 +2153,11 @@ async def assistant_ask(body: dict) -> dict:
     shortcut = _station_shortcut(text, patient_id, second_person)
     if shortcut is not None:
         shortcut["lang"] = lang
+        shortcut["subject"] = patient_id
         return shortcut
     if not CLIENT.available:
         return {"ok": True, "answer": DOWN + station_answer, "spoken": DOWN + station_spoken, "grounded_in": "manual",
-                "blocked": [], "stand_in": False, "held_reason": "assistant_down", "lang": lang}
+                "blocked": [], "stand_in": False, "held_reason": "assistant_down", "lang": lang, "subject": patient_id}
     STATION.questions_pending += 1
     STATION.yield_to_question()
     try:
@@ -2056,7 +2168,7 @@ async def assistant_ask(body: dict) -> dict:
     if raw is None:
         return {"ok": True, "answer": LATE + station_answer, "spoken": LATE + station_spoken, "grounded_in": "manual",
                 "blocked": [], "stand_in": False, "held_reason": "assistant_silent", "detail": CLIENT.last_error,
-                "lang": lang}
+                "lang": lang, "subject": patient_id}
     out = enforce_answer(raw)
     if out["grounded_in"] != "nothing" and not out["blocked"] and _ungrounded(out["answer"], facts):
         out["grounded_in"] = "nothing"
@@ -2069,12 +2181,14 @@ async def assistant_ask(body: dict) -> dict:
         out["spoken"] = UNGROUNDED + station_spoken
         out["lang"] = lang
         out["stand_in"] = CLIENT.stand_in
+        out["subject"] = patient_id
         return out
     # Two validated sentences read as they are; the voice module says the units.
     out["spoken"] = out["answer"]
     out["lang"] = lang
     out["stand_in"] = CLIENT.stand_in
     out["held_reason"] = None
+    out["subject"] = patient_id
     return out
 
 
@@ -2231,6 +2345,11 @@ async def me(patient_id: str) -> dict:
     urgency = summary["today"]["urgency"]
     agent = STATION.db.agent_name(patient_id)
     intro = spoken_personal_intro(summary["name"], week_ok, urgency, summary["isolation"], agent)
+    # Eddy, 25 Sep: « when I click the button, present this week's stats »:
+    # the greeting, then the week in numbers, then today.
+    brief = _week_brief(patient_id, True, with_today=False)
+    if brief:
+        intro = intro + " " + brief
     return {
         **summary,
         "agent_name": agent,

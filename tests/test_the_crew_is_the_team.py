@@ -108,7 +108,8 @@ def test_activities_are_deterministic_and_keep_the_isolated_apart():
 def test_the_crew_week_and_the_personal_page_come_from_the_station():
     station.STATION._frame()
     week = asyncio.run(station.crew_week())
-    assert week["summary"]["total"] == 40
+    from server.config import CONFIG
+    assert week["summary"]["total"] == CONFIG.ship.crew_size   # six since 25 Sep: the team, one room each
     first = week["members"][0]
     assert first["id"] == "P-01" and first["name"] == "Eddy"
     assert set(first["week"]) == {"days", "count", "vitals", "daily"}

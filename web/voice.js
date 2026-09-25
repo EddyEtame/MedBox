@@ -104,8 +104,14 @@
       .replace(/[^a-z0-9]/g, "_").replace(/^_+|_+$/g, "");
   }
 
+  // Only the page in front speaks. Eddy, 25 Sep: two announcements over
+  // each other, one from the ship page, one from the ship embedded in the
+  // crew page's card, another from a tab he had left open.
+  function muted() {
+    try { return document.hidden || document.body.classList.contains("embed"); } catch (e) { return false; }
+  }
   function say(items) {
-    if (!on || !items || !items.length) return;
+    if (!on || muted() || !items || !items.length) return;
     for (var i = 0; i < items.length; i++) queue.push(items[i]);
     while (queue.length > MAX_QUEUE) queue.shift();
     pump();
@@ -326,7 +332,7 @@
      the browser reports as local, then nothing. Optional every step: the
      same sentence is always visible on screen. */
   function speakText(text, lang) {
-    if (!on || !String(text || "").trim()) return Promise.resolve(false);
+    if (!on || muted() || !String(text || "").trim()) return Promise.resolve(false);
     var serial = ++consentSerial;
     consentPlaying = true;
     return waitForOperationalLine(serial).then(function () {

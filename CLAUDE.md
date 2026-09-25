@@ -258,6 +258,32 @@ zero is not a sign**, whatever the model says about it.
   the other half: two Ollama servers (the tray app's and the bundle's, on
   11434 and 11555) held 2.8 GB of duplicate runners with 0.8 GB free;
   `tools/preflight.ps1` flags both. Rehearsal script: `docs/CAHIER-DE-SOUTENANCE.md`.
+- **The night of 25 Sep, 02:40–03:30, Eddy's list** (« this shit is actually
+  very stupid… there's just supposed to be six… when the AI talks about
+  somebody the ship should move and the room glow… the voices overlap… you
+  haven't explained SpO2 or NEWS2 to me »). Done: `crew_size = 6` in
+  config.toml (the roster is a setting; `layout.dorm` bunks anyone beyond
+  the rooms if it goes back to forty); six named rooms on deck 1 with bed,
+  desk, screen, locker, a glowing floor and a name tag (`roomTiles`,
+  `setRoomNames` in hull.js); every answer carries its `subject`, the ship
+  page listens to `medbox-command` and `state` events and flies to that
+  member's room (`focusMember`, glow 14 s); the frame loop publishes a
+  `state` event when a member's urgency changes (`_state_sentence`, once
+  per member per 45 s) and every page with a voice says it; the station
+  answers « présente ma semaine » (`_week_brief`) and « vais-je tomber
+  malade ? » (`_forecast_answer`) from the person's own seven days, and the
+  personal intro presents the week in numbers; consent given on one main
+  page carries to the others for eight hours (`medbox.consent` in
+  localStorage, audited as method `carried-over`; a personal page still
+  asks); the announcer holds a change 8 s (down) / 3 s (back) and never says
+  « de nouveau actif » for a stop nobody heard; a hidden tab or an embedded
+  ship never speaks (`muted()` in voice.js); the ship page renders at 30
+  frames a second at pixel ratio 1 (20 when embedded); the ears get four
+  threads and the background assessment yields to them (`ears_busy`);
+  board badges are French; the empty chart hides when nobody is selected.
+  `.build/deliverables/COMPRENDRE-LES-CHIFFRES-EDDY.md` explains SpO₂,
+  NEWS2 with the code's thresholds, the baseline, the noise equation and
+  the week to Eddy.
 - **The hull, rebuilt for the bar** (01:30, 25 Sep; Eddy: « ameliorate the 3D to
   baffled bar, right now it's poor »). `web/hull.js`: painted plating (a
   512 px canvas, map + bump), a sun that casts shadows (PCFSoft, 1024), a

@@ -77,6 +77,6 @@ path = "data/medbox.db"
 
 [ship]
 name = "ESA Horizon"
-crew_size = 40
+crew_size = 6
 quarantine_zones = ["A", "B", "C"]
 zone_capacity = 4

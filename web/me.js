@@ -161,6 +161,9 @@
       } else if (m.type === "board" && state.me) {
         var row = (m.board || []).filter(function (r) { return r.patient && r.patient.id === pid; })[0];
         if (row) { state.me.vitals = row.patient; state.me.today = row.triage; renderToday(state.me); }
+      } else if (m.type === "state" && m.patient_id === pid && m.spoken) {
+        // Their own state changed: said to them, in their own space.
+        speak(m.spoken, "fr");
       }
     };
     ws.onclose = function () { setTimeout(connect, 1500); };

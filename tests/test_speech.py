@@ -117,8 +117,24 @@ def test_the_station_announces_its_own_assistant_dying():
     """The beat the whole demo is built on, and it is literally true: this line
     is spoken by the fast track while every number on screen keeps updating."""
     a = Announcer()
+    a.DOWN_HOLD = a.BACK_HOLD = 0.0
     a.on_ai(True, False)
     assert [u.phrase for u in a.on_ai(False, False)] == ["ai_down"]
+
+
+def test_a_flicker_is_not_announced_but_a_real_stop_is():
+    """25 Sep: under load the assistant timed out and answered again ten
+    seconds later, and the crew heard « arrêté » and « de nouveau actif » on
+    top of each other. A change is said once it has lasted; a return is
+    said only after a stop that was heard."""
+    a = Announcer()
+    a.on_ai(True, False, now=0.0)
+    assert a.on_ai(False, False, now=1.0) == []          # pending
+    assert a.on_ai(True, False, now=4.0) == []           # flicker: back before the hold, nothing said
+    assert a.on_ai(False, False, now=10.0) == []         # pending again
+    assert [u.phrase for u in a.on_ai(False, False, now=19.0)] == ["ai_down"]
+    assert a.on_ai(True, False, now=20.0) == []          # pending
+    assert [u.phrase for u in a.on_ai(True, False, now=24.0)] == ["ai_back"]
 
 
 def test_booting_is_not_an_event():
@@ -176,7 +192,11 @@ def test_no_clip_exists_that_nothing_can_ever_play():
 
     have = {p.stem for p in SPEECH_DIR.glob("*.wav")}
     need = set(every_clip(crew_names()))
-    assert not (have - need), f"orphaned clips: {sorted(have - need)}"
+    # A name clip for a member who is not aboard today is not an orphan:
+    # the roster is a setting (crew_size), and the clips stay rendered for
+    # the day it grows back.
+    orphans = {stem for stem in have - need if not stem.startswith("name_")}
+    assert not orphans, f"orphaned clips: {sorted(orphans)}"
 
 
 def test_the_browser_builds_the_same_filename_as_python():

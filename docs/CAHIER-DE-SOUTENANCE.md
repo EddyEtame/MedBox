@@ -18,15 +18,17 @@ ce n’est pas normal.
 
 | Geste | Attendu |
 |---|---|
-| Regarder | Un vaisseau vu de trois quarts : la coque ouverte côté public, deux ponts, quarante cabines, l’infirmerie au centre du pont bas, les trois zones d’isolement A, B, C autour, les serres sur le dos, les moteurs à l’arrière. Quarante points lumineux : l’équipage, dans ses cabines. |
+| Regarder | Un vaisseau vu de trois quarts : la coque ouverte côté public, deux ponts, **six chambres nommées** sur le pont haut (Eddy, Brad, Davidson, Anthony, Frederic, Merove, avec lit, bureau et casier), l’infirmerie au centre du pont bas, les trois zones d’isolement A, B, C, les serres sur le dos, les moteurs à l’arrière. Six points lumineux : l’équipage, chacun dans sa chambre. |
+| Dire **« MedBox, comment va Brad ? »** | La réponse est dite, la caméra vole vers la chambre de Brad et son plancher s’allume quatorze secondes. Même chose pour tout membre nommé dans une question. |
+| Appliquer un écart à quelqu’un (tableau → Réglage manuel) ou lancer un scénario | Dès que la priorité change, le référent le dit à voix haute sur toutes les pages (« Eddy passe à surveiller : score 4, priorité faible, avec de la fièvre… »), et le vaisseau montre sa chambre. |
 | Glisser la souris | Le vaisseau tourne ; la coupe suit la caméra (le flanc face à vous s’ouvre). Molette : zoom. |
 | Cliquer un point | Le panneau du membre s’ouvre à droite : nom, rôle, constantes, score ; la caméra s’approche. Échap ferme. |
 | Cliquer la zone **A** dans le rail des zones (ou dire « MedBox, montre la zone A ») | La caméra entre dans la pièce ; le pont du dessus s’efface ; le panneau « Zone A · 0/4 · ouverte » liste qui s’y trouve. **Brief** la décrit à voix haute ; **Suivante** passe à B ; **Vaisseau** (ou Échap) revient. |
 | Bouton **Ronde** (ou « MedBox, ronde ») | Le référent fait le tour à voix haute : état du bord, zone A, B, C, infirmerie, retour. Environ une minute. |
 | **Son coupé → Son activé** | Le référent se présente à voix haute une fois. |
-| Pastille **Écoute locale → Activer** | Le navigateur demande le micro ; la pastille s’ouvre sur le texte de consentement ; dire **« j’accepte »** ; il demande la langue ; dire **« français »** ; « À l’écoute. Dites MedBox, puis votre demande. » La pastille se replie toute seule. |
+| Pastille **Écoute locale → Activer** | Le navigateur demande le micro ; la pastille s’ouvre sur le texte de consentement ; dire **« j’accepte »** ; il demande la langue ; dire **« français »** ; « À l’écoute. Dites MedBox, puis votre demande. » La pastille se replie toute seule. **Une seule fois** : sur les autres pages (équipage, tableau, vaisseau), Activer passe directement à l’écoute pendant huit heures. Un espace personnel redemande, c’est l’espace de quelqu’un. |
 | Dire **« MedBox, qui est en isolement ? »** | Réponse immédiate, à l’écran et à voix haute, depuis les registres (pas le modèle) : « Tout l’équipage (40 membres) est dans sa plage habituelle. Personne n’est en isolement. » Pendant le scénario : « Équipage de 40 : à surveiller : … ; personne en isolement. » puis les noms décidés. |
-| Dire **« MedBox, comment va Brad ? »** (depuis n’importe quelle page) | Le membre nommé devient le sujet : « Brad est en routine aujourd’hui : score 0… ». Immédiat. |
+| Dire **« MedBox, comment va Brad ? »** (depuis n’importe quelle page) | Le membre nommé devient le sujet : « Brad est en routine aujourd’hui : score 0… ». Immédiat. Sur le vaisseau, la caméra va à sa chambre. |
 | Dire **« MedBox, présente-toi »** | La présentation de la station, immédiate. |
 | Champ **Commande** : `worst` | Le membre le plus prioritaire est sélectionné. `isoles`, `pourquoi`, `suivant`, `aide` marchent aussi. |
 
@@ -53,10 +55,11 @@ ce n’est pas normal.
 | Geste | Attendu |
 |---|---|
 | Ouvrir | « Bonjour Merove. Je suis MedBox, le référent médical du bord… » ; ses constantes du jour face à ses valeurs habituelles ; sa semaine ; ses messages ; ses activités ; son dossier ; le vaisseau centré sur elle. |
-| **Écouter le référent** | La présentation est lue à voix haute, à la deuxième personne. |
+| **Écouter le référent** | La présentation est lue à voix haute, à la deuxième personne, **puis la semaine en chiffres** : ce qui a bougé, quel jour, à combien ; ce qui est resté dans la plage. |
 | **Mon évaluation** | Pour les six membres qui ont une page, l’évaluation est préparée en arrière-plan dès que le modèle est chaud (compter deux minutes après le lancement) : le clic l’affiche aussitôt et elle est lue. Sinon les étapes de réflexion s’affichent (je relève vos constantes… je compare… je vérifie…) et l’évaluation arrive en dix à vingt secondes. Pendant le scénario : elle nomme ce que les mesures montrent et la décision. |
 | Écrire ou dire **« est-ce que je vais bien ? »** | Réponse immédiate : « Vous êtes en routine aujourd’hui : score 0… » ou « Vous êtes à surveiller : score 5, priorité moyenne, avec de la fièvre et une respiration plus rapide que d’habitude. L’isolement est décidé, à confirmer. » |
 | **« pourquoi mon pouls monte ? »**, **« ma température ? »** | Réponse immédiate avec la valeur, la plage habituelle et le poids dans le score. |
+| **« présente ma semaine »**, **« est-ce que je vais tomber malade la semaine prochaine ? »** | Immédiat, depuis ses sept jours : « Votre semaine, sur 7 jours : pouls habituel 60, monté à 81 le 23… » ; « Je ne prédis pas, je mesure : … si cela recommence, je vous préviens avant que vous ne le sentiez. » |
 | **« j’ai mal à la tête, c’est grave ? »** | Immédiat : « Je note « j’ai mal à la tête… » dans votre dossier. Pour l’instant, vos constantes ne montrent rien d’anormal… » ; la plainte apparaît dans le dossier. |
 | Une question ouverte (**« est-ce que je dois dormir plus ? »**) | Le référent dit « un instant, je regarde vos constantes » ; les étapes défilent ; la réponse arrive en trois à cinq secondes quand la mémoire vive est libre ; si le modèle dépasse dix secondes, la station répond avec ses faits et le dit. Pendant le scénario, une question passe devant l’évaluation de fond : elle ne fait jamais la queue. |
 | **Nommer** un assistant (par exemple « Nova ») | « Nova » devient un mot de réveil : « Nova, est-ce que je vais bien ? » |

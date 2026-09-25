@@ -12,7 +12,7 @@ ARIA / PsychoSpace, est dans [ANTHONYSITCH/Psychospace](https://github.com/ANTHO
 | | |
 |---|---|
 | ![Le vaisseau en 3D](docs/assets/vaisseau.png) | ![Le tableau de bord de l’équipage](docs/assets/equipage.png) |
-| *Le vaisseau, ouvert côté public : deux ponts, quarante cabines, l’infirmerie, les trois zones d’isolement.* | *L’équipage : messages du référent, membre en forme, activités du jour.* |
+| *Le vaisseau, ouvert côté public : deux ponts, six chambres nommées, l’infirmerie, les trois zones d’isolement.* | *L’équipage : messages du référent, membre en forme, activités du jour.* |
 | ![Un espace personnel](docs/assets/espace-personnel.png) | |
 | *L’espace personnel de Merove pendant la contamination.* | |
 
@@ -88,7 +88,7 @@ Le bouton micro reste masqué tant que le modèle n’est pas complet.
 
 | Page | Adresse | Ce qu’elle fait |
 |---|---|---|
-| Vaisseau 3D | `/ship` | Le vaisseau vu de trois quarts, la coque ouverte comme une maison de poupée : deux ponts, quarante cabines, l’infirmerie, les trois zones d’isolement et leurs couchettes, les moteurs ; commande locale ; micro ; « Ronde ». |
+| Vaisseau 3D | `/ship` | Le vaisseau vu de trois quarts, la coque ouverte comme une maison de poupée : deux ponts, six chambres nommées, l’infirmerie, les trois zones d’isolement et leurs couchettes, les moteurs ; le référent y fait voler la caméra vers la chambre de qui il parle ; commande locale ; micro ; « Ronde ». |
 | Tableau | `/board` | Le tableau 2D de surveillance, classé par priorité, avec le dossier de chaque membre. |
 | Équipage | `/crew` | La semaine des six, l’état de chacun, le membre en forme et ses habitudes, les activités du jour, les messages du référent. |
 | Espace personnel | `/me/P-01` … `/me/P-06`, ports **8771 à 8776** | Le référent reconnaît la personne, se présente, lit son évaluation à la deuxième personne, répond à ses questions ; sa semaine, ses messages, son dossier, le vaisseau centré sur elle. |

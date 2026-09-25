@@ -31,6 +31,7 @@
   var engineGlow = null, engineLight = null, engineDiscs = [], engineSprites = [], radiators = [];
   var navLamps = [], growLights = [], growSprites = [], stars = [], planetGroup = null, cutStrips = [];
   var LAY = null, panelTex = null, plateTex = null, glowTex = null, dish = null, padRing = null;
+  var roomTiles = [], roomLabels = [], roomLabelNames = [];
 
   /* ---------- painted surfaces: small canvases, made once ---------- */
 
@@ -592,16 +593,34 @@
     // Cabins on deck 1: a partition per cabin with a doorway, a bed against
     // the hull, a locker.
     var lockerMat = upper(mat(0x6f8391, { metalness: 0.6, roughness: 0.5 }));
+    var deskMat = upper(mat(0x9fb0b8, { roughness: 0.6, metalness: 0.4 })), chairMat = upper(mat(0x2b3940));
     var walls = [], parts = [], lintels = [], lockers = [], c0 = LAY.cabinBox(0), span0 = c0.x1 - c0.x0, depth0 = c0.z1 - c0.z0;
     for (var i = 0; i < LAY.CREW; i++) {
       var c = LAY.cabinBox(i);
-      walls.push([c.x0, LAY.DECK1.floor + 0.75, (c.z0 + c.z1) / 2, 0]);
-      bedAt(c.x, LAY.DECK1.floor, (c.z0 + c.z1) / 2 + (c.side > 0 ? 0.15 : -0.15), 0, true);
+      var zmid = (c.z0 + c.z1) / 2;
+      walls.push([c.x0, LAY.DECK1.floor + 0.75, zmid, 0]);
+      if (i === LAY.CREW - 1 || i === LAY.CREW - 2) walls.push([c.x1, LAY.DECK1.floor + 0.75, zmid, 0]);
+      bedAt(c.x0 + 0.9, LAY.DECK1.floor, zmid + (c.side > 0 ? 0.2 : -0.2), 0, true);
       var span = c.x1 - c.x0;
       var innerZ = c.side > 0 ? c.z0 : c.z1;
-      parts.push([c.x0 + span * 0.275, LAY.DECK1.floor + 0.75, innerZ, 0]);
-      lintels.push([c.x1 - span * 0.225, LAY.DECK1.floor + 1.35, innerZ, 0]);
-      lockers.push([c.x1 - 0.2, LAY.DECK1.floor + 0.55, c.side > 0 ? c.z1 - 0.22 : c.z0 + 0.22, 0]);
+      parts.push([c.x0 + span * 0.3, LAY.DECK1.floor + 0.75, innerZ, 0]);
+      lintels.push([c.x1 - span * 0.2, LAY.DECK1.floor + 1.35, innerZ, 0]);
+      lockers.push([c.x1 - 0.3, LAY.DECK1.floor + 0.55, c.side > 0 ? c.z1 - 0.22 : c.z0 + 0.22, 0]);
+      // The room's own floor, lit when the referent talks about its member.
+      var tile = lit(new THREE.Mesh(new THREE.BoxGeometry(span - 0.12, 0.03, depth0 - 0.12),
+        upper(new THREE.MeshStandardMaterial({ color: 0xb7c4cc, emissive: 0x7be8d3, emissiveIntensity: 0.05, roughness: 0.85 }))), false, true);
+      tile.position.set(c.x, LAY.DECK1.floor + 0.02, zmid);
+      g.add(tile);
+      roomTiles.push(tile);
+      var desk = lit(new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.06, 0.55), deskMat), true, true);
+      desk.position.set(c.x1 - 1.3, LAY.DECK1.floor + 0.72, c.side > 0 ? c.z1 - 0.45 : c.z0 + 0.45);
+      g.add(desk);
+      var screen = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.32, 0.04), consoleUp);
+      screen.position.set(c.x1 - 1.3, LAY.DECK1.floor + 0.95, c.side > 0 ? c.z1 - 0.2 : c.z0 + 0.2);
+      g.add(screen);
+      var chair = lit(new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.5, 0.42), chairMat), true, true);
+      chair.position.set(c.x1 - 1.3, LAY.DECK1.floor + 0.25, c.side > 0 ? c.z1 - 1.1 : c.z0 + 1.1);
+      g.add(chair);
     }
     instancedBoxes(0.05, 1.5, depth0, wallUp, walls, true);
     instancedBoxes(span0 * 0.55, 1.5, 0.05, wallUp, parts, true);
@@ -773,7 +792,7 @@
       return false;
     }
     renderer.setClearColor(0x03080b, 1);
-    renderer.setPixelRatio(Math.min(root.devicePixelRatio || 1, 1.25));   // the processor also runs the model
+    renderer.setPixelRatio(1);   // the processor also runs the model and the ears
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
@@ -840,7 +859,42 @@
     return true;
   }
 
-  /* render({eye, target, fov, aspect, heat, breath, sealed, view, viewZone, glowZone, zoneNames}) */
+  function labelTexture(name) {
+    var c = document.createElement("canvas");
+    c.width = 256; c.height = 64;
+    var ctx = c.getContext("2d");
+    ctx.clearRect(0, 0, 256, 64);
+    ctx.fillStyle = "rgba(4,16,22,0.72)";
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(4, 8, 248, 48, 12) : ctx.rect(4, 8, 248, 48); ctx.fill();
+    ctx.strokeStyle = "rgba(123,232,211,0.9)"; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = "#e9f2f6";
+    ctx.font = "600 30px 'Segoe UI', Arial, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(String(name).slice(0, 14), 128, 33);
+    var t = new THREE.CanvasTexture(c);
+    t.encoding = THREE.sRGBEncoding;
+    return t;
+  }
+  // A name tag above each room, once the board has told the hull who lives
+  // where. Redrawn only when a name changes.
+  function setRoomNames(names) {
+    if (!names) return;
+    for (var i = 0; i < roomTiles.length; i++) {
+      var name = names[i] || "";
+      if (roomLabelNames[i] === name) continue;
+      roomLabelNames[i] = name;
+      if (roomLabels[i]) { scene.remove(roomLabels[i]); roomLabels[i] = null; }
+      if (!name) continue;
+      var s = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture(name), transparent: true, depthTest: false, depthWrite: false }));
+      s.scale.set(2.6, 0.65, 1);
+      var t = roomTiles[i].position;
+      s.position.set(t.x, LAY.H / 2 + 0.95, t.z);
+      scene.add(s);
+      roomLabels[i] = s;
+    }
+  }
+
+  /* render({eye, target, fov, aspect, heat, breath, sealed, view, viewZone, glowZone, zoneNames, glowRoom, roomNames}) */
   function render(f) {
     if (!ready) return;
     var w = canvas.clientWidth || 1, h = canvas.clientHeight || 1;
@@ -868,6 +922,14 @@
       else { m.emissive.setHex(0x2fb7a6); m.emissiveIntensity = 0.15; }
       var dm = zoneDoors[z] && zoneDoors[z].material;
       if (dm) { dm.emissive.setHex(sealed ? 0xff9a3c : 0x7be8d3); dm.emissiveIntensity = sealed ? 1.6 + 0.5 * Math.sin(t * 5) : 0.8; }
+    }
+    setRoomNames(f.roomNames);
+    var overview = f.view !== "zone" && f.view !== "medbay";
+    for (var r = 0; r < roomTiles.length; r++) {
+      var rm = roomTiles[r].material;
+      if (f.glowRoom === r) { rm.emissive.setHex(0xf0c459); rm.emissiveIntensity = 0.55 + 0.35 * Math.sin(t * 4); }
+      else { rm.emissive.setHex(0x7be8d3); rm.emissiveIntensity = 0.05; }
+      if (roomLabels[r]) roomLabels[r].visible = overview;
     }
     var heat = f.heat || 0, breath = f.breath || 0;
     for (var i = 0; i < radiators.length; i++) radiators[i].material.emissiveIntensity = 0.55 + heat * 1.3 + 0.05 * Math.sin(t * 7 + i);

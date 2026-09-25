@@ -35,7 +35,7 @@ def test_the_station_warms_voice_and_ears_at_start():
     assert station.INTRO_SPOKEN in station.FIXED_SENTENCES
     assert any("Un instant" in s for s in station.FIXED_SENTENCES)
     ears = (ROOT / "server" / "voice.py").read_text(encoding="utf-8")
-    assert "cpu_threads=6" in ears
+    assert "cpu_threads=4" in ears, "four threads: the model keeps the rest of the processor"
 
 
 def test_every_header_is_a_bar():

@@ -176,6 +176,10 @@
         if (!state.seen[m.message.id]) { state.seen[m.message.id] = true; ping(); load(); }
       } else if (m.type === "message_read") {
         load();
+      } else if (m.type === "state" && m.spoken) {
+        if (!MedBox.voice) return;
+        var now = Date.now();
+        if (!state.lastStateSaid || now - state.lastStateSaid > 5000) { state.lastStateSaid = now; MedBox.voice.speakText(m.spoken, "fr"); }
       }
     };
     ws.onclose = function () { setTimeout(connect, 1500); };

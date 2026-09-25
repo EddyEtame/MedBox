@@ -32,7 +32,13 @@
     ws.onmessage = function (ev) {
       var msg;
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
-      if (msg.type === "board") onBoard(msg);
+      if (msg.type === "board") {
+        onBoard(msg);
+        // No member selected: no empty chart taking the room the simulation
+        // controls need on a laptop screen (Eddy, 25 Sep).
+        var tc = document.querySelector(".trend-card");
+        if (tc) tc.hidden = !state.selected;
+      }
       // A symptom reported from the other view, or another screen entirely.
       else if (msg.type === "symptom" && msg.reported &&
                msg.reported.patient_id === state.selected) loadReported();
@@ -43,7 +49,20 @@
       // on every frame and would otherwise show it for a tenth of a second.
       else if (msg.type === "event" && msg.kind === "warning")
         state.warning = { text: String(msg.text || ""), until: Date.now() + 15000 };
+      // Somebody's state changed: the referent says it (25 Sep, Eddy applied
+      // a deviation on this board and the voice said nothing).
+      else if (msg.type === "state" && msg.spoken) speakState(msg);
     };
+  }
+
+  var URGENCY_FR = { routine: "routine", low: "faible", medium: "moyenne", high: "haute" };
+  var lastStateSaid = 0;
+  function speakState(msg) {
+    var now = Date.now();
+    if (now - lastStateSaid < 5000) return;
+    lastStateSaid = now;
+    if (!MedBox.voice) return;
+    MedBox.voice.speakText(msg.spoken, "fr");
   }
 
   function setChip(id, up, text) {
@@ -161,7 +180,7 @@
         '<span class="' + vitalClass(t.params, "spo2") + '">' + num(p.spo2, 0) + '</span>' +
         '<span class="' + vitalClass(t.params, "pulse") + '">' + num(p.pulse, 0) + '</span>' +
         '<span class="' + vitalClass(t.params, "respiration") + '">' + num(p.respiration, 0) + '</span>' +
-        '<span class="badge b-' + t.urgency + '">' + t.urgency + ' ' + t.total + '</span>' +
+        '<span class="badge b-' + t.urgency + '">' + (URGENCY_FR[t.urgency] || t.urgency) + ' ' + t.total + '</span>' +
         '</div>';
     }).join("");
     // The rows are rebuilt ten times a second, which takes keyboard focus with

@@ -182,7 +182,7 @@
   }
 
   /* ------------------------------------------------------------- geometry */
-  var RING_R = 6.0, HUB_R = 1.50, DECK_Y = 0.85, CREW = 40;
+  var RING_R = 6.0, HUB_R = 1.50, DECK_Y = 0.85, CREW = 6;
   var DOCK_R = HUB_R + 0.45;   // where inbound critical crew come to rest
   var FOV = 0.86;
 
@@ -462,8 +462,35 @@
       // The command line's output stays until the next command, which is
       // long enough to be read.
       else if (m.type === "event" && m.kind === "warning") say(String(m.text || ""), true);
+      // Somebody's state changed: the referent says it, the ship shows
+      // their room (Eddy, 25 Sep: he applied a deviation and heard nothing).
+      else if (m.type === "state" && m.spoken) onState(m);
     };
   }
+
+  var lastStateSaid = 0;
+  function onState(m) {
+    if (m.patient_id) focusMember(m.patient_id);
+    var now = Date.now();
+    if (now - lastStateSaid < 5000) return;
+    lastStateSaid = now;
+    say(m.spoken);
+    if (!MedBox.voice) return;
+    MedBox.voice.speakText(m.spoken, "fr");
+  }
+
+  // The room of the member the referent is talking about: the camera goes
+  // there and the floor glows for a while.
+  function focusMember(id) {
+    if (!nodes[id]) return;
+    state.glowMember = id;
+    state.glowUntil = Date.now() + 14000;
+    flyTo(id);
+  }
+  window.addEventListener("medbox-command", function (e) {
+    var d = (e && e.detail) || {};
+    if (d.subject && nodes[d.subject]) focusMember(d.subject);
+  });
 
   function onBoard(m) {
     state.board = m.board || [];
@@ -489,6 +516,7 @@
         var ang = (idx - 1) / CREW * Math.PI * 2;
         var home = LAY ? LAY.cabin(idx - 1) : { x: Math.cos(ang) * RING_R, y: (idx % 2 ? 1 : -1) * 0.34, z: Math.sin(ang) * RING_R };
         nodes[p.id] = {
+          room: idx - 1,
           ang: ang, home: ang, tang: ang, deck: (idx % 2 ? 1 : -1) * 0.34, tdeck: (idx % 2 ? 1 : -1) * 0.34,
           r: RING_R, tr: RING_R, col: URGENCY.routine.slice(),
           tcol: URGENCY.routine.slice(), size: 0.15, tsize: 0.15,
@@ -497,6 +525,8 @@
         };
       }
       var n = nodes[p.id];
+      state.roomNames = state.roomNames || [];
+      state.roomNames[n.room] = p.name;
       // THE SPATIAL TRIAGE: NEWS2 pulls the patient off the ring toward the hub.
       // Saturate at 7, the NEWS2 threshold for an emergency response. So
       // "docked at the medbay" is not a look, it is a clinical statement:
@@ -654,7 +684,7 @@
 
   function resize() {
     placeRail();
-    dpr = Math.min(window.devicePixelRatio || 1, 1.25);   // the processor also runs the model
+    dpr = 1;   // the processor also runs the model and the ears (25 Sep: 1.25 cost a quarter more per frame)
     W = Math.max(1, Math.round(canvas.clientWidth * dpr));
     H = Math.max(1, Math.round(canvas.clientHeight * dpr));
     if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
@@ -687,8 +717,10 @@
 
   var last = 0, spin = 0, breathPhase = 0;
 
+  var frameGap = document.body.classList.contains("embed") ? 50 : 33;   // 20 or 30 a second, not 60
   function frame(ts) {
-    var dt = last ? Math.min(0.05, (ts - last) / 1000) : 0.016;
+    if (last && ts - last < frameGap) { requestAnimationFrame(frame); return; }
+    var dt = last ? Math.min(0.08, (ts - last) / 1000) : 0.016;
     last = ts;
     resize();
 
@@ -736,7 +768,9 @@
     upv[0]   = view[1]; upv[1]   = view[5]; upv[2]   = view[9];
 
     if (hullOn) {
+      var glowRoom = (state.glowMember && nodes[state.glowMember] && Date.now() < state.glowUntil) ? nodes[state.glowMember].room : -1;
       MedBox.hull.render({ eye: eye, target: cam.target, fov: FOV, aspect: W / H, heat: state.heat,
+                           glowRoom: glowRoom, roomNames: state.roomNames || [],
                            breath: breath, sealed: state.sealed, view: state.view, viewZone: state.viewZone,
                            glowZone: state.glowZone, zoneNames: state.zoneNames });
     }
@@ -1081,7 +1115,7 @@
     return false;
   }
   window.MedBox = window.MedBox || {};
-  window.MedBox.ship = { viewZone: viewZone, viewMedbay: viewMedbay, viewShip: viewShip, tour: tour, local: localCommand, zoneBrief: zoneBrief };
+  window.MedBox.ship = { viewZone: viewZone, viewMedbay: viewMedbay, viewShip: viewShip, tour: tour, local: localCommand, zoneBrief: zoneBrief, focusMember: focusMember };
 
   /* ---------------------------------------------------------------- panel */
   function esc(s) {
