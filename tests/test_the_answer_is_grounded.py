@@ -186,6 +186,16 @@ def test_a_member_named_in_the_question_is_its_subject():
     assert station._named_member("Comment va Brad ?") == "P-02"
     assert station._named_member("Comment va Alba ?") is None
     assert station._named_member("Et le bradycarde ?") is None
+    # What the ears write for a name half heard (25 Sep: « comment va
+    # Anthony ? » came back as another first name): a known mishearing, a
+    # close spelling, two short words for one name.
+    assert station._named_member("comment va Antoine") == "P-04"
+    assert station._named_member("MedBox. Comment va Rétonie ?") == "P-04"
+    assert station._named_member("comment va me rover ?") == "P-06"
+    assert station._named_member("comment va Frédérique ?") == "P-05"
+    assert station._named_member("Comment va Brad ? Comment va Anthony ?") == "P-04", "the last « comment va » is the one said"
+    out = station._station_shortcut("comment va Zorglub ?", None, False)
+    assert out and out["answer"].startswith("Je n’ai pas reconnu ce nom") and "Brad" in out["answer"]
     out = station._station_shortcut("Comment va Brad ?", "P-01", True)
     assert out and out["answer"].startswith("Brad est")
     assert station._subject("Est-ce que je vais bien ?", "P-01", True) == ("P-01", True)

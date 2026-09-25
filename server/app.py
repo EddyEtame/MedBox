@@ -621,8 +621,13 @@ async def lifespan(app: FastAPI):
                 n = await asyncio.to_thread(SPEAKER.warm, FIXED_SENTENCES)
                 log.info("voice warm: %d fixed sentences ready", n)
             if TRANSCRIBER.available:
+                names = [p.name for p in STATION.source.patients.values()]
+                # Names only: a prompt made of sentences was echoed back by the
+                # model (« Comment va Brad ? Comment va Anthony ? » for one name).
+                TRANSCRIBER.vocabulary = "Équipage : " + ", ".join(names) + "."
+                TRANSCRIBER.hotwords = " ".join(names)
                 await asyncio.to_thread(TRANSCRIBER._load)
-                log.info("ears warm")
+                log.info("ears warm, %d names known", len(names))
         except Exception as exc:  # never a reason for the station not to start
             log.warning("voice warm-up skipped: %s", exc)
     warm_task = asyncio.create_task(warm_voice_and_ears())
@@ -1801,22 +1806,68 @@ def _vital_answer(patient_id: str, key: str, second_person: bool) -> str | None:
             f"C’est ce qui pèse dans {'votre' if second_person else 'son'} score aujourd’hui : {t.get('total')}, priorité {urgency}.").replace("  ", " ")
 
 
+def _plain(text: str) -> str:
+    """Lower case, accents off, so « Frédérique » and « frederic » compare."""
+    import unicodedata
+    return "".join(ch for ch in unicodedata.normalize("NFD", str(text).lower()) if unicodedata.category(ch) != "Mn")
+
+
+# What the ears write for a name they half heard (25 Sep: « Antoine » for
+# Anthony). Exact first, then these, then a close spelling.
+NAME_ALIASES = {
+    "eddy": {"eddie", "edy", "edie", "eddi"},
+    "brad": {"brade", "bred", "brat", "bradley"},
+    "davidson": {"davison", "david son", "davidsonne", "davidsson"},
+    "frederic": {"frederique", "fred", "frederik", "frederick"},
+    "merove": {"merov", "meroff", "merauve", "merove", "merof", "mirove", "meroe", "rover", "merover", "mero", "nerove"},
+    "anthony": {"antoine", "antony", "anthonie", "tony", "antoni", "anthoni", "antonin", "retonie", "antonie", "entony", "anthonie", "tonie"},
+}
+
+
 def _named_member(text: str) -> str | None:
-    """The crew member a question names, by full name or by a first name
-    nobody else shares; None when the question names nobody."""
-    low = text.lower()
+    """The crew member a question names: by full name, by a first name
+    nobody else shares, by a known mishearing, or by a close spelling
+    (four letters or more, seventy-eight per cent alike). None otherwise."""
+    import difflib
+    low = _plain(text)
+    # The word right after « comment va » is the name meant, whatever else
+    # the ears wrote around it (« comment va Brad Anthony » was heard once).
+    for m in reversed(list(re.finditer(r"comment (?:va|vont|se porte)\s+([a-z]{3,})", low))):
+        hit = _named_member(m.group(1)) if m.group(1) != low else None
+        if hit:
+            return hit
+    tokens = re.findall(r"[a-z]{3,}", low)
+    # Two short words for one name (« me rover » for Merove): joined pairs too.
+    words = re.findall(r"[a-z]+", low)
+    tokens += [a + b for a, b in zip(words, words[1:]) if 4 <= len(a + b) <= 10]
     firsts: dict[str, list[str]] = {}
     for pid, e in STATION.latest.items():
         name = str(e["patient"].get("name") or "").strip()
         if not name:
             continue
-        if re.search(r"(?<!\w)" + re.escape(name.lower()) + r"(?!\w)", low):
+        if re.search(r"(?<!\w)" + re.escape(_plain(name)) + r"(?!\w)", low):
             return pid
-        firsts.setdefault(name.split()[0].lower(), []).append(pid)
+        firsts.setdefault(_plain(name.split()[0]), []).append(pid)
     for first, pids in firsts.items():
         if len(pids) == 1 and re.search(r"(?<!\w)" + re.escape(first) + r"(?!\w)", low):
             return pids[0]
-    return None
+    for first, pids in firsts.items():
+        if len(pids) == 1 and any(re.search(r"(?<!\w)" + re.escape(alias) + r"(?!\w)", low) for alias in NAME_ALIASES.get(first, ())):
+            return pids[0]
+    best, best_pid = 0.0, None
+    for tok in tokens:
+        if len(tok) < 4:
+            continue
+        for first, pids in firsts.items():
+            if len(pids) != 1:
+                continue
+            ratio = difflib.SequenceMatcher(None, tok, first).ratio()
+            if ratio > best:
+                best, best_pid = ratio, pids[0]
+    return best_pid if best >= 0.7 else None
+
+
+UNKNOWN_NAME = re.compile(r"comment (va|vont|se porte)\s+(?!t[- ]|il|elle|on)([a-zà-ÿ]{3,})", re.I)
 
 
 def _subject(text: str, patient_id: str | None, second_person: bool) -> tuple[str | None, bool]:
@@ -1985,7 +2036,13 @@ def _station_shortcut(text: str, patient_id: str | None, second_person: bool = F
         # Eddy, 24 Sep: asked to present himself, the model found nothing in
         # eight seconds. The introduction is the station's own text.
         return out(deterministic_introduction(), INTRO_SPOKEN)
+    named = _named_member(text)
     patient_id, second_person = _subject(text, patient_id, second_person)
+    if named is None and UNKNOWN_NAME.search(text) and not re.search(r"comment (va|vont)[- ]?(t[- ])?(il|elle|on|ça|ca)", text, re.I):
+        # « Comment va Anthony ? » heard as a name nobody has: say so, and
+        # name the crew, rather than let the model answer about nobody.
+        names = [str(e["patient"].get("name") or "") for e in STATION.latest.values()]
+        return out("Je n’ai pas reconnu ce nom. À bord : " + ", ".join(n for n in names if n) + ". Redites-le, par exemple « comment va Brad ? ».")
     if patient_id is not None:
         # « Est-ce que je vais bien ? », « pourquoi mon pouls monte ? » : the
         # registers hold the answer; the jury hears it in a second.

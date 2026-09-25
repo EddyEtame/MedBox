@@ -62,6 +62,11 @@ class Transcriber:
         self.model_dir = model_dir
         self._model = None
         self._tried = False
+        # The names the ears must know how to spell: the crew, set by the
+        # station at start-up. Eddy, 25 Sep: « comment va Anthony ? » came
+        # back as another first name, and nobody was found.
+        self.vocabulary = ""
+        self.hotwords = ""
         self.last_error: str | None = None
 
     def _where(self) -> str:
@@ -149,8 +154,10 @@ class Transcriber:
                 condition_on_previous_text=False,
                 initial_prompt=(
                     "MedBox. Français et English. J'accepte. Je n'accepte pas. "
-                    "Oui. Non. I accept. I do not accept. Yes. No."
+                    "Oui. Non. I accept. I do not accept. Yes. No. "
+                    + (self.vocabulary or "")
                 ),
+                hotwords=(self.hotwords or None),
                 **pinned,
             )
             parts, logprobs = [], []
