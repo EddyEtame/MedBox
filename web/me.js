@@ -163,6 +163,7 @@
         if (row) { state.me.vitals = row.patient; state.me.today = row.triage; renderToday(state.me); }
       } else if (m.type === "state" && m.patient_id === pid && m.spoken) {
         // Their own state changed: said to them, in their own space.
+        if (MedBox.alarm && (m.urgency === "high" || m.urgency === "medium")) MedBox.alarm.ring(m.urgency, pid, m.urgency === "high" ? "Alerte haute" : "Alerte");
         speak(m.spoken, "fr");
       }
     };

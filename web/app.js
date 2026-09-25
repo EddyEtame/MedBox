@@ -58,6 +58,7 @@
   var URGENCY_FR = { routine: "routine", low: "faible", medium: "moyenne", high: "haute" };
   var lastStateSaid = 0;
   function speakState(msg) {
+    if (MedBox.alarm && (msg.urgency === "high" || msg.urgency === "medium")) MedBox.alarm.ring(msg.urgency, msg.patient_id, (msg.urgency === "high" ? "Alerte haute : " : "Alerte : ") + (msg.name || ""));
     var now = Date.now();
     if (now - lastStateSaid < 5000) return;
     lastStateSaid = now;

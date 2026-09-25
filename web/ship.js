@@ -462,15 +462,33 @@
       // The command line's output stays until the next command, which is
       // long enough to be read.
       else if (m.type === "event" && m.kind === "warning") say(String(m.text || ""), true);
+      // A scenario's own notes (« Un écart thermique détecté à bord ») are
+      // said, not only written (Eddy, 25 Sep: « loaded this scenario but
+      // the system doesn't talk »).
+      else if (m.type === "event" && m.text) onNote(m);
       // Somebody's state changed: the referent says it, the ship shows
       // their room (Eddy, 25 Sep: he applied a deviation and heard nothing).
       else if (m.type === "state" && m.spoken) onState(m);
     };
   }
 
-  var lastStateSaid = 0;
+  var lastStateSaid = 0, lastNoteSaid = 0;
+  function onNote(m) {
+    var text = String(m.text || "");
+    say(text);
+    var now = Date.now();
+    if (now - lastNoteSaid < 3000) return;
+    lastNoteSaid = now;
+    if (!MedBox.voice) return;
+    MedBox.voice.speakText(text, "fr");
+  }
   function onState(m) {
     if (m.patient_id) focusMember(m.patient_id);
+    // The alarm rings with the voice, not instead of it: a siren and a red
+    // flash at « haute », two beeps at « moyenne » (Eddy, 25 Sep).
+    if (MedBox.alarm && (m.urgency === "high" || m.urgency === "medium")) {
+      MedBox.alarm.ring(m.urgency, m.patient_id, m.urgency === "high" ? "Alerte haute : " + (m.name || "") : "Alerte : " + (m.name || ""));
+    }
     var now = Date.now();
     if (now - lastStateSaid < 5000) return;
     lastStateSaid = now;

@@ -177,6 +177,7 @@
       } else if (m.type === "message_read") {
         load();
       } else if (m.type === "state" && m.spoken) {
+        if (MedBox.alarm && (m.urgency === "high" || m.urgency === "medium")) MedBox.alarm.ring(m.urgency, m.patient_id, (m.urgency === "high" ? "Alerte haute : " : "Alerte : ") + (m.name || ""));
         if (!MedBox.voice) return;
         var now = Date.now();
         if (!state.lastStateSaid || now - state.lastStateSaid > 5000) { state.lastStateSaid = now; MedBox.voice.speakText(m.spoken, "fr"); }
